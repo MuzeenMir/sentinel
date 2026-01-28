@@ -1,0 +1,25 @@
+# SENTINEL Flink Stream Processing Dependencies
+
+# Apache Flink
+apache-flink==1.18.0
+apache-flink-libraries==1.18.0
+
+# Kafka Connector - JAR dependency, not PyPI package
+# apache-flink-connector-kafka==3.0.0-1.17
+
+# Data Processing
+numpy>=1.26.0
+pandas==2.0.3
+scipy==1.11.2
+
+# Configuration
+pyyaml==6.0.1
+python-dotenv==1.0.0
+
+# Serialization
+avro-python3==1.10.2
+fastavro==1.8.4
+
+# Utilities
+redis==5.0.1
+requests==2.31.0

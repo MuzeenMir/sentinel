@@ -1,0 +1,67 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --sentinel-primary: #3b82f6;
+  --sentinel-secondary: #10b981;
+  --sentinel-danger: #ef4444;
+  --sentinel-warning: #f59e0b;
+}
+
+body {
+  @apply bg-gray-900 text-gray-100;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+.card {
+  @apply bg-gray-800 rounded-lg border border-gray-700 shadow-lg;
+}
+
+.card-header {
+  @apply px-6 py-4 border-b border-gray-700;
+}
+
+.card-body {
+  @apply p-6;
+}
+
+.btn {
+  @apply px-4 py-2 rounded-lg font-medium transition-colors duration-200;
+}
+
+.btn-primary {
+  @apply bg-blue-600 hover:bg-blue-700 text-white;
+}
+
+.btn-secondary {
+  @apply bg-gray-700 hover:bg-gray-600 text-gray-100;
+}
+
+.btn-danger {
+  @apply bg-red-600 hover:bg-red-700 text-white;
+}
+
+.status-badge {
+  @apply px-2 py-1 rounded-full text-xs font-medium;
+}
+
+.status-critical {
+  @apply bg-red-900/50 text-red-400 border border-red-800;
+}
+
+.status-high {
+  @apply bg-orange-900/50 text-orange-400 border border-orange-800;
+}
+
+.status-medium {
+  @apply bg-yellow-900/50 text-yellow-400 border border-yellow-800;
+}
+
+.status-low {
+  @apply bg-blue-900/50 text-blue-400 border border-blue-800;
+}
+
+.status-compliant {
+  @apply bg-green-900/50 text-green-400 border border-green-800;
+}

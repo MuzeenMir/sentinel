@@ -1,0 +1,17 @@
+# SENTINEL Environment (copy to `sentinelenv` and set your values)
+# Do not commit `sentinelenv` to git.
+
+# JWT (required; use a strong random value in production)
+JWT_SECRET_KEY=your-secret-key-change-in-production
+
+# Initial admin (created on first auth-service start if none exists)
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=your-secure-password
+ADMIN_EMAIL=admin@sentinel.local
+
+# Database (defaults for docker-compose)
+POSTGRES_PASSWORD=sentinel_password
+
+# Optional: Redis, Kafka (docker-compose sets defaults)
+# REDIS_URL=redis://redis:6379
+# KAFKA_BOOTSTRAP_SERVERS=kafka:9092

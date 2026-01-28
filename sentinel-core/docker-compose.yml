@@ -1,0 +1,302 @@
+services:
+  # PostgreSQL database with health check
+  postgres:
+    image: postgres:13-alpine
+    container_name: sentinel-postgres
+    environment:
+      POSTGRES_DB: sentinel_db
+      POSTGRES_USER: sentinel
+      POSTGRES_PASSWORD: sentinel_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - sentinel-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sentinel"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Redis for caching and session management
+  redis:
+    image: redis:7-alpine
+    container_name: sentinel-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - sentinel-network
+
+  # Authentication service with dependency
+  auth-service:
+    build:
+      context: ./backend/auth-service
+      dockerfile: Dockerfile
+    container_name: sentinel-auth-service
+    ports:
+      - "5000:5000"
+    environment:
+      - DATABASE_URL=postgresql://sentinel:sentinel_password@postgres:5432/sentinel_db
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-change-this-in-production}
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-Santa}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-Ggxr@123}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-santa@sentinel.local}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - sentinel-network
+    restart: unless-stopped
+
+  # Kafka for message queuing
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    container_name: sentinel-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    networks:
+      - sentinel-network
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: sentinel-kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    networks:
+      - sentinel-network
+
+  # API Gateway
+  api-gateway:
+    build:
+      context: ./backend/api-gateway
+      dockerfile: Dockerfile
+    container_name: sentinel-api-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      - AUTH_SERVICE_URL=http://auth-service:5000
+      - DATA_COLLECTOR_URL=http://data-collector:5001
+      - ALERT_SERVICE_URL=http://alert-service:5002
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - auth-service
+      - data-collector
+      - alert-service
+    networks:
+      - sentinel-network
+    restart: unless-stopped
+
+  # Data Collector
+  data-collector:
+    build:
+      context: ./backend/data-collector
+      dockerfile: Dockerfile
+    container_name: sentinel-data-collector
+    ports:
+      - "5001:5001"
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      kafka:
+        condition: service_started
+      redis:
+        condition: service_started
+    networks:
+      - sentinel-network
+    privileged: true  # Required for raw socket access
+    restart: unless-stopped
+
+  # High-speed XDP Collector (bare-metal / privileged container)
+  xdp-collector:
+    build:
+      context: ./backend/xdp-collector
+      dockerfile: Dockerfile
+    container_name: sentinel-xdp-collector
+    # XDP requires host networking and privileges to attach to NIC
+    network_mode: "host"
+    privileged: true
+    environment:
+      - XDP_ENABLED=true
+      - XDP_INTERFACE=eth0
+      - XDP_QUEUE_COUNT=1
+      - KAFKA_BOOTSTRAP_SERVERS=localhost:9092
+    restart: unless-stopped
+
+  # Alert Service
+  alert-service:
+    build:
+      context: ./backend/alert-service
+      dockerfile: Dockerfile
+    container_name: sentinel-alert-service
+    ports:
+      - "5002:5002"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - SMTP_HOST=${SMTP_HOST:-localhost}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - NOTIFICATION_EMAIL=${NOTIFICATION_EMAIL:-admin@example.com}
+    depends_on:
+      - redis
+    networks:
+      - sentinel-network
+    restart: unless-stopped
+
+  # AI Detection Engine
+  ai-engine:
+    build:
+      context: ./backend/ai-engine
+      dockerfile: Dockerfile
+    container_name: sentinel-ai-engine
+    ports:
+      - "5003:5003"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - MODEL_PATH=/models
+      - CONFIDENCE_THRESHOLD=0.85
+      - BATCH_SIZE=1000
+    volumes:
+      - ai_models:/models
+    depends_on:
+      - redis
+      - kafka
+    networks:
+      - sentinel-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+
+  # Elasticsearch for logging (optional)
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.0
+    container_name: sentinel-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    networks:
+      - sentinel-network
+    restart: unless-stopped
+
+  # Kibana for log visualization (optional)
+  kibana:
+    image: docker.elastic.co/kibana/kibana:7.17.0
+    container_name: sentinel-kibana
+    ports:
+      - "5601:5601"
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+    depends_on:
+      - elasticsearch
+    networks:
+      - sentinel-network
+    restart: unless-stopped
+
+  # Policy Orchestrator
+  policy-orchestrator:
+    build:
+      context: ./backend/policy-orchestrator
+      dockerfile: Dockerfile
+    container_name: sentinel-policy-orchestrator
+    ports:
+      - "5004:5004"
+    environment:
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - redis
+    networks:
+      - sentinel-network
+    restart: unless-stopped
+
+  # DRL Engine
+  drl-engine:
+    build:
+      context: ./backend/drl-engine
+      dockerfile: Dockerfile
+    container_name: sentinel-drl-engine
+    ports:
+      - "5005:5005"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - AI_ENGINE_URL=http://ai-engine:5003
+      - POLICY_SERVICE_URL=http://policy-orchestrator:5004
+      - MODEL_PATH=/models/drl
+    volumes:
+      - ai_models:/models
+    depends_on:
+      - redis
+      - ai-engine
+      - policy-orchestrator
+    networks:
+      - sentinel-network
+    restart: unless-stopped
+
+  # XAI Service
+  xai-service:
+    build:
+      context: ./backend/xai-service
+      dockerfile: Dockerfile
+    container_name: sentinel-xai-service
+    ports:
+      - "5006:5006"
+    environment:
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - redis
+    networks:
+      - sentinel-network
+    restart: unless-stopped
+
+  # Compliance Engine
+  compliance-engine:
+    build:
+      context: ./backend/compliance-engine
+      dockerfile: Dockerfile
+    container_name: sentinel-compliance-engine
+    ports:
+      - "5007:5007"
+    environment:
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - redis
+    networks:
+      - sentinel-network
+    restart: unless-stopped
+
+networks:
+  sentinel-network:
+    driver: bridge
+
+volumes:
+  redis_data:
+  postgres_data:
+  es_data:
+  ai_models:

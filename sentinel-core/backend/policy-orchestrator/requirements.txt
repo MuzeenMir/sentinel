@@ -1,0 +1,26 @@
+# SENTINEL Policy Orchestrator Dependencies
+
+# Web Framework
+Flask==2.3.3
+Flask-CORS==4.0.0
+gunicorn==21.2.0
+
+# Redis
+redis==5.0.1
+
+# API Clients for firewall vendors
+requests==2.31.0
+paramiko==3.3.1  # For SSH-based firewall management
+boto3==1.28.0    # For AWS services
+
+# Network utilities
+netaddr==0.9.0
+ipaddress>=1.0.0
+
+# Data validation
+jsonschema==4.19.0
+pydantic==2.4.2
+
+# Utilities
+python-dotenv==1.0.0
+pyyaml==6.0.1
