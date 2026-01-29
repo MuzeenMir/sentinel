@@ -1,6 +1,7 @@
-Flask==2.3.3
+# SENTINEL XDP Collector Dependencies
+Flask==3.0.0
 Flask-CORS==4.0.0
-kafka-python==2.0.2
+confluent-kafka==2.3.0
 redis==5.0.1
 python-dotenv==1.0.0
-
+gunicorn==21.2.0

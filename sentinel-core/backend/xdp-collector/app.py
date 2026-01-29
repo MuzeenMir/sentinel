@@ -14,23 +14,121 @@ NOTE:
 """
 
 import os
+import sys
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, Any, Optional
+from enum import Enum
 
 from flask import Flask, jsonify
 from flask_cors import CORS
 
-from backend.data-collector.collector import (  # type: ignore
-    TCP_PROTOCOL,
-    UDP_PROTOCOL,
-    ICMP_PROTOCOL,
-    DataSourceType,
-)
-from backend.data-collector.xdp_bridge import (  # type: ignore
-    XDPBridge,
-    build_raw_packet_from_l2_l3_l4,
-)
+# Protocol constants (same as data-collector)
+TCP_PROTOCOL = 6
+UDP_PROTOCOL = 17
+ICMP_PROTOCOL = 1
+
+
+class DataSourceType(Enum):
+    """Data source types for normalization."""
+    PCAP = "pcap"
+    NETFLOW = "netflow"
+    SFLOW = "sflow"
+    SYSLOG = "syslog"
+    XDP = "xdp"
+
+
+class XDPBridge:
+    """
+    Bridge for XDP packet normalization and Kafka publishing.
+    
+    This is a self-contained implementation that handles packet
+    normalization without depending on the data-collector module.
+    """
+    
+    def __init__(self):
+        self.kafka_producer = None
+        self._init_kafka()
+    
+    def _init_kafka(self):
+        """Initialize Kafka producer for publishing normalized records."""
+        try:
+            from confluent_kafka import Producer
+            kafka_servers = os.environ.get('KAFKA_BOOTSTRAP_SERVERS', 'localhost:9092')
+            self.kafka_producer = Producer({
+                'bootstrap.servers': kafka_servers,
+                'client.id': 'xdp-collector',
+                'acks': 'all',
+                'retries': 3,
+                'retry.backoff.ms': 100,
+            })
+            logging.getLogger(__name__).info(f"Kafka producer initialized: {kafka_servers}")
+        except ImportError:
+            logging.getLogger(__name__).warning("confluent_kafka not available, running in stub mode")
+        except Exception as e:
+            logging.getLogger(__name__).error(f"Failed to initialize Kafka producer: {e}")
+    
+    def normalize_packet(self, raw_packet: Dict[str, Any], source_type: DataSourceType) -> Dict[str, Any]:
+        """Normalize raw packet data to CIM format."""
+        import time
+        return {
+            'timestamp': raw_packet.get('timestamp', time.time()),
+            'source_ip': raw_packet.get('src_ip', '0.0.0.0'),
+            'destination_ip': raw_packet.get('dest_ip', '0.0.0.0'),
+            'source_port': raw_packet.get('src_port'),
+            'destination_port': raw_packet.get('dest_port'),
+            'protocol': raw_packet.get('protocol', 'unknown'),
+            'bytes': raw_packet.get('length', 0),
+            'source_type': source_type.value,
+            'raw_data': raw_packet,
+        }
+    
+    def publish_normalized(self, record: Dict[str, Any]) -> bool:
+        """Publish normalized record to Kafka."""
+        if not self.kafka_producer:
+            return False
+        try:
+            import json
+            topic = os.environ.get('KAFKA_TOPIC', 'sentinel-network-events')
+            self.kafka_producer.produce(
+                topic,
+                key=record.get('source_ip', '').encode('utf-8'),
+                value=json.dumps(record).encode('utf-8'),
+            )
+            self.kafka_producer.poll(0)
+            return True
+        except Exception as e:
+            logging.getLogger(__name__).error(f"Failed to publish to Kafka: {e}")
+            return False
+
+
+def build_raw_packet_from_l2_l3_l4(
+    src_ip: str,
+    dest_ip: str,
+    protocol: int,
+    src_port: Optional[int],
+    dest_port: Optional[int],
+    length: int,
+) -> Dict[str, Any]:
+    """Build a raw packet dictionary from L2/L3/L4 headers."""
+    import time
+    
+    protocol_names = {
+        TCP_PROTOCOL: 'TCP',
+        UDP_PROTOCOL: 'UDP',
+        ICMP_PROTOCOL: 'ICMP',
+    }
+    
+    return {
+        'timestamp': time.time(),
+        'src_ip': src_ip,
+        'dest_ip': dest_ip,
+        'src_port': src_port,
+        'dest_port': dest_port,
+        'protocol': protocol_names.get(protocol, f'PROTO_{protocol}'),
+        'protocol_num': protocol,
+        'length': length,
+    }
 
 
 app = Flask(__name__)

@@ -1,0 +1,21 @@
+# Docker Compose Override Example
+# Copy this file to docker-compose.override.yml to customize your local development setup
+# This file is automatically loaded by docker compose
+
+version: '3.8'
+
+services:
+  # Example: Override API Gateway port for local development
+  api-gateway:
+    ports:
+      - "8080:8080"
+    environment:
+      - FLASK_DEBUG=true
+    volumes:
+      - ./backend/api-gateway:/app
+
+  # Example: Enable hot-reload for frontend
+  # frontend:
+  #   volumes:
+  #     - ./frontend/admin-console:/app
+  #     - /app/node_modules

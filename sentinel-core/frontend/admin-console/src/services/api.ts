@@ -1,11 +1,13 @@
 import axios from 'axios'
-import { useAuthStore } from '../store/authStore'
+import { useAuthStore, DEMO_BYPASS_TOKEN } from '../store/authStore'
+import { appConfig } from '../config/runtime'
+import type { LoginResponse, User } from '../types'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080'
+const API_BASE_URL = appConfig.apiBaseUrl || ''
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000,
+  timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -14,7 +16,7 @@ export const api = axios.create({
 // Request interceptor
 api.interceptors.request.use((config) => {
   const token = useAuthStore.getState().token
-  if (token) {
+  if (token && token !== DEMO_BYPASS_TOKEN) {
     config.headers.Authorization = `Bearer ${token}`
   }
   return config
@@ -25,13 +27,23 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      useAuthStore.getState().logout()
+      const token = useAuthStore.getState().token
+      if (token !== DEMO_BYPASS_TOKEN) {
+        useAuthStore.getState().logout()
+      }
     }
     return Promise.reject(error)
   }
 )
 
 // API functions
+export const authApi = {
+  login: (data: { username: string; password: string }) =>
+    api.post<LoginResponse>('/api/v1/auth/login', data),
+  logout: () => api.post('/api/v1/auth/logout'),
+  verifyToken: () => api.post<{ user: User }>('/api/v1/auth/verify'),
+}
+
 export const threatApi = {
   getThreats: () => api.get('/api/v1/threats'),
   getThreat: (id: string) => api.get(`/api/v1/threats/${id}`),

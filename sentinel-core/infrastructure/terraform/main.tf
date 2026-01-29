@@ -79,6 +79,56 @@ resource "aws_route_table_association" "public_assoc" {
   route_table_id = aws_route_table.public_rt.id
 }
 
+# Elastic IP for NAT Gateway
+resource "aws_eip" "nat_eip" {
+  count  = var.enable_nat_gateway ? (var.single_nat_gateway ? 1 : length(var.public_subnet_cidrs)) : 0
+  domain = "vpc"
+
+  tags = {
+    Name        = "${var.environment}-sentinel-nat-eip-${count.index}"
+    Environment = var.environment
+  }
+
+  depends_on = [aws_internet_gateway.sentinel_igw]
+}
+
+# NAT Gateway for private subnets
+resource "aws_nat_gateway" "sentinel_nat" {
+  count         = var.enable_nat_gateway ? (var.single_nat_gateway ? 1 : length(var.public_subnet_cidrs)) : 0
+  allocation_id = aws_eip.nat_eip[count.index].id
+  subnet_id     = aws_subnet.public_subnets[count.index].id
+
+  tags = {
+    Name        = "${var.environment}-sentinel-nat-gw-${count.index}"
+    Environment = var.environment
+  }
+
+  depends_on = [aws_internet_gateway.sentinel_igw]
+}
+
+# Route Table for Private Subnets
+resource "aws_route_table" "private_rt" {
+  count  = var.enable_nat_gateway ? (var.single_nat_gateway ? 1 : length(var.private_subnet_cidrs)) : 0
+  vpc_id = aws_vpc.sentinel_vpc.id
+
+  route {
+    cidr_block     = "0.0.0.0/0"
+    nat_gateway_id = var.single_nat_gateway ? aws_nat_gateway.sentinel_nat[0].id : aws_nat_gateway.sentinel_nat[count.index].id
+  }
+
+  tags = {
+    Name        = "${var.environment}-private-route-table-${count.index}"
+    Environment = var.environment
+  }
+}
+
+# Associate Private Subnets with Route Table
+resource "aws_route_table_association" "private_assoc" {
+  count          = var.enable_nat_gateway ? length(aws_subnet.private_subnets) : 0
+  subnet_id      = aws_subnet.private_subnets[count.index].id
+  route_table_id = var.single_nat_gateway ? aws_route_table.private_rt[0].id : aws_route_table.private_rt[count.index].id
+}
+
 # RDS Subnet Group
 resource "aws_db_subnet_group" "sentinel_rds_subnet_group" {
   name       = "${var.environment}-sentinel-rds-subnet-group"
@@ -198,12 +248,16 @@ resource "aws_security_group" "data_collector_sg" {
   description = "Security group for data collector instances"
   vpc_id      = aws_vpc.sentinel_vpc.id
 
-  ingress {
-    description = "SSH access"
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]  # Should be restricted in production
+  # SSH access - restricted to specific CIDRs only
+  dynamic "ingress" {
+    for_each = length(var.allowed_ssh_cidrs) > 0 ? [1] : []
+    content {
+      description = "SSH access from allowed CIDRs"
+      from_port   = 22
+      to_port     = 22
+      protocol    = "tcp"
+      cidr_blocks = var.allowed_ssh_cidrs
+    }
   }
 
   ingress {

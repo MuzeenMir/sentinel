@@ -1,202 +1,234 @@
-# SENTINEL - AI-Powered Intrusion Detection System
+# SENTINEL Security Platform
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://python.org)
-[![React 18](https://img.shields.io/badge/React-18-61dafb.svg)](https://react.dev)
+An enterprise-grade, AI-powered security platform for real-time threat detection, automated response, and compliance management.
 
-## Overview
+## Features
 
-SENTINEL is an enterprise-grade AI-powered Intrusion Detection System (IDS) with Deep Reinforcement Learning (DRL) based firewall policy generation. The platform provides:
-
-- **Real-time Threat Detection** using ensemble ML models (XGBoost, LSTM, Isolation Forest)
-- **Autonomous Policy Generation** via PPO-based Deep Reinforcement Learning
-- **Multi-Vendor Firewall Integration** (iptables, AWS Security Groups, Palo Alto)
-- **Explainable AI** with SHAP-based decision explanations
-- **Compliance Management** for GDPR, HIPAA, PCI-DSS, NIST CSF
+- **AI-Powered Threat Detection**: Ensemble ML models (XGBoost, LSTM, Isolation Forest, Autoencoder) for comprehensive threat analysis
+- **Deep Reinforcement Learning**: Automated firewall policy optimization using PPO agents
+- **Real-Time Monitoring**: High-speed packet analysis with XDP/eBPF support
+- **Explainable AI**: SHAP-based explanations for all detections
+- **Compliance Engine**: Built-in frameworks for GDPR, HIPAA, NIST CSF, PCI-DSS
+- **Modern Dashboard**: React-based admin console with real-time updates
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                      SENTINEL Platform                          │
-│                                                                  │
-│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐         │
-│  │   Data      │───▶│   AI        │───▶│    DRL      │         │
-│  │  Collector  │    │  Engine     │    │   Engine    │         │
-│  └─────────────┘    └─────────────┘    └──────┬──────┘         │
-│         │                                      │                 │
-│         ▼                                      ▼                 │
-│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐         │
-│  │   Kafka     │    │    XAI      │    │   Policy    │         │
-│  │   (MSK)     │    │  Service    │    │Orchestrator │         │
-│  └─────────────┘    └─────────────┘    └─────────────┘         │
-│                                                                  │
-│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐         │
-│  │ Compliance  │    │   Alert     │    │    Auth     │         │
-│  │   Engine    │    │  Service    │    │  Service    │         │
-│  └─────────────┘    └─────────────┘    └─────────────┘         │
+┌──────────────────────────────────────────────────────────────────┐
+│                        Admin Console (React)                      │
+└────────────────────────────────┬─────────────────────────────────┘
+                                 │
+┌────────────────────────────────▼─────────────────────────────────┐
+│                         API Gateway                               │
+│                 (Authentication, Rate Limiting, Routing)          │
+└─────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┬──────────┘
+      │      │      │      │      │      │      │      │
+   ┌──▼──┐ ┌─▼─┐ ┌──▼──┐ ┌─▼─┐ ┌──▼──┐ ┌─▼─┐ ┌──▼──┐ ┌─▼─┐
+   │Auth │ │AI │ │Alert│ │DRL│ │Policy│ │XAI│ │Comp.│ │Data│
+   │Svc  │ │Eng│ │Svc  │ │Eng│ │Orch. │ │Svc│ │Eng. │ │Coll│
+   └──┬──┘ └─┬─┘ └──┬──┘ └─┬─┘ └──┬──┘ └─┬─┘ └──┬──┘ └─┬─┘
+      │      │      │      │      │      │      │      │
+┌─────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┴─────────┐
+│                     Message Queue (Kafka)                       │
 └─────────────────────────────────────────────────────────────────┘
+                                 │
+           ┌─────────────────────┼─────────────────────┐
+           │                     │                     │
+      ┌────▼────┐          ┌────▼────┐          ┌────▼────┐
+      │PostgreSQL│          │  Redis  │          │ Models  │
+      │   (DB)   │          │ (Cache) │          │(Storage)│
+      └──────────┘          └─────────┘          └─────────┘
 ```
 
 ## Quick Start
 
 ### Prerequisites
 
-- Docker and Docker Compose
-- Python 3.10+
-- Node.js 18+
+- Docker & Docker Compose v2+
+- Node.js 18+ (for local frontend development)
+- Python 3.10+ (for local backend development)
 
-### Local Development
+### Development Setup
+
+1. **Clone and configure:**
+```bash
+cd sentinel-core
+cp .env.example .env
+# Edit .env with your configuration
+```
+
+2. **Start all services:**
+```bash
+docker compose up -d
+```
+
+3. **Access the platform:**
+- Admin Console: http://localhost:3000
+- API Gateway: http://localhost:8080
+- API Documentation: http://localhost:8080/docs
+
+### Default Credentials
+
+Set in your `.env` file:
+- Username: `ADMIN_USERNAME`
+- Password: `ADMIN_PASSWORD`
+
+## Project Structure
+
+```
+sentinel-core/
+├── backend/
+│   ├── ai-engine/          # ML threat detection service
+│   ├── alert-service/      # Alert management & notifications
+│   ├── api-gateway/        # Central API gateway
+│   ├── auth-service/       # Authentication & authorization
+│   ├── compliance-engine/  # Compliance frameworks
+│   ├── data-collector/     # Network data ingestion
+│   ├── drl-engine/         # Deep RL policy optimization
+│   ├── policy-orchestrator/# Firewall policy management
+│   ├── xai-service/        # Explainable AI service
+│   └── xdp-collector/      # High-speed XDP collection
+├── frontend/
+│   └── admin-console/      # React admin dashboard
+├── infrastructure/
+│   └── terraform/          # AWS infrastructure as code
+├── stream-processing/
+│   └── flink-jobs/         # Apache Flink stream processing
+├── docs/                   # Documentation
+├── docker-compose.yml      # Container orchestration
+└── init.sql                # Database schema
+```
+
+## API Endpoints
+
+### Authentication
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/v1/auth/login` | User login |
+| POST | `/api/v1/auth/logout` | User logout |
+| POST | `/api/v1/auth/refresh` | Refresh token |
+| GET | `/api/v1/auth/profile` | Get current user |
+
+### Threats
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/threats` | List threats |
+| GET | `/api/v1/threats/:id` | Get threat details |
+| PUT | `/api/v1/threats/:id/status` | Update threat status |
+
+### Policies
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/policies` | List firewall policies |
+| POST | `/api/v1/policies` | Create policy |
+| PUT | `/api/v1/policies/:id` | Update policy |
+| DELETE | `/api/v1/policies/:id` | Delete policy |
+
+### Alerts
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/alerts` | List alerts |
+| POST | `/api/v1/alerts` | Create alert |
+| POST | `/api/v1/alerts/:id/acknowledge` | Acknowledge alert |
+| POST | `/api/v1/alerts/:id/resolve` | Resolve alert |
+
+## Configuration
+
+### Environment Variables
+
+See `.env.example` for all available configuration options. Key variables:
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `JWT_SECRET_KEY` | Secret key for JWT tokens | Yes |
+| `POSTGRES_PASSWORD` | Database password | Yes |
+| `ADMIN_USERNAME` | Initial admin username | Yes |
+| `ADMIN_PASSWORD` | Initial admin password | Yes |
+| `ADMIN_EMAIL` | Initial admin email | Yes |
+
+### Production Deployment
+
+For production deployments:
+
+1. **Use secure passwords**: Generate strong passwords for all services
+2. **Enable TLS**: Configure SSL certificates for all external endpoints
+3. **Set up backups**: Configure database and Redis backups
+4. **Monitor services**: Set up CloudWatch/Prometheus monitoring
+5. **Use secrets management**: Integrate with AWS Secrets Manager or HashiCorp Vault
+
+## Development
+
+### Backend Services
+
+Each backend service is a Python Flask application:
 
 ```bash
-# Clone the repository
-git clone https://github.com/MuzeenMir/sentinel.git
-cd sentinel/sentinel-core
+cd backend/auth-service
+python -m venv venv
+source venv/bin/activate  # or `venv\Scripts\activate` on Windows
+pip install -r requirements.txt
+python app.py
+```
 
-# Copy environment file and set your values (JWT_SECRET_KEY, ADMIN_*, etc.)
-cp sentinelenv.example sentinelenv
-# Edit `sentinelenv` with JWT_SECRET_KEY, ADMIN_USERNAME, ADMIN_PASSWORD, ADMIN_EMAIL
+### Frontend Development
 
-# Start all services
-docker compose --env-file sentinelenv up -d
-
-# Start frontend (development)
+```bash
 cd frontend/admin-console
 npm install
 npm run dev
 ```
 
-Access the admin console at `http://localhost:3000`
+### Running Tests
 
-### Production Deployment (AWS)
+```bash
+# Backend tests
+cd backend/auth-service
+pytest
+
+# Frontend tests
+cd frontend/admin-console
+npm run test
+```
+
+## Infrastructure
+
+### AWS Deployment
+
+Deploy to AWS using Terraform:
 
 ```bash
 cd infrastructure/terraform
+cp terraform.tfvars.example terraform.tfvars
+# Edit terraform.tfvars with your configuration
+
 terraform init
+terraform plan
 terraform apply
 ```
 
-See [Deployment Guide](docs/deployment-guide.md) for detailed instructions.
+### Required AWS Resources
 
-## Services
+- VPC with public/private subnets
+- RDS PostgreSQL (Multi-AZ for production)
+- ElastiCache Redis
+- MSK Kafka cluster
+- ECS/EKS for container orchestration
+- Application Load Balancer
+- SageMaker endpoints (optional, for ML inference)
 
-| Service | Port | Description |
-|---------|------|-------------|
-| API Gateway | 8080 | Main API entry point |
-| Auth Service | 5001 | Authentication & authorization |
-| Alert Service | 5002 | Notification management |
-| AI Engine | 5003 | ML-based threat detection |
-| Policy Orchestrator | 5004 | Firewall rule management |
-| DRL Engine | 5005 | Reinforcement learning decisions |
-| XAI Service | 5006 | Explainability & audit trails |
-| Compliance Engine | 5007 | Regulatory compliance |
-| Data Collector | 5008 | Network traffic ingestion |
-| Admin Console | 3000 | Web UI (development) |
+## Security Considerations
 
-## Detection Capabilities
-
-### Supervised Detection (Known Threats)
-- Malware communication
-- DoS/DDoS attacks
-- Brute force attacks
-- Port scanning
-- SQL injection
-- XSS attacks
-- Data exfiltration
-
-### Unsupervised Detection (Zero-Day)
-- Anomalous traffic patterns
-- Behavioral deviations
-- Protocol anomalies
-
-## DRL Policy Actions
-
-| Action | Description |
-|--------|-------------|
-| ALLOW | Permit traffic |
-| DENY | Block traffic |
-| RATE_LIMIT | Throttle connection rate |
-| QUARANTINE | Isolate host |
-| MONITOR | Enhanced logging |
-
-## Configuration
-
-Key environment variables:
-
-```bash
-# Database
-DATABASE_URL=postgresql://user:pass@host:5432/db
-
-# Redis
-REDIS_URL=redis://localhost:6379
-
-# Kafka
-KAFKA_BOOTSTRAP_SERVERS=localhost:9092
-
-# AI Engine
-CONFIDENCE_THRESHOLD=0.85
-BATCH_SIZE=32
-
-# DRL
-DRL_LEARNING_RATE=0.0003
-DRL_DISCOUNT_FACTOR=0.99
-```
-
-## Documentation
-
-- [Architecture](docs/architecture.md)
-- [API Reference](docs/api-reference.md)
-- [Deployment Guide](docs/deployment-guide.md)
-- [ML Models](docs/ml-models.md)
-- [Security](docs/security.md)
-
-## API Example
-
-```bash
-# Authenticate
-curl -X POST http://localhost:8080/api/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username": "admin", "password": "password"}'
-
-# Run detection
-curl -X POST http://localhost:8080/api/v1/detect \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "traffic_data": {
-      "source_ip": "192.168.1.100",
-      "dest_ip": "10.0.0.1",
-      "dest_port": 22,
-      "protocol": "TCP"
-    }
-  }'
-```
-
-## Technology Stack
-
-- **Backend**: Python, Flask, Gunicorn
-- **Frontend**: React 18, TypeScript, Tailwind CSS
-- **ML/DL**: PyTorch, XGBoost, scikit-learn
-- **RL**: Stable-Baselines3, Gymnasium
-- **Streaming**: Apache Kafka (MSK), Apache Flink
-- **Database**: PostgreSQL, Redis
-- **Infrastructure**: Terraform, Docker, AWS ECS
-- **Monitoring**: CloudWatch, Prometheus (optional)
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+- All sensitive data is encrypted at rest and in transit
+- JWT tokens with short expiration and refresh mechanism
+- Rate limiting on all API endpoints
+- Role-based access control (RBAC)
+- Audit logging for all actions
+- Password strength requirements enforced
 
 ## License
 
-This project is licensed under the MIT License - see [LICENSE](LICENSE) for details.
+MIT License - see [LICENSE](LICENSE) for details.
 
 ## Support
 
-- Documentation: https://docs.sentinel.example.com
-- Issues: https://github.com/MuzeenMir/sentinel/issues
-- Security: security@sentinel.example.com
+For enterprise support and custom deployments, contact: support@sentinel.io

@@ -1,31 +1,49 @@
+"""
+SENTINEL Alert Service
+
+Enterprise-grade alerting and notification service with support for
+multiple notification channels (email, Slack, webhooks) and
+comprehensive alert lifecycle management.
+"""
 import os
 import json
 import time
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 from datetime import datetime, timedelta
 import logging
 import redis
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-import threading
+from concurrent.futures import ThreadPoolExecutor
 import requests
 
 # Initialize Flask app
 app = Flask(__name__)
+CORS(app, resources={r"/api/*": {"origins": os.environ.get('CORS_ORIGINS', '*').split(',')}})
 
 # Configuration
 app.config['REDIS_URL'] = os.environ.get('REDIS_URL', 'redis://localhost:6379')
 app.config['SMTP_HOST'] = os.environ.get('SMTP_HOST', 'localhost')
-app.config['SMTP_PORT'] = int(os.environ.get('SMTP_PORT', 587))
+app.config['SMTP_PORT'] = int(os.environ.get('SMTP_PORT', '587'))
 app.config['SMTP_USER'] = os.environ.get('SMTP_USER', '')
 app.config['SMTP_PASSWORD'] = os.environ.get('SMTP_PASSWORD', '')
+app.config['SMTP_USE_TLS'] = os.environ.get('SMTP_USE_TLS', 'true').lower() == 'true'
 app.config['NOTIFICATION_EMAIL'] = os.environ.get('NOTIFICATION_EMAIL', 'admin@example.com')
+app.config['SLACK_WEBHOOK_URL'] = os.environ.get('SLACK_WEBHOOK_URL', '')
 
-# Initialize extensions
-redis_client = redis.from_url(app.config['REDIS_URL'])
+# Redis with connection pooling
+redis_pool = redis.ConnectionPool.from_url(
+    app.config['REDIS_URL'],
+    max_connections=int(os.environ.get('REDIS_MAX_CONNECTIONS', '20'))
+)
+redis_client = redis.Redis(connection_pool=redis_pool, decode_responses=True)
+
+# Thread pool for async notifications
+notification_executor = ThreadPoolExecutor(max_workers=4)
 
 # Logging setup
 logging.basicConfig(level=logging.INFO)
@@ -93,7 +111,7 @@ class AlertEngine:
             }
 
             # Store alert in Redis
-            redis_client.hmset(f"alert:{alert_id}", alert_record)
+            redis_client.hset(f"alert:{alert_id}", mapping=alert_record)
             redis_client.sadd('alerts:all', alert_id)
             redis_client.sadd(f"alerts:severity:{alert_record['severity']}", alert_id)
             redis_client.sadd(f"alerts:status:new", alert_id)
@@ -113,26 +131,27 @@ class AlertEngine:
             logger.error(f"Error creating alert: {e}")
             raise
 
-    def get_alert(self, alert_id: str) -> Optional[Dict]:
+    def get_alert(self, alert_id: str) -> Optional[Dict[str, Any]]:
         """Get specific alert details"""
         try:
             alert_data = redis_client.hgetall(f"alert:{alert_id}")
             if not alert_data:
                 return None
 
+            # decode_responses=True means values are already strings
             return {
-                'id': alert_data[b'id'].decode(),
-                'type': alert_data[b'type'].decode(),
-                'severity': alert_data[b'severity'].decode(),
-                'status': alert_data[b'status'].decode(),
-                'timestamp': alert_data[b'timestamp'].decode(),
-                'description': alert_data[b'description'].decode(),
-                'details': json.loads(alert_data[b'details'].decode()),
-                'source': alert_data[b'source'].decode(),
-                'assigned_to': alert_data[b'assigned_to'].decode() if alert_data[b'assigned_to'] else None,
-                'due_date': alert_data[b'due_date'].decode() if alert_data[b'due_date'] else None,
-                'correlation_id': alert_data[b'correlation_id'].decode() if alert_data[b'correlation_id'] else None,
-                'tags': json.loads(alert_data[b'tags'].decode()) if alert_data[b'tags'] else []
+                'id': alert_data.get('id', ''),
+                'type': alert_data.get('type', ''),
+                'severity': alert_data.get('severity', ''),
+                'status': alert_data.get('status', ''),
+                'timestamp': alert_data.get('timestamp', ''),
+                'description': alert_data.get('description', ''),
+                'details': json.loads(alert_data.get('details', '{}')),
+                'source': alert_data.get('source', ''),
+                'assigned_to': alert_data.get('assigned_to') if alert_data.get('assigned_to') else None,
+                'due_date': alert_data.get('due_date') if alert_data.get('due_date') else None,
+                'correlation_id': alert_data.get('correlation_id') if alert_data.get('correlation_id') else None,
+                'tags': json.loads(alert_data.get('tags', '[]'))
             }
 
         except Exception as e:
@@ -203,70 +222,147 @@ class AlertEngine:
             logger.error(f"Error updating alert status: {e}")
             return False
 
-    def trigger_notifications(self, alert_record: Dict):
-        """Trigger appropriate notifications for alert"""
+    def trigger_notifications(self, alert_record: Dict[str, Any]) -> None:
+        """Trigger appropriate notifications for alert asynchronously."""
         try:
             # Determine notification priority based on severity
             severity = AlertSeverity(alert_record['severity'])
 
-            # Email notification for high/critical alerts
+            # Email notification for high/critical alerts (async)
             if severity in [AlertSeverity.HIGH, AlertSeverity.CRITICAL]:
-                self.send_email_notification(alert_record)
+                notification_executor.submit(self._send_email_async, alert_record)
+                
+            # Slack notification if configured (async)
+            if app.config['SLACK_WEBHOOK_URL'] and severity == AlertSeverity.CRITICAL:
+                notification_executor.submit(self._send_slack_async, alert_record)
 
-            # For development, also send to console
+            # Always log to console
             self.log_notification(alert_record)
 
         except Exception as e:
             logger.error(f"Error triggering notifications: {e}")
 
-    def send_email_notification(self, alert_record: Dict):
-        """Send email notification"""
+    def _send_email_async(self, alert_record: Dict[str, Any]) -> None:
+        """Send email notification asynchronously."""
         try:
-            msg = MIMEMultipart()
+            if not app.config['SMTP_USER'] or not app.config['SMTP_PASSWORD']:
+                logger.warning("SMTP credentials not configured, skipping email notification")
+                return
+                
+            msg = MIMEMultipart('alternative')
             msg['From'] = app.config['SMTP_USER']
             msg['To'] = app.config['NOTIFICATION_EMAIL']
             msg['Subject'] = f"[{alert_record['severity'].upper()}] Security Alert: {alert_record['type']}"
 
-            body = f"""
-            Security Alert
+            # Plain text version
+            text_body = f"""
+Security Alert - SENTINEL
+
+ID: {alert_record['id']}
+Type: {alert_record['type']}
+Severity: {alert_record['severity']}
+Timestamp: {alert_record['timestamp']}
+Description: {alert_record['description']}
+
+Details:
+{json.dumps(json.loads(alert_record['details']) if isinstance(alert_record['details'], str) else alert_record['details'], indent=2)}
+
+Please investigate immediately.
+            """
             
-            ID: {alert_record['id']}
-            Type: {alert_record['type']}
-            Severity: {alert_record['severity']}
-            Timestamp: {alert_record['timestamp']}
-            Description: {alert_record['description']}
-            
-            Details: {json.dumps(json.loads(alert_record['details']), indent=2)}
-            
-            Please investigate immediately.
+            # HTML version
+            html_body = f"""
+            <html>
+            <body style="font-family: Arial, sans-serif; padding: 20px;">
+                <div style="background-color: #f44336; color: white; padding: 15px; border-radius: 5px;">
+                    <h2 style="margin: 0;">Security Alert - {alert_record['severity'].upper()}</h2>
+                </div>
+                <div style="padding: 20px; background-color: #f9f9f9; border-radius: 5px; margin-top: 10px;">
+                    <p><strong>Alert ID:</strong> {alert_record['id']}</p>
+                    <p><strong>Type:</strong> {alert_record['type']}</p>
+                    <p><strong>Severity:</strong> <span style="color: #f44336;">{alert_record['severity'].upper()}</span></p>
+                    <p><strong>Timestamp:</strong> {alert_record['timestamp']}</p>
+                    <p><strong>Description:</strong> {alert_record['description']}</p>
+                </div>
+                <p style="color: #666; font-size: 12px; margin-top: 20px;">
+                    This is an automated notification from SENTINEL Security Platform.
+                </p>
+            </body>
+            </html>
             """
 
-            msg.attach(MIMEText(body, 'plain'))
+            msg.attach(MIMEText(text_body, 'plain'))
+            msg.attach(MIMEText(html_body, 'html'))
 
-            server = smtplib.SMTP(app.config['SMTP_HOST'], app.config['SMTP_PORT'])
-            server.starttls()
-            server.login(app.config['SMTP_USER'], app.config['SMTP_PASSWORD'])
-            text = msg.as_string()
-            server.sendmail(app.config['SMTP_USER'], app.config['NOTIFICATION_EMAIL'], text)
-            server.quit()
+            with smtplib.SMTP(app.config['SMTP_HOST'], app.config['SMTP_PORT'], timeout=30) as server:
+                if app.config['SMTP_USE_TLS']:
+                    server.starttls()
+                server.login(app.config['SMTP_USER'], app.config['SMTP_PASSWORD'])
+                server.sendmail(app.config['SMTP_USER'], app.config['NOTIFICATION_EMAIL'], msg.as_string())
 
             logger.info(f"Email notification sent for alert {alert_record['id']}")
 
+        except smtplib.SMTPException as e:
+            logger.error(f"SMTP error sending email notification: {e}")
         except Exception as e:
             logger.error(f"Error sending email notification: {e}")
 
-    def send_slack_notification(self, alert_record: Dict):
-        """Send Slack notification (placeholder)"""
-        # Implementation would go here
-        pass
+    def _send_slack_async(self, alert_record: Dict[str, Any]) -> None:
+        """Send Slack notification asynchronously."""
+        try:
+            webhook_url = app.config['SLACK_WEBHOOK_URL']
+            if not webhook_url:
+                return
+                
+            severity_colors = {
+                'low': '#36a64f',
+                'medium': '#ffc107',
+                'high': '#ff9800',
+                'critical': '#f44336'
+            }
+            
+            payload = {
+                'attachments': [{
+                    'color': severity_colors.get(alert_record['severity'], '#808080'),
+                    'title': f"Security Alert: {alert_record['type']}",
+                    'text': alert_record['description'],
+                    'fields': [
+                        {'title': 'Alert ID', 'value': alert_record['id'], 'short': True},
+                        {'title': 'Severity', 'value': alert_record['severity'].upper(), 'short': True},
+                        {'title': 'Timestamp', 'value': alert_record['timestamp'], 'short': True},
+                        {'title': 'Source', 'value': alert_record['source'], 'short': True}
+                    ],
+                    'footer': 'SENTINEL Security Platform'
+                }]
+            }
+            
+            response = requests.post(webhook_url, json=payload, timeout=10)
+            response.raise_for_status()
+            logger.info(f"Slack notification sent for alert {alert_record['id']}")
+            
+        except requests.RequestException as e:
+            logger.error(f"Error sending Slack notification: {e}")
+        except Exception as e:
+            logger.error(f"Error sending Slack notification: {e}")
 
-    def send_webhook_notification(self, alert_record: Dict):
-        """Send webhook notification (placeholder)"""
-        # Implementation would go here
-        pass
+    def send_webhook_notification(self, alert_record: Dict[str, Any], webhook_url: str) -> bool:
+        """Send webhook notification to custom endpoint."""
+        try:
+            response = requests.post(
+                webhook_url,
+                json=alert_record,
+                headers={'Content-Type': 'application/json'},
+                timeout=10
+            )
+            response.raise_for_status()
+            logger.info(f"Webhook notification sent for alert {alert_record['id']}")
+            return True
+        except Exception as e:
+            logger.error(f"Error sending webhook notification: {e}")
+            return False
 
-    def log_notification(self, alert_record: Dict):
-        """Log notification to console for development"""
+    def log_notification(self, alert_record: Dict[str, Any]) -> None:
+        """Log notification to console for development."""
         logger.info(f"ALERT NOTIFICATION: [{alert_record['severity']}] {alert_record['type']} - {alert_record['description']}")
 
 # Initialize alert engine
@@ -433,4 +529,14 @@ def get_alert_types():
     }), 200
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5002, debug=os.environ.get('FLASK_DEBUG', False))
+    # For development only - use gunicorn in production
+    debug_mode = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
+    
+    if debug_mode:
+        logger.warning("Running in DEBUG mode - DO NOT use in production!")
+        
+    app.run(
+        host='0.0.0.0',
+        port=int(os.environ.get('PORT', '5002')),
+        debug=debug_mode
+    )

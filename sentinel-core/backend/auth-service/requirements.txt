@@ -1,8 +1,12 @@
-Flask==2.3.3
-Flask-SQLAlchemy==3.0.5
-Flask-JWT-Extended==4.5.3
+# SENTINEL Auth Service Dependencies
+Flask==3.0.0
+Flask-SQLAlchemy==3.1.1
+Flask-JWT-Extended==4.6.0
 Flask-CORS==4.0.0
-bcrypt==4.0.1
+Flask-Limiter==3.5.0
+bcrypt==4.1.2
 PyJWT==2.8.0
 redis==5.0.1
-psycopg2-binary>=2.9.9
+psycopg2-binary==2.9.9
+gunicorn==21.2.0
+gevent==23.9.1

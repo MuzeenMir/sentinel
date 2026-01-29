@@ -338,7 +338,7 @@ def submit_feedback():
         
         # Store feedback for model retraining
         feedback_key = f"ai_engine:feedback:{data['detection_id']}"
-        redis_client.hmset(feedback_key, {
+        redis_client.hset(feedback_key, mapping={
             'is_correct': str(data['is_correct']),
             'actual_label': data.get('actual_label', ''),
             'notes': data.get('notes', ''),
@@ -367,7 +367,7 @@ def log_detection(result: Dict[str, Any]):
         
         # Store detection record
         detection_key = f"ai_engine:detection:{result.get('detection_id', 'unknown')}"
-        redis_client.hmset(detection_key, {
+        redis_client.hset(detection_key, mapping={
             'timestamp': datetime.utcnow().isoformat(),
             'is_threat': str(result.get('is_threat', False)),
             'confidence': str(result.get('confidence', 0)),

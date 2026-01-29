@@ -1,14 +1,14 @@
 services:
   # PostgreSQL database with health check
   postgres:
-    image: postgres:13-alpine
+    image: postgres:13
     container_name: sentinel-postgres
     environment:
       POSTGRES_DB: sentinel_db
       POSTGRES_USER: sentinel
       POSTGRES_PASSWORD: sentinel_password
     ports:
-      - "5432:5432"
+      - "5433:5432"  # host 5433 to avoid conflict with local PostgreSQL on 5432
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -287,6 +287,24 @@ services:
       - REDIS_URL=redis://redis:6379
     depends_on:
       - redis
+    networks:
+      - sentinel-network
+    restart: unless-stopped
+
+  # Admin Console (production-ready build)
+  admin-console:
+    build:
+      context: ./frontend/admin-console
+      dockerfile: Dockerfile
+    container_name: sentinel-admin-console
+    ports:
+      - "3000:8080"
+    environment:
+      - SENTINEL_API_PROXY=http://api-gateway:8080
+      - SENTINEL_ENV=production
+      - SENTINEL_DEMO_AUTH=true
+    depends_on:
+      - api-gateway
     networks:
       - sentinel-network
     restart: unless-stopped

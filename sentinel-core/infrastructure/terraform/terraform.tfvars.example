@@ -1,0 +1,81 @@
+# SENTINEL Terraform Variables Example
+# Copy this file to terraform.tfvars and update values for your environment
+
+# ================================
+# Core Configuration
+# ================================
+
+aws_region  = "us-east-1"
+environment = "dev"  # dev, staging, or production
+
+# ================================
+# Network Configuration
+# ================================
+
+vpc_cidr             = "10.0.0.0/16"
+public_subnet_cidrs  = ["10.0.1.0/24", "10.0.2.0/24"]
+private_subnet_cidrs = ["10.0.10.0/24", "10.0.20.0/24"]
+enable_nat_gateway   = true
+single_nat_gateway   = true  # Set to false for HA in production
+
+# ================================
+# Database (RDS) Configuration
+# ================================
+
+rds_instance_class          = "db.t3.medium"
+rds_allocated_storage       = 20
+rds_database_name           = "sentinel_db"
+rds_username                = "sentinel_admin"
+rds_password                = "CHANGE_THIS_PASSWORD"  # Use AWS Secrets Manager in production
+rds_multi_az                = false                   # Set to true for production
+rds_backup_retention_period = 7
+
+# ================================
+# Cache (Redis) Configuration
+# ================================
+
+redis_node_type      = "cache.t3.medium"
+redis_num_nodes      = 1  # Use 2+ for production cluster mode
+redis_engine_version = "6.2"
+# redis_auth_token   = "your-auth-token"  # Uncomment and set for production
+
+# ================================
+# Kafka (MSK) Configuration
+# ================================
+
+kafka_broker_nodes    = 2
+kafka_instance_type   = "kafka.t3.small"
+kafka_ebs_volume_size = 100
+kafka_version         = "2.8.1"
+
+# ================================
+# SageMaker Configuration
+# ================================
+
+sagemaker_instance_type = "ml.t3.medium"
+
+# ================================
+# Security Configuration
+# ================================
+
+ssl_certificate_arn = ""  # Required for HTTPS listener
+allowed_ssh_cidrs   = []  # Add your bastion/VPN CIDR blocks for SSH access
+enable_waf          = false
+
+# ================================
+# Monitoring Configuration
+# ================================
+
+enable_cloudwatch_alarms = true
+alarm_email              = "alerts@yourcompany.com"
+
+# ================================
+# Tags
+# ================================
+
+tags = {
+  Project     = "SENTINEL"
+  ManagedBy   = "Terraform"
+  Environment = "dev"
+  Owner       = "security-team"
+}

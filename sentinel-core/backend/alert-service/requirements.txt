@@ -1,4 +1,7 @@
-Flask==2.3.3
+# SENTINEL Alert Service Dependencies
+Flask==3.0.0
+Flask-CORS==4.0.0
 redis==5.0.1
 requests==2.31.0
-psycopg2-binary>=2.9.9
+gunicorn==21.2.0
+gevent==23.9.1

@@ -9,40 +9,43 @@ const mockPolicies = [
 ]
 
 export function Policies() {
-  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [, setShowCreateModal] = useState(false)
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h3 className="text-lg font-semibold">Active Policies</h3>
-          <p className="text-sm text-gray-400">Manage firewall and security policies</p>
+          <p className="text-sm text-slate-400">Manage firewall and security policies</p>
         </div>
-        <button 
-          onClick={() => setShowCreateModal(true)}
-          className="btn btn-primary"
-        >
-          + Create Policy
-        </button>
+        <div className="flex items-center gap-3">
+          <button className="btn btn-secondary">Import Pack</button>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="btn btn-primary"
+          >
+            + Create Policy
+          </button>
+        </div>
       </div>
 
       {/* Policy Stats */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         <div className="card p-4">
-          <p className="text-sm text-gray-400">Total Policies</p>
+          <p className="text-sm text-slate-400">Total Policies</p>
           <p className="text-2xl font-bold">{mockPolicies.length}</p>
         </div>
         <div className="card p-4">
-          <p className="text-sm text-gray-400">DENY Rules</p>
+          <p className="text-sm text-slate-400">DENY Rules</p>
           <p className="text-2xl font-bold text-red-400">{mockPolicies.filter(p => p.action === 'DENY').length}</p>
         </div>
         <div className="card p-4">
-          <p className="text-sm text-gray-400">ALLOW Rules</p>
-          <p className="text-2xl font-bold text-green-400">{mockPolicies.filter(p => p.action === 'ALLOW').length}</p>
+          <p className="text-sm text-slate-400">ALLOW Rules</p>
+          <p className="text-2xl font-bold text-emerald-400">{mockPolicies.filter(p => p.action === 'ALLOW').length}</p>
         </div>
         <div className="card p-4">
-          <p className="text-sm text-gray-400">Total Matches</p>
+          <p className="text-sm text-slate-400">Total Matches</p>
           <p className="text-2xl font-bold">{mockPolicies.reduce((a, p) => a + p.matches, 0).toLocaleString()}</p>
         </div>
       </div>
@@ -52,27 +55,27 @@ export function Policies() {
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-gray-700">
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">ID</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Name</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Action</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Source</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Destination</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Matches</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Actions</th>
+              <tr className="border-b border-slate-800/80 text-xs uppercase text-slate-500">
+                <th className="px-6 py-3 text-left font-medium">ID</th>
+                <th className="px-6 py-3 text-left font-medium">Name</th>
+                <th className="px-6 py-3 text-left font-medium">Action</th>
+                <th className="px-6 py-3 text-left font-medium">Source</th>
+                <th className="px-6 py-3 text-left font-medium">Destination</th>
+                <th className="px-6 py-3 text-left font-medium">Matches</th>
+                <th className="px-6 py-3 text-left font-medium">Status</th>
+                <th className="px-6 py-3 text-left font-medium">Actions</th>
               </tr>
             </thead>
             <tbody>
               {mockPolicies.map((policy) => (
-                <tr key={policy.id} className="border-b border-gray-700/50 hover:bg-gray-700/30">
+                <tr key={policy.id} className="border-b border-slate-800/50 hover:bg-slate-900/60">
                   <td className="px-6 py-4 text-sm font-mono">{policy.id}</td>
                   <td className="px-6 py-4 text-sm font-medium">{policy.name}</td>
                   <td className="px-6 py-4">
                     <ActionBadge action={policy.action} />
                   </td>
-                  <td className="px-6 py-4 text-sm font-mono text-gray-300">{policy.source}</td>
-                  <td className="px-6 py-4 text-sm font-mono text-gray-300">{policy.destination}</td>
+                  <td className="px-6 py-4 text-sm font-mono text-slate-300">{policy.source}</td>
+                  <td className="px-6 py-4 text-sm font-mono text-slate-300">{policy.destination}</td>
                   <td className="px-6 py-4 text-sm">{policy.matches.toLocaleString()}</td>
                   <td className="px-6 py-4">
                     <span className="status-badge status-compliant">{policy.status}</span>
