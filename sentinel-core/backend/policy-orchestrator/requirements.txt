@@ -1,5 +1,8 @@
 # SENTINEL Policy Orchestrator Dependencies
 
+# Shared firewall adapters (install from path when building: pip install -e ../firewall-adapters)
+# sentinel-firewall-adapters  # uncomment if published to PyPI
+
 # Web Framework
 Flask==2.3.3
 Flask-CORS==4.0.0
@@ -11,7 +14,10 @@ redis==5.0.1
 # API Clients for firewall vendors
 requests==2.31.0
 paramiko==3.3.1  # For SSH-based firewall management
-boto3==1.28.0    # For AWS services
+boto3>=1.28.0    # For AWS Security Groups
+azure-mgmt-network>=19.0.0  # For Azure NSG
+azure-identity>=1.15.0      # For Azure auth
+google-cloud-compute>=1.14.0  # For GCP Firewall
 
 # Network utilities
 netaddr==0.9.0

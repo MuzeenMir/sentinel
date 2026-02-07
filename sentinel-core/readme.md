@@ -94,10 +94,12 @@ sentinel-core/
 │   └── terraform/          # AWS infrastructure as code
 ├── stream-processing/
 │   └── flink-jobs/         # Apache Flink stream processing
-├── docs/                   # Documentation
+├── docs/                   # Documentation (see docs/ARCHITECTURE-DESIGN-DEVELOPMENT.md for full guide)
 ├── docker-compose.yml      # Container orchestration
 └── init.sql                # Database schema
 ```
+
+For a full architecture, design, and development guide, see [docs/ARCHITECTURE-DESIGN-DEVELOPMENT.md](docs/ARCHITECTURE-DESIGN-DEVELOPMENT.md).
 
 ## API Endpoints
 

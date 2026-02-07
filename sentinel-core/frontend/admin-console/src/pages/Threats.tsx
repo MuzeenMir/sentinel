@@ -1,14 +1,16 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { clsx } from 'clsx'
 import { threatApi } from '../services/api'
+import { createSseClient } from '../services/stream'
 import { appConfig } from '../config/runtime'
 
 export function Threats() {
   const [filter, setFilter] = useState<string>('all')
   const [query, setQuery] = useState<string>('')
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['threats'],
@@ -52,6 +54,34 @@ export function Threats() {
     return acc
   }, {})
 
+  useEffect(() => {
+    const es = createSseClient('/api/v1/stream/threats', () => {
+      queryClient.invalidateQueries({ queryKey: ['threats'] })
+    })
+    return () => es.close()
+  }, [queryClient])
+
+  const handleExport = () => {
+    const headers = ['id', 'type', 'severity', 'source', 'target', 'status', 'timestamp']
+    const rows = filteredThreats.map((threat) => [
+      threat.id,
+      threat.type || '',
+      threat.severity || '',
+      threat.source_ip || threat.source || '',
+      threat.dest_ip || threat.destination || threat.target || '',
+      threat.status || '',
+      threat.timestamp || threat.time || '',
+    ])
+    const csv = [headers, ...rows].map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `threats-${new Date().toISOString().slice(0, 10)}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -69,7 +99,7 @@ export function Threats() {
               className="w-full sm:w-72 rounded-lg border border-slate-800/80 bg-slate-900/60 px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
             />
           </div>
-          <button className="btn btn-secondary">Export CSV</button>
+          <button className="btn btn-secondary" onClick={handleExport}>Export CSV</button>
         </div>
       </div>
 

@@ -1,19 +1,18 @@
+# Build with context: ./backend (docker-compose) so firewall-adapters is available.
 FROM python:3.10-slim
 
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    gcc \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y gcc curl && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
-COPY requirements.txt .
+COPY policy-orchestrator/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
-COPY . .
+COPY firewall-adapters /app/firewall-adapters
+RUN pip install --no-cache-dir -e /app/firewall-adapters
+
+COPY policy-orchestrator /app
+WORKDIR /app
 
 EXPOSE 5004
 

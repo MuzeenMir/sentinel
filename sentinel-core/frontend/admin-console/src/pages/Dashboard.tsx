@@ -1,6 +1,8 @@
-import { useQuery } from '@tanstack/react-query'
+import { useEffect } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts'
 import { statsApi } from '../services/api'
+import { createSseClient } from '../services/stream'
 
 // Mock data for demonstration
 const mockStats = {
@@ -27,6 +29,7 @@ const mockRecentThreats = [
 ]
 
 export function Dashboard() {
+  const queryClient = useQueryClient()
   const {
     data: statsData,
     isError: statsError,
@@ -72,6 +75,14 @@ export function Dashboard() {
 
   const lastUpdatedAt = Math.max(statsUpdatedAt || 0, trafficUpdatedAt || 0)
   const lastUpdatedLabel = lastUpdatedAt ? new Date(lastUpdatedAt).toLocaleTimeString() : 'Just now'
+
+  useEffect(() => {
+    const es = createSseClient('/api/v1/stream/alerts', () => {
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
+      queryClient.invalidateQueries({ queryKey: ['traffic-stats'] })
+    })
+    return () => es.close()
+  }, [queryClient])
 
   return (
     <div className="space-y-6">

@@ -26,6 +26,7 @@ from features.statistical import StatisticalFeatureExtractor
 from features.behavioral import BehavioralFeatureExtractor
 from features.contextual import ContextualFeatureExtractor
 from inference.prediction_service import PredictionService
+from learning.retraining_pipeline import RetrainingPipeline
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -78,6 +79,7 @@ def initialize_models():
         
         # Initialize unsupervised models
         detectors['isolation_forest'] = IsolationForestDetector(
+            model_path=os.path.join(app.config['MODEL_PATH'], 'isolation_forest'),
             contamination=0.1
         )
         detectors['autoencoder'] = AutoencoderDetector(
@@ -89,6 +91,9 @@ def initialize_models():
             base_detectors=detectors,
             threshold=app.config['CONFIDENCE_THRESHOLD']
         )
+        ensemble_path = os.path.join(app.config['MODEL_PATH'], 'ensemble')
+        if os.path.exists(ensemble_path):
+            ensemble.load(ensemble_path)
         
         # Initialize prediction service
         prediction_service = PredictionService(
@@ -316,6 +321,24 @@ def get_statistics():
         return jsonify({'error': 'Failed to get statistics'}), 500
 
 
+@app.route('/api/v1/feedback/stats', methods=['GET'])
+@require_auth
+def feedback_stats():
+    """Get feedback collection statistics for retraining readiness."""
+    try:
+        keys = redis_client.keys('ai_engine:feedback:*')
+        count = len(keys) if keys else 0
+        return jsonify({
+            'feedback_count': count,
+            'ready_for_retrain': count >= 100,
+            'min_samples_for_retrain': 100,
+            'timestamp': datetime.utcnow().isoformat()
+        }), 200
+    except Exception as e:
+        logger.error(f"Feedback stats error: {e}")
+        return jsonify({'error': 'Failed to get feedback stats'}), 500
+
+
 @app.route('/api/v1/feedback', methods=['POST'])
 @require_auth
 def submit_feedback():
@@ -336,14 +359,17 @@ def submit_feedback():
         if not data or 'detection_id' not in data or 'is_correct' not in data:
             return jsonify({'error': 'detection_id and is_correct are required'}), 400
         
-        # Store feedback for model retraining
+        # Store feedback for model retraining (optional features for retrain-from-feedback)
         feedback_key = f"ai_engine:feedback:{data['detection_id']}"
-        redis_client.hset(feedback_key, mapping={
+        mapping = {
             'is_correct': str(data['is_correct']),
             'actual_label': data.get('actual_label', ''),
             'notes': data.get('notes', ''),
             'timestamp': datetime.utcnow().isoformat()
-        })
+        }
+        if 'features' in data and isinstance(data['features'], dict):
+            mapping['features'] = json.dumps(data['features'])
+        redis_client.hset(feedback_key, mapping=mapping)
         redis_client.expire(feedback_key, 2592000)  # 30 days
         
         # Update false positive counter if applicable
@@ -355,6 +381,64 @@ def submit_feedback():
     except Exception as e:
         logger.error(f"Feedback submission error: {e}")
         return jsonify({'error': 'Failed to submit feedback'}), 500
+
+
+@app.route('/api/v1/models/retrain', methods=['POST'])
+@require_auth
+def trigger_retrain():
+    """
+    Trigger on-demand retraining with provided samples.
+    
+    Request body:
+    {
+        "model": "xgboost",
+        "samples": [ { "features": {"f1": 0.1, "f2": 0.2, ...}, "label": 0|1 }, ... ]
+    }
+    Writes to staging; promotes to MODEL_PATH only if new model improves F1 by >= 2%.
+    """
+    try:
+        data = request.get_json()
+        if not data or 'model' not in data or 'samples' not in data:
+            return jsonify({'error': 'model and samples are required'}), 400
+        
+        model_name = data['model']
+        samples = data['samples']
+        
+        if model_name != 'xgboost':
+            return jsonify({'error': 'Only xgboost retraining is supported'}), 400
+        
+        if len(samples) < 50:
+            return jsonify({
+                'error': f'At least 50 samples required, got {len(samples)}',
+                'min_samples': 50
+            }), 400
+        
+        models_dir = app.config['MODEL_PATH']
+        pipeline = RetrainingPipeline(
+            models_dir=models_dir,
+            staging_dir=os.path.join(models_dir, 'staging'),
+            backup_dir=os.path.join(models_dir, 'backup'),
+            improvement_threshold=0.02
+        )
+        
+        job = pipeline.retrain_xgboost(samples)
+        
+        return jsonify({
+            'job_id': job.id,
+            'model': job.model_name,
+            'status': job.status,
+            'samples_used': job.samples_used,
+            'promoted': job.promoted,
+            'old_metrics': job.old_metrics,
+            'new_metrics': job.new_metrics,
+            'error': job.error,
+            'started_at': job.started_at,
+            'completed_at': job.completed_at
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Retrain error: {e}")
+        return jsonify({'error': 'Retraining failed', 'details': str(e)}), 500
 
 
 def log_detection(result: Dict[str, Any]):

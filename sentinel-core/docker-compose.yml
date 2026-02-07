@@ -96,11 +96,19 @@ services:
       - AUTH_SERVICE_URL=http://auth-service:5000
       - DATA_COLLECTOR_URL=http://data-collector:5001
       - ALERT_SERVICE_URL=http://alert-service:5002
+      - POLICY_SERVICE_URL=http://policy-orchestrator:5004
+      - COMPLIANCE_ENGINE_URL=http://compliance-engine:5007
+      - XAI_SERVICE_URL=http://xai-service:5006
+      - AI_ENGINE_URL=http://ai-engine:5003
+      - DRL_ENGINE_URL=http://drl-engine:5005
       - REDIS_URL=redis://redis:6379
     depends_on:
       - auth-service
       - data-collector
       - alert-service
+      - policy-orchestrator
+      - compliance-engine
+      - xai-service
     networks:
       - sentinel-network
     restart: unless-stopped
@@ -223,8 +231,8 @@ services:
   # Policy Orchestrator
   policy-orchestrator:
     build:
-      context: ./backend/policy-orchestrator
-      dockerfile: Dockerfile
+      context: ./backend
+      dockerfile: policy-orchestrator/Dockerfile
     container_name: sentinel-policy-orchestrator
     ports:
       - "5004:5004"
@@ -291,6 +299,53 @@ services:
       - sentinel-network
     restart: unless-stopped
 
+  # HIDS Agent - Host-based Intrusion Detection
+  hids-agent:
+    build:
+      context: ./backend/hids-agent
+      dockerfile: Dockerfile
+    container_name: sentinel-hids-agent
+    ports:
+      - "5010:5010"
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - KAFKA_SERVERS=kafka:9092
+      - FIM_PATHS=/etc/passwd,/etc/shadow,/etc/sudoers,/etc/ssh/sshd_config
+    volumes:
+      - /etc:/host/etc:ro
+      - /var/log:/host/var/log:ro
+      - /proc:/host/proc:ro
+      - hids_data:/var/lib/sentinel
+    depends_on:
+      - redis
+      - kafka
+    networks:
+      - sentinel-network
+    privileged: true
+    restart: unless-stopped
+
+  # System Hardening Service
+  hardening-service:
+    build:
+      context: ./backend/hardening-service
+      dockerfile: Dockerfile
+    container_name: sentinel-hardening-service
+    ports:
+      - "5011:5011"
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    volumes:
+      - /etc:/host/etc:rw
+      - hardening_backups:/var/lib/sentinel/backups
+    depends_on:
+      - redis
+    networks:
+      - sentinel-network
+    privileged: true
+    restart: unless-stopped
+
   # Admin Console (production-ready build)
   admin-console:
     build:
@@ -318,3 +373,5 @@ volumes:
   postgres_data:
   es_data:
   ai_models:
+  hids_data:
+  hardening_backups:

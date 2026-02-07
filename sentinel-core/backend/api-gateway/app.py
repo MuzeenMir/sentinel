@@ -1,6 +1,6 @@
 import os
 import requests
-from flask import Flask, request, jsonify, g
+from flask import Flask, request, jsonify, g, Response
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -19,6 +19,11 @@ CORS(app)
 app.config['AUTH_SERVICE_URL'] = os.environ.get('AUTH_SERVICE_URL', 'http://auth-service:5000')
 app.config['DATA_COLLECTOR_URL'] = os.environ.get('DATA_COLLECTOR_URL', 'http://data-collector:5001')
 app.config['ALERT_SERVICE_URL'] = os.environ.get('ALERT_SERVICE_URL', 'http://alert-service:5002')
+app.config['POLICY_SERVICE_URL'] = os.environ.get('POLICY_SERVICE_URL', 'http://policy-orchestrator:5004')
+app.config['COMPLIANCE_ENGINE_URL'] = os.environ.get('COMPLIANCE_ENGINE_URL', 'http://compliance-engine:5007')
+app.config['XAI_SERVICE_URL'] = os.environ.get('XAI_SERVICE_URL', 'http://xai-service:5006')
+app.config['AI_ENGINE_URL'] = os.environ.get('AI_ENGINE_URL', 'http://ai-engine:5003')
+app.config['DRL_ENGINE_URL'] = os.environ.get('DRL_ENGINE_URL', 'http://drl-engine:5005')
 app.config['REDIS_URL'] = os.environ.get('REDIS_URL', 'redis://localhost:6379')
 
 # Initialize extensions
@@ -42,10 +47,14 @@ def require_auth(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         auth_header = request.headers.get('Authorization')
-        if not auth_header or not auth_header.startswith('Bearer '):
+        token = None
+        if auth_header and auth_header.startswith('Bearer '):
+            token = auth_header.split(' ')[1]
+        elif request.args.get('token'):
+            # Allow token via query param for SSE/EventSource compatibility
+            token = request.args.get('token')
+        if not token:
             return jsonify({'error': 'Authorization token required'}), 401
-
-        token = auth_header.split(' ')[1]
 
         # Verify token with auth service
         try:
@@ -107,6 +116,42 @@ def get_request_stats():
                 stats[endpoint] += int(count)
 
     return stats
+
+# ---------------------------------------------------------------------------
+# Configuration persistence
+# ---------------------------------------------------------------------------
+CONFIG_CACHE_KEY = "sentinel:config"
+
+def _default_config():
+    return {
+        'ai_engine': {
+            'model_path': '/models/current_model.pkl',
+            'confidence_threshold': 0.85,
+            'batch_size': 1000
+        },
+        'firewall': {
+            'max_rules': 10000,
+            'sync_interval': 30
+        },
+        'monitoring': {
+            'alert_threshold': 0.95,
+            'retention_days': 90
+        }
+    }
+
+def _load_config():
+    """Load config from Redis if available, else return defaults."""
+    try:
+        raw = redis_client.get(CONFIG_CACHE_KEY)
+        if raw:
+            return json.loads(raw)
+    except Exception as e:
+        logger.warning(f"Config cache read failed: {e}")
+    return _default_config()
+
+def _save_config(new_config):
+    """Persist config in Redis."""
+    redis_client.set(CONFIG_CACHE_KEY, json.dumps(new_config))
 
 @app.before_request
 def before_request():
@@ -307,24 +352,7 @@ def acknowledge_alert(alert_id):
 def get_config():
     """Get system configuration"""
     try:
-        # Return system-wide configuration
-        config = {
-            'ai_engine': {
-                'model_path': '/models/current_model.pkl',
-                'confidence_threshold': 0.85,
-                'batch_size': 1000
-            },
-            'firewall': {
-                'max_rules': 10000,
-                'sync_interval': 30
-            },
-            'monitoring': {
-                'alert_threshold': 0.95,
-                'retention_days': 90
-            }
-        }
-
-        return jsonify(config), 200
+        return jsonify(_load_config()), 200
 
     except Exception as e:
         logger.error(f"Config retrieval error: {e}")
@@ -342,7 +370,8 @@ def update_config():
             if key not in new_config:
                 return jsonify({'error': f'Missing configuration section: {key}'}), 400
 
-        # Update configuration (in production, this would update persistent storage)
+        # Persist configuration
+        _save_config(new_config)
         logger.info(f"Configuration updated by {g.current_user['username']}: {json.dumps(new_config)}")
 
         return jsonify({'message': 'Configuration updated successfully'}), 200
@@ -351,8 +380,9 @@ def update_config():
         logger.error(f"Config update error: {e}")
         return jsonify({'error': 'Configuration update failed'}), 500
 
-# Statistics endpoints
+# Statistics endpoints (both /stats and /statistics for API compatibility)
 @app.route('/api/v1/stats', methods=['GET'])
+@app.route('/api/v1/statistics', methods=['GET'])
 @require_auth
 def get_statistics():
     """Get system statistics"""
@@ -362,7 +392,8 @@ def get_statistics():
             'requests': get_request_stats(),
             'threats_detected': 0,  # Would come from data collector
             'alerts_generated': 0,  # Would come from alert service
-            'system_health': 'healthy'
+            'system_health': 'healthy',
+            'timestamp': time.time()
         }
 
         return jsonify(stats), 200
@@ -370,6 +401,41 @@ def get_statistics():
     except Exception as e:
         logger.error(f"Stats retrieval error: {e}")
         return jsonify({'error': 'Statistics retrieval failed'}), 500
+
+# Server-Sent Events for real-time updates
+@app.route('/api/v1/stream/threats', methods=['GET'])
+@require_auth
+def stream_threats():
+    """Stream threat update events."""
+    def event_stream():
+        while True:
+            payload = {
+                'type': 'threat_heartbeat',
+                'timestamp': time.time()
+            }
+            yield f"data: {json.dumps(payload)}\n\n"
+            time.sleep(5)
+    return Response(event_stream(), mimetype='text/event-stream', headers={
+        'Cache-Control': 'no-cache',
+        'X-Accel-Buffering': 'no'
+    })
+
+@app.route('/api/v1/stream/alerts', methods=['GET'])
+@require_auth
+def stream_alerts():
+    """Stream alert update events."""
+    def event_stream():
+        while True:
+            payload = {
+                'type': 'alert_heartbeat',
+                'timestamp': time.time()
+            }
+            yield f"data: {json.dumps(payload)}\n\n"
+            time.sleep(5)
+    return Response(event_stream(), mimetype='text/event-stream', headers={
+        'Cache-Control': 'no-cache',
+        'X-Accel-Buffering': 'no'
+    })
 
 # Rate limiting test endpoint
 @app.route('/api/v1/test-rate-limit', methods=['GET'])
@@ -395,22 +461,39 @@ def validate_json_request(required_fields=None):
     
     return None
 
-# Additional endpoints for better API coverage
+# Helper: proxy request to a backend service
+def _proxy_to(base_url, path_suffix, methods=None):
+    """Forward request to backend; path_suffix is appended to base_url (no leading slash)."""
+    url = urljoin(base_url.rstrip('/') + '/', path_suffix.lstrip('/'))
+    headers = {'Authorization': request.headers.get('Authorization', '')}
+    try:
+        if request.method == 'GET':
+            resp = requests.get(url, headers=headers, params=request.args, timeout=30)
+        elif request.method == 'POST':
+            resp = requests.post(url, headers=headers, json=request.get_json(silent=True), params=request.args, timeout=30)
+        elif request.method == 'PUT':
+            resp = requests.put(url, headers=headers, json=request.get_json(silent=True), timeout=30)
+        elif request.method == 'DELETE':
+            resp = requests.delete(url, headers=headers, timeout=30)
+        else:
+            return jsonify({'error': 'Method not allowed'}), 405
+        return jsonify(resp.json() if resp.content else {}), resp.status_code
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Proxy error to {url}: {e}")
+        return jsonify({'error': 'Backend service unavailable'}), 503
+
+# Policy endpoints (proxy to policy-orchestrator)
 @app.route('/api/v1/policies', methods=['GET'])
 @require_auth
 def get_policies():
     """Get firewall policies"""
-    try:
-        # This would proxy to policy orchestrator service
-        # For now, return mock data structure
-        return jsonify({
-            'policies': [],
-            'total': 0,
-            'message': 'Policy service integration pending'
-        }), 200
-    except Exception as e:
-        logger.error(f"Get policies error: {e}")
-        return jsonify({'error': 'Failed to retrieve policies'}), 500
+    return _proxy_to(app.config['POLICY_SERVICE_URL'], '/api/v1/policies')
+
+@app.route('/api/v1/policies/<policy_id>', methods=['GET'])
+@require_auth
+def get_policy(policy_id):
+    """Get a single policy by ID"""
+    return _proxy_to(app.config['POLICY_SERVICE_URL'], f'/api/v1/policies/{policy_id}')
 
 @app.route('/api/v1/policies', methods=['POST'])
 @require_role('admin')
@@ -419,34 +502,114 @@ def create_policy():
     validation_error = validate_json_request(['name', 'action', 'source', 'destination'])
     if validation_error:
         return validation_error
-    
-    try:
-        data = request.json
-        logger.info(f"Policy creation requested: {data.get('name')}")
-        return jsonify({
-            'message': 'Policy created successfully',
-            'policy_id': f"POL-{int(time.time())}"
-        }), 201
-    except Exception as e:
-        logger.error(f"Create policy error: {e}")
-        return jsonify({'error': 'Failed to create policy'}), 500
+    return _proxy_to(app.config['POLICY_SERVICE_URL'], '/api/v1/policies')
 
-@app.route('/api/v1/statistics', methods=['GET'])
+@app.route('/api/v1/policies/<policy_id>', methods=['PUT'])
 @require_auth
-def get_statistics():
-    """Get system statistics"""
-    try:
-        stats = {
-            'requests': get_request_stats(),
-            'threats_detected': 0,
-            'alerts_generated': 0,
-            'system_health': 'healthy',
-            'timestamp': time.time()
-        }
-        return jsonify(stats), 200
-    except Exception as e:
-        logger.error(f"Stats retrieval error: {e}")
-        return jsonify({'error': 'Statistics retrieval failed'}), 500
+def update_policy(policy_id):
+    """Update a policy"""
+    return _proxy_to(app.config['POLICY_SERVICE_URL'], f'/api/v1/policies/{policy_id}')
+
+@app.route('/api/v1/policies/<policy_id>', methods=['DELETE'])
+@require_auth
+def delete_policy(policy_id):
+    """Delete a policy"""
+    return _proxy_to(app.config['POLICY_SERVICE_URL'], f'/api/v1/policies/{policy_id}')
+
+# Compliance Engine proxy
+@app.route('/api/v1/frameworks', methods=['GET'])
+@require_auth
+def get_frameworks():
+    return _proxy_to(app.config['COMPLIANCE_ENGINE_URL'], '/api/v1/frameworks')
+
+@app.route('/api/v1/frameworks/<framework_id>', methods=['GET'])
+@require_auth
+def get_framework(framework_id):
+    return _proxy_to(app.config['COMPLIANCE_ENGINE_URL'], f'/api/v1/frameworks/{framework_id}')
+
+@app.route('/api/v1/assess', methods=['POST'])
+@require_auth
+def compliance_assess():
+    return _proxy_to(app.config['COMPLIANCE_ENGINE_URL'], '/api/v1/assess')
+
+@app.route('/api/v1/gap-analysis', methods=['POST'])
+@require_auth
+def compliance_gap_analysis():
+    return _proxy_to(app.config['COMPLIANCE_ENGINE_URL'], '/api/v1/gap-analysis')
+
+@app.route('/api/v1/reports', methods=['POST'])
+@require_auth
+def compliance_reports():
+    return _proxy_to(app.config['COMPLIANCE_ENGINE_URL'], '/api/v1/reports')
+
+@app.route('/api/v1/reports/history', methods=['GET'])
+@require_auth
+def compliance_reports_history():
+    return _proxy_to(app.config['COMPLIANCE_ENGINE_URL'], '/api/v1/reports/history')
+
+@app.route('/api/v1/map-policy', methods=['POST'])
+@require_auth
+def compliance_map_policy():
+    return _proxy_to(app.config['COMPLIANCE_ENGINE_URL'], '/api/v1/map-policy')
+
+# XAI Service proxy
+@app.route('/api/v1/explain/detection', methods=['POST'])
+@require_auth
+def xai_explain_detection():
+    return _proxy_to(app.config['XAI_SERVICE_URL'], '/api/v1/explain/detection')
+
+@app.route('/api/v1/explain/policy', methods=['POST'])
+@require_auth
+def xai_explain_policy():
+    return _proxy_to(app.config['XAI_SERVICE_URL'], '/api/v1/explain/policy')
+
+@app.route('/api/v1/audit-trail', methods=['GET'])
+@require_auth
+def xai_audit_trail():
+    return _proxy_to(app.config['XAI_SERVICE_URL'], '/api/v1/audit-trail')
+
+@app.route('/api/v1/report/compliance', methods=['POST'])
+@require_auth
+def xai_report_compliance():
+    return _proxy_to(app.config['XAI_SERVICE_URL'], '/api/v1/report/compliance')
+
+@app.route('/api/v1/xai/statistics', methods=['GET'])
+@require_auth
+def xai_statistics():
+    """XAI service statistics (proxied to avoid conflict with gateway /api/v1/statistics)"""
+    return _proxy_to(app.config['XAI_SERVICE_URL'], '/api/v1/statistics')
+
+# AI Engine proxy (optional)
+@app.route('/api/v1/detect', methods=['POST'])
+@require_auth
+def ai_detect():
+    return _proxy_to(app.config['AI_ENGINE_URL'], '/api/v1/detect')
+
+@app.route('/api/v1/detect/batch', methods=['POST'])
+@require_auth
+def ai_detect_batch():
+    return _proxy_to(app.config['AI_ENGINE_URL'], '/api/v1/detect/batch')
+
+# DRL Engine proxy (optional)
+@app.route('/api/v1/decide', methods=['POST'])
+@require_auth
+def drl_decide():
+    return _proxy_to(app.config['DRL_ENGINE_URL'], '/api/v1/decide')
+
+@app.route('/api/v1/decide/batch', methods=['POST'])
+@require_auth
+def drl_decide_batch():
+    return _proxy_to(app.config['DRL_ENGINE_URL'], '/api/v1/decide/batch')
+
+@app.route('/api/v1/action-space', methods=['GET'])
+@require_auth
+def drl_action_space():
+    return _proxy_to(app.config['DRL_ENGINE_URL'], '/api/v1/action-space')
+
+@app.route('/api/v1/state-space', methods=['GET'])
+@require_auth
+def drl_state_space():
+    return _proxy_to(app.config['DRL_ENGINE_URL'], '/api/v1/state-space')
 
 # Error handlers
 @app.errorhandler(429)

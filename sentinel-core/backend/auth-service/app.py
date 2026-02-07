@@ -72,6 +72,8 @@ class UserRole(Enum):
     ADMIN = "admin"
     SECURITY_ANALYST = "security_analyst"
     AUDITOR = "auditor"
+    OPERATOR = "operator"
+    VIEWER = "viewer"
 
 class UserStatus(Enum):
     ACTIVE = "active"

@@ -1,5 +1,7 @@
 """
 Vendor Factory for creating firewall vendor instances.
+Uses AdapterVendor (firewall-adapters package) for all five adapter types when available.
+Falls back to legacy IptablesVendor/AWSSecurityGroupVendor if firewall_adapters not installed.
 """
 import os
 import logging
@@ -10,34 +12,79 @@ from .aws_vendor import AWSSecurityGroupVendor
 
 logger = logging.getLogger(__name__)
 
+try:
+    from .adapter_vendor import AdapterVendor
+    HAS_ADAPTER_VENDOR = True
+except ImportError:
+    AdapterVendor = None
+    HAS_ADAPTER_VENDOR = False
+
+
+def _build_registry() -> Dict[str, type]:
+    """Build vendor registry: prefer AdapterVendor for all five when available."""
+    registry = {}
+    if HAS_ADAPTER_VENDOR and AdapterVendor is not None:
+        registry['iptables'] = AdapterVendor
+        registry['nftables'] = AdapterVendor
+        registry['aws'] = AdapterVendor
+        registry['aws_security_group'] = AdapterVendor  # Alias
+        registry['aws_sg'] = AdapterVendor  # Alias
+        registry['azure'] = AdapterVendor
+        registry['gcp'] = AdapterVendor
+    else:
+        registry['iptables'] = IptablesVendor
+        registry['aws_security_group'] = AWSSecurityGroupVendor
+        registry['aws_sg'] = AWSSecurityGroupVendor
+    return registry
+
 
 class VendorFactory:
     """
     Factory for creating and managing firewall vendor instances.
     """
-    
-    # Registry of available vendors
-    VENDOR_REGISTRY = {
-        'iptables': IptablesVendor,
-        'aws_security_group': AWSSecurityGroupVendor,
-        'aws_sg': AWSSecurityGroupVendor,  # Alias
-    }
-    
+
+    VENDOR_REGISTRY = _build_registry()
+
     def __init__(self):
         self._instances: Dict[str, BaseVendor] = {}
         self._configs = self._load_configs()
-    
+
     def _load_configs(self) -> Dict[str, Dict]:
         """Load vendor configurations from environment."""
         configs = {
             'iptables': {
+                'adapter_type': 'iptables',
                 'chain': os.environ.get('IPTABLES_CHAIN', 'SENTINEL'),
                 'table': os.environ.get('IPTABLES_TABLE', 'filter')
             },
-            'aws_security_group': {
+            'nftables': {'adapter_type': 'nftables'},
+            'aws': {
+                'adapter_type': 'aws',
                 'region': os.environ.get('AWS_REGION', 'us-east-1'),
                 'security_group_id': os.environ.get('AWS_SECURITY_GROUP_ID')
-            }
+            },
+            'aws_security_group': {
+                'adapter_type': 'aws',
+                'region': os.environ.get('AWS_REGION', 'us-east-1'),
+                'security_group_id': os.environ.get('AWS_SECURITY_GROUP_ID')
+            },
+            'aws_sg': {
+                'adapter_type': 'aws',
+                'region': os.environ.get('AWS_REGION', 'us-east-1'),
+                'security_group_id': os.environ.get('AWS_SECURITY_GROUP_ID')
+            },
+            'azure': {
+                'adapter_type': 'azure',
+                'subscription_id': os.environ.get('AZURE_SUBSCRIPTION_ID'),
+                'resource_group': os.environ.get('AZURE_RESOURCE_GROUP'),
+                'nsg_name': os.environ.get('AZURE_NSG_NAME'),
+            },
+            'gcp': {
+                'adapter_type': 'gcp',
+                'project_id': os.environ.get('GCP_PROJECT_ID'),
+                'network': os.environ.get('GCP_NETWORK', 'default'),
+                'credentials_path': os.environ.get('GOOGLE_APPLICATION_CREDENTIALS'),
+            },
         }
         return configs
     

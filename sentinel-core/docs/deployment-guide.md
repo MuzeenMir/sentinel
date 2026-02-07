@@ -62,6 +62,30 @@ npm install
 npm run dev
 ```
 
+## Production Reverse Proxy (TLS)
+
+For production, use the included Nginx reverse proxy to terminate TLS and route
+traffic to the admin console and API gateway.
+
+### 1. Prepare certificates
+
+Place your certificates in:
+
+```
+sentinel-core/reverse-proxy/certs/fullchain.pem
+sentinel-core/reverse-proxy/certs/privkey.pem
+```
+
+### 2. Start with production overrides
+
+```bash
+cd sentinel-core
+docker compose --env-file sentinelenv -f docker-compose.yml -f docker-compose.prod.yml up -d
+```
+
+This will expose ports 80/443 on the reverse proxy and keep internal services
+private. Update `reverse-proxy/nginx.conf` if you need custom domains or paths.
+
 ## AWS Production Deployment
 
 ### 1. Initialize Terraform

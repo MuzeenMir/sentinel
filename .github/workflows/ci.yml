@@ -1,0 +1,112 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sentinel-core/frontend/admin-console
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: sentinel-core/frontend/admin-console/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run type-check
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm run test -- --run
+
+  e2e:
+    name: E2E
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sentinel-core/frontend/admin-console
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: sentinel-core/frontend/admin-console/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+
+      - name: Run E2E tests
+        run: npm run test:e2e
+
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sentinel-core/backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install test dependencies
+        run: pip install -r requirements-test.txt
+
+      - name: Run backend tests
+        run: python -m pytest tests/ -v --tb=short
+
+  training:
+    name: Training pipeline
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sentinel-core
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install training dependencies
+        run: pip install -r training/requirements.txt
+
+      - name: Run training (xgboost + isolation_forest, max 5000 rows)
+        run: |
+          python training/train_all.py \
+            --data-path training/datasets/data \
+            --dataset cicids2018 \
+            --models xgboost isolation_forest \
+            --max-rows 5000 \
+            --device cpu
+
+      - name: Check artifacts
+        run: |
+          test -f backend/ai-engine/trained_models/xgboost/xgboost_model.json
+          test -f backend/ai-engine/trained_models/isolation_forest/isolation_forest.joblib

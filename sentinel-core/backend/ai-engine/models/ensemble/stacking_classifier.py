@@ -162,12 +162,34 @@ class StackingEnsemble:
             if is_threat and result.get('threat_type'):
                 threat_types.append(result['threat_type'])
         
-        # Weighted average of threat scores
-        total_weight = sum(self.weights.get(name, 0.25) for name in detector_results)
-        if total_weight > 0:
-            weighted_threat_score = sum(threat_scores) / total_weight
+        # Use meta-learner when loaded (same feature order as weights)
+        if self.meta_learner is not None and self.weights:
+            order = list(self.weights.keys())
+            row_values = []
+            for n in order:
+                r = detector_results.get(n, {})
+                if not r:
+                    row_values.append(0.5)
+                    continue
+                conf = r.get('confidence', 0.5)
+                row_values.append(conf if r.get('is_threat') else 1.0 - conf)
+            row = np.array([row_values], dtype=np.float64)
+            if row.shape[1] == len(order):
+                try:
+                    proba = self.meta_learner.predict_proba(row)
+                    weighted_threat_score = float(proba[0][1]) if proba.shape[1] > 1 else float(proba[0][0])
+                except Exception:
+                    total_weight = sum(self.weights.get(name, 0.25) for name in detector_results)
+                    weighted_threat_score = sum(threat_scores) / max(total_weight, 1e-9)
+            else:
+                total_weight = sum(self.weights.get(name, 0.25) for name in detector_results)
+                weighted_threat_score = sum(threat_scores) / max(total_weight, 1e-9)
         else:
-            weighted_threat_score = 0.0
+            total_weight = sum(self.weights.get(name, 0.25) for name in detector_results)
+            if total_weight > 0:
+                weighted_threat_score = sum(threat_scores) / total_weight
+            else:
+                weighted_threat_score = 0.0
         
         # Final decision
         is_threat = weighted_threat_score >= self.threshold
@@ -362,7 +384,7 @@ class StackingEnsemble:
                     self.weights = config.get('weights', self.DEFAULT_WEIGHTS)
                     self.threshold = config.get('threshold', 0.5)
                     self._version = config.get('version', '1.0.0')
-                    self._metrics = config.get('metrics', {})
+                    self._metrics = config.get('metrics', config.get('calibration_metrics', {}))
             
             # Load meta-learner
             meta_file = os.path.join(path, 'meta_learner.joblib')

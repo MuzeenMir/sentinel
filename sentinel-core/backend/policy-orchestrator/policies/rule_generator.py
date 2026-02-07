@@ -3,9 +3,10 @@ Rule Generator for creating firewall rules from policy definitions.
 """
 import uuid
 import logging
+import json
 from datetime import datetime
 from typing import Dict, List, Any, Optional
-from netaddr import IPNetwork, IPAddress
+from netaddr import IPNetwork, IPAddress, cidr_merge
 
 logger = logging.getLogger(__name__)
 
@@ -205,17 +206,44 @@ class RuleGenerator:
     
     def merge_rules(self, rules: List[Dict]) -> List[Dict]:
         """Merge overlapping rules for optimization."""
-        # Group by action and protocol
+        # Group by action, protocol, destination, and rule attributes
         groups = {}
         for rule in rules:
-            key = (rule['action'], rule['protocol'])
+            key = (
+                rule.get('action'),
+                rule.get('protocol'),
+                rule.get('dest_port'),
+                rule.get('dest_ip'),
+                rule.get('direction'),
+                rule.get('priority'),
+                json.dumps(rule.get('rate_limit'), sort_keys=True),
+            )
             if key not in groups:
                 groups[key] = []
             groups[key].append(rule)
         
         merged = []
-        for (action, protocol), group_rules in groups.items():
-            # TODO: Implement actual CIDR merging
-            merged.extend(group_rules)
+        for _, group_rules in groups.items():
+            source_cidrs = []
+            base_rule = group_rules[0]
+            for rule in group_rules:
+                src = rule.get('source_cidr') or rule.get('source_ip')
+                if not src:
+                    merged.append(rule)
+                    continue
+                try:
+                    source_cidrs.append(IPNetwork(src))
+                except Exception:
+                    merged.append(rule)
+            
+            if not source_cidrs:
+                continue
+            
+            merged_cidrs = list(IPNetwork(c) for c in [str(n) for n in cidr_merge(source_cidrs)])
+            for network in merged_cidrs:
+                new_rule = dict(base_rule)
+                new_rule['source_cidr'] = str(network)
+                new_rule['source_ip'] = str(network)
+                merged.append(new_rule)
         
         return merged

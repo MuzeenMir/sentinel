@@ -1,91 +1,109 @@
-# Production Docker Compose Configuration
+# Production overrides for Sentinel
 # Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-
-version: '3.8'
+# Ensure .env.production or env file sets JWT_SECRET_KEY, ADMIN_PASSWORD, etc.
 
 services:
-  # Production overrides
-  api-gateway:
-    restart: always
-    deploy:
-      resources:
-        limits:
-          cpus: '1'
-          memory: 512M
-        reservations:
-          cpus: '0.5'
-          memory: 256M
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  auth-service:
-    restart: always
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 256M
-        reservations:
-          cpus: '0.25'
-          memory: 128M
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  ai-engine:
-    restart: always
-    deploy:
-      resources:
-        limits:
-          cpus: '2'
-          memory: 4G
-        reservations:
-          cpus: '1'
-          memory: 2G
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "50m"
-        max-file: "5"
-
   postgres:
-    restart: always
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    # Do not expose postgres port on host in production (remove ports or bind to 127.0.0.1 only)
+    ports: []
     deploy:
       resources:
         limits:
-          cpus: '1'
-          memory: 1G
-        reservations:
-          cpus: '0.5'
-          memory: 512M
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-    command: >
-      postgres
-      -c shared_buffers=256MB
-      -c max_connections=100
-      -c effective_cache_size=512MB
+          memory: 2G
 
   redis:
-    restart: always
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-}
     deploy:
       resources:
         limits:
-          cpus: '0.5'
           memory: 512M
-        reservations:
-          cpus: '0.25'
+
+  auth-service:
+    environment:
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      DATABASE_URL: postgresql://sentinel:${POSTGRES_PASSWORD}@postgres:5432/sentinel_db
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  api-gateway:
+    environment:
+      REDIS_URL: redis://:${REDIS_PASSWORD:-}@redis:6379
+    ports: []
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  admin-console:
+    environment:
+      SENTINEL_DEMO_AUTH: "false"
+      SENTINEL_ENV: production
+    ports: []
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
           memory: 256M
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+
+  ai-engine:
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+
+  alert-service:
+    environment:
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      NOTIFICATION_EMAIL: ${NOTIFICATION_EMAIL}
+
+  elasticsearch:
+    environment:
+      - discovery.type=single-node
+      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
+  reverse-proxy:
+    image: nginx:1.25-alpine
+    container_name: sentinel-reverse-proxy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./reverse-proxy/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./reverse-proxy/certs:/etc/nginx/certs:ro
+    depends_on:
+      - admin-console
+      - api-gateway
+    networks:
+      - sentinel-network
+    restart: unless-stopped

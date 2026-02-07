@@ -66,3 +66,8 @@ export const statsApi = {
   getDashboardStats: () => api.get('/api/v1/statistics'),
   getTrafficStats: () => api.get('/api/v1/traffic'),
 }
+
+export const configApi = {
+  getConfig: () => api.get<Record<string, unknown>>('/api/v1/config'),
+  updateConfig: (data: Record<string, unknown>) => api.put('/api/v1/config', data),
+}
