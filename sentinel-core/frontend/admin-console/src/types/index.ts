@@ -58,6 +58,11 @@ export interface Threat {
   confidence: number
   detection_method: string
   details?: Record<string, unknown>
+  /** Alternate field names from API */
+  source?: string
+  destination?: string
+  target?: string
+  time?: string
 }
 
 export type ThreatType = 
