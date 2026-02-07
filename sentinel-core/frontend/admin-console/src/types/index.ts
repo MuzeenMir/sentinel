@@ -119,6 +119,7 @@ export interface PolicyCreateRequest {
   port_range?: string
   action: PolicyAction
   priority: number
+  [key: string]: unknown
 }
 
 // Compliance Types

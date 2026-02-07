@@ -1,7 +1,7 @@
 import axios from 'axios'
 import { useAuthStore, DEMO_BYPASS_TOKEN } from '../store/authStore'
 import { appConfig } from '../config/runtime'
-import type { LoginResponse, User } from '../types'
+import type { LoginResponse, User, PolicyCreateRequest } from '../types'
 
 const API_BASE_URL = appConfig.apiBaseUrl || ''
 
@@ -51,8 +51,9 @@ export const threatApi = {
 
 export const policyApi = {
   getPolicies: () => api.get('/api/v1/policies'),
-  createPolicy: (data: any) => api.post('/api/v1/policies', data),
-  updatePolicy: (id: string, data: any) => api.put(`/api/v1/policies/${id}`, data),
+  createPolicy: (data: PolicyCreateRequest) => api.post('/api/v1/policies', data),
+  updatePolicy: (id: string, data: Partial<PolicyCreateRequest> & Record<string, unknown>) =>
+    api.put(`/api/v1/policies/${id}`, data),
   deletePolicy: (id: string) => api.delete(`/api/v1/policies/${id}`),
 }
 

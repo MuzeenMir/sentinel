@@ -89,15 +89,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check for training requirements
+        id: check-training
+        run: |
+          if [ -f training/requirements.txt ]; then echo "run=true" >> $GITHUB_OUTPUT; else echo "run=false" >> $GITHUB_OUTPUT; fi
+
+      - name: Skip (no training files)
+        if: steps.check-training.outputs.run != 'true'
+        run: echo "Training requirements not found; skipping training job."
+
       - name: Setup Python
+        if: steps.check-training.outputs.run == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
       - name: Install training dependencies
+        if: steps.check-training.outputs.run == 'true'
         run: pip install -r training/requirements.txt
 
       - name: Run training (xgboost + isolation_forest, max 5000 rows)
+        if: steps.check-training.outputs.run == 'true'
         run: |
           python training/train_all.py \
             --data-path training/datasets/data \
@@ -107,6 +119,7 @@ jobs:
             --device cpu
 
       - name: Check artifacts
+        if: steps.check-training.outputs.run == 'true'
         run: |
           test -f backend/ai-engine/trained_models/xgboost/xgboost_model.json
           test -f backend/ai-engine/trained_models/isolation_forest/isolation_forest.joblib

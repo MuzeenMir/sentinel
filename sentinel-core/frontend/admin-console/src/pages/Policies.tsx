@@ -35,7 +35,11 @@ export function Policies() {
 
   const policies = useMemo(() => apiPolicies, [apiPolicies])
 
-  const createMutation = useMutation({
+  const createMutation = useMutation<
+    Awaited<ReturnType<typeof policyApi.createPolicy>>,
+    Error,
+    PolicyCreateRequest
+  >({
     mutationFn: (payload: PolicyCreateRequest) => policyApi.createPolicy(payload),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['policies'] })
@@ -102,8 +106,9 @@ export function Policies() {
 
   const stats = useMemo(() => {
     const total = policies.length
-    const deny = policies.filter((p) => p.action === 'deny' || p.action === 'DENY').length
-    const allow = policies.filter((p) => p.action === 'allow' || p.action === 'ALLOW').length
+    const actionLower = (a: string | undefined) => String(a ?? '').toLowerCase()
+    const deny = policies.filter((p) => actionLower(p.action) === 'deny').length
+    const allow = policies.filter((p) => actionLower(p.action) === 'allow').length
     return { total, deny, allow }
   }, [policies])
 
