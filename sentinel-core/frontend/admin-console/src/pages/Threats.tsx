@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { clsx } from 'clsx'
+import type { Threat } from '../types'
 import { threatApi } from '../services/api'
 import { createSseClient } from '../services/stream'
 import { appConfig } from '../config/runtime'
@@ -20,7 +21,7 @@ export function Threats() {
     },
   })
 
-  const threats = (data?.threats as any[]) || []
+  const threats = (data?.threats as Threat[]) || []
   const normalizedQuery = query.trim().toLowerCase()
 
   const filteredThreats = threats.filter((threat) => {
@@ -197,7 +198,9 @@ export function Threats() {
                       {String(threat.status || 'new').replace('_', ' ')}
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-400">
-                      {new Date(threat.timestamp || threat.time || Date.now()).toLocaleString()}
+                      {(threat.timestamp || threat.time)
+                        ? new Date(threat.timestamp || threat.time).toLocaleString()
+                        : '—'}
                     </td>
                     <td className="px-6 py-4 space-x-2 text-right pr-8">
                       <button

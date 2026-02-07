@@ -75,7 +75,9 @@ export function ThreatDetail() {
                   </p>
                   <p>
                     <span className="text-slate-500">Time:</span>{' '}
-                    {new Date(threat.timestamp || threat.time || Date.now()).toLocaleString()}
+                    {(threat.timestamp || threat.time)
+                      ? new Date(threat.timestamp || threat.time).toLocaleString()
+                      : '—'}
                   </p>
                 </div>
               </div>

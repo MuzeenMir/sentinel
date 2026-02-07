@@ -59,7 +59,7 @@ export const policyApi = {
 
 export const complianceApi = {
   getFrameworks: () => api.get('/api/v1/frameworks'),
-  runAssessment: (framework: string, policies: any[]) => 
+  runAssessment: (framework: string, policies: Record<string, unknown>[]) => 
     api.post('/api/v1/assess', { framework, policies }),
 }
 

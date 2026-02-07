@@ -27,13 +27,11 @@ export function Policies() {
     retry: 1,
   })
 
-  const apiPolicies: Policy[] = Array.isArray(data?.policies)
-    ? data.policies
-    : Array.isArray(data)
-      ? data
-      : []
-
-  const policies = useMemo(() => apiPolicies, [apiPolicies])
+  const policies = useMemo<Policy[]>(() => {
+    if (Array.isArray(data?.policies)) return data.policies
+    if (Array.isArray(data)) return data
+    return []
+  }, [data])
 
   const createMutation = useMutation<
     Awaited<ReturnType<typeof policyApi.createPolicy>>,
