@@ -1,0 +1,2 @@
+# No external dependencies — uses Python stdlib only
+# This file exists for documentation purposes
