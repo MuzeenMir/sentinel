@@ -54,6 +54,13 @@ configure_credentials() {
         return
     fi
 
+    if [ ! -t 0 ]; then
+        log "ERROR: AWS credentials invalid or not set, and this script is not interactive."
+        log "Run in your terminal: aws configure"
+        log "Then run this script again: bash training/aws-setup.sh"
+        exit 1
+    fi
+
     log "Running 'aws configure'. You will need:"
     log "  - AWS Access Key ID"
     log "  - AWS Secret Access Key"

@@ -11,7 +11,7 @@ set -euo pipefail
 #   - Project clone + Python deps + PyTorch w/ CUDA
 ###############################################################################
 
-REPO_URL="${SENTINEL_REPO:-https://github.com/YOUR_ORG/sentinel.git}"
+REPO_URL="${SENTINEL_REPO:-https://github.com/MuzeenMir/sentinel.git}"
 BRANCH="${SENTINEL_BRANCH:-main}"
 PYTHON_VERSION="3.12"
 CUDA_VERSION="12-1"
