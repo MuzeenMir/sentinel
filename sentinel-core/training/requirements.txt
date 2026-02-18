@@ -1,0 +1,38 @@
+# SENTINEL Training Pipeline - Combined Dependencies
+# Install with: pip install -r requirements.txt
+
+# ── Core ML/AI ────────────────────────────────────────────────────────────────
+numpy>=1.26.0
+pandas>=2.0.3
+scikit-learn>=1.3.0
+scipy>=1.11.2
+joblib>=1.3.2
+
+# ── Gradient Boosting ─────────────────────────────────────────────────────────
+xgboost>=2.0.0
+lightgbm>=4.1.0
+
+# ── Deep Learning (PyTorch) ───────────────────────────────────────────────────
+# NOTE: For CUDA support, install separately after this file:
+#   pip install --force-reinstall torch==2.1.0+cu121 torchvision==0.16.0+cu121 \
+#       --extra-index-url https://download.pytorch.org/whl/cu121
+torch>=2.1.0
+torchvision>=0.16.0
+
+# ── Reinforcement Learning ────────────────────────────────────────────────────
+stable-baselines3>=2.1.0
+gymnasium>=0.29.1
+
+# ── Anomaly Detection ─────────────────────────────────────────────────────────
+pyod>=1.1.0
+
+# ── Explainability ────────────────────────────────────────────────────────────
+shap>=0.43.0
+
+# ── Model Serialization ──────────────────────────────────────────────────────
+onnx>=1.14.1
+onnxruntime>=1.16.0
+
+# ── Utilities ─────────────────────────────────────────────────────────────────
+pyyaml>=6.0.1
+tqdm>=4.66.0

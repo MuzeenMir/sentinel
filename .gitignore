@@ -1,0 +1,59 @@
+# Dependencies
+node_modules/
+.pnp.*
+.yarn/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+*.whl
+venv/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Testing / Coverage
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.tox/
+
+# Build artifacts
+*.log
+*.pid
+
+# Training datasets (large files)
+sentinel-core/training/datasets/data/cicids2018/
+sentinel-core/training/datasets/data/cicids2017/
+sentinel-core/training/datasets/data/unsw_nb15/
+sentinel-core/training/datasets/data/MANIFEST.txt
+
+# Trained model weights (large binary files)
+sentinel-core/backend/ai-engine/trained_models/
+
+# AWS keys (never commit)
+*.pem
+.sentinel-instance-id
+.sentinel-instance-ip
