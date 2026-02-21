@@ -37,9 +37,10 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 
-# Ensure the project root is importable
+# Ensure the project root is importable (training package + backend services)
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 sys.path.insert(0, str(PROJECT_ROOT / "backend" / "ai-engine"))
 sys.path.insert(0, str(PROJECT_ROOT / "backend" / "drl-engine"))
 
