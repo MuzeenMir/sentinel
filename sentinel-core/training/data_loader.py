@@ -389,13 +389,20 @@ def load_dataset(
     scaler = StandardScaler()
     X = scaler.fit_transform(X)
 
+    # Remap labels to contiguous 0..n_classes-1 (dataset may have non-contiguous indices)
+    unique = np.unique(y)
+    if len(unique) > 0 and (unique != np.arange(len(unique))).any():
+        label_map = {old: new for new, old in enumerate(unique)}
+        y = np.array([label_map[int(v)] for v in y], dtype=np.int64)
+    n_classes = len(np.unique(y))
+
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=test_size, random_state=random_state, stratify=y,
     )
 
     logger.info(
         "Dataset split: train=%d  test=%d  features=%d  classes=%d",
-        len(X_train), len(X_test), X_train.shape[1], len(np.unique(y)),
+        len(X_train), len(X_test), X_train.shape[1], n_classes,
     )
 
     return {
@@ -405,7 +412,7 @@ def load_dataset(
         "y_test": y_test,
         "feature_names": feature_names,
         "scaler": scaler,
-        "n_classes": len(np.unique(y)),
+        "n_classes": n_classes,
     }
 
 
@@ -442,13 +449,20 @@ def load_multiple_datasets(
     scaler = StandardScaler()
     X = scaler.fit_transform(X)
 
+    # Remap labels to contiguous 0..n_classes-1
+    unique = np.unique(y)
+    if len(unique) > 0 and (unique != np.arange(len(unique))).any():
+        label_map = {old: new for new, old in enumerate(unique)}
+        y = np.array([label_map[int(v)] for v in y], dtype=np.int64)
+    n_classes = len(np.unique(y))
+
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=test_size, random_state=random_state, stratify=y,
     )
 
     logger.info(
         "Merged %d datasets: train=%d  test=%d  classes=%d",
-        len(datasets), len(X_train), len(X_test), len(np.unique(y)),
+        len(datasets), len(X_train), len(X_test), n_classes,
     )
 
     return {
@@ -458,5 +472,5 @@ def load_multiple_datasets(
         "y_test": y_test,
         "feature_names": feature_names,
         "scaler": scaler,
-        "n_classes": len(np.unique(y)),
+        "n_classes": n_classes,
     }

@@ -97,9 +97,10 @@ def train_xgboost(
     logger.info("Training XGBoost classifier...")
     model_dir = os.path.join(output_dir, "xgboost")
 
+    n_classes = data.get("n_classes") or len(ThreatCategory.all_categories())
     params = {
         "objective": "multi:softprob",
-        "num_class": len(ThreatCategory.all_categories()),
+        "num_class": n_classes,
         "max_depth": 8,
         "learning_rate": 0.1,
         "n_estimators": 200,
