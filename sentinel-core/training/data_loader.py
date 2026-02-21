@@ -132,6 +132,7 @@ def load_cicids2018(
 ) -> Tuple[np.ndarray, np.ndarray, List[str]]:
     """
     Load CSE-CIC-IDS2018 processed CSV files.
+    Processes one file at a time to avoid OOM on large datasets.
 
     Returns (X, y, feature_names) where y contains integer class indices.
     """
@@ -142,61 +143,66 @@ def load_cicids2018(
 
     logger.info("Loading CIC-IDS2018 from %s (%d files)", data_path, len(csv_files))
 
-    frames: List[pd.DataFrame] = []
+    X_parts: List[np.ndarray] = []
+    y_parts: List[np.ndarray] = []
+    feature_names: List[str] = []
+    label_col = None
+    drop_cols = None
+    feature_cols = None
+
     for fp in csv_files:
         logger.info("  Reading %s", fp.name)
         try:
-            chunk = pd.read_csv(fp, encoding="utf-8", low_memory=False)
+            df = pd.read_csv(fp, encoding="utf-8", low_memory=False)
         except UnicodeDecodeError:
-            chunk = pd.read_csv(fp, encoding="latin-1", low_memory=False)
-        chunk = _clean_columns(chunk)
-        frames.append(chunk)
+            df = pd.read_csv(fp, encoding="latin-1", low_memory=False)
+        df = _clean_columns(df)
 
-    df = pd.concat(frames, ignore_index=True)
-    logger.info("Raw rows: %d, columns: %d", len(df), len(df.columns))
+        if label_col is None:
+            for candidate in ("label", "labels", "attack", "class"):
+                if candidate in df.columns:
+                    label_col = candidate
+                    break
+            if label_col is None:
+                raise KeyError(f"Cannot find label column. Columns: {list(df.columns)}")
+            df["_sentinel_label"] = (
+                df[label_col].astype(str).str.strip().map(_CICIDS2018_MAP).fillna("unknown")
+            )
+            df["_sentinel_y"] = df["_sentinel_label"].map(LABEL_TO_IDX)
+            drop_cols = [c for c in df.columns if c in (
+                label_col, "_sentinel_label", "timestamp", "flow_id",
+                "src_ip", "src_port", "dst_ip", "dst_port", "protocol",
+            ) or c.startswith("_sentinel")]
+            feature_cols = [c for c in df.columns if c not in drop_cols]
+            feature_names = list(feature_cols[:N_FEATURES])
+            feature_names += [f"pad_{i}" for i in range(N_FEATURES - len(feature_names))]
+        else:
+            df["_sentinel_label"] = (
+                df[label_col].astype(str).str.strip().map(_CICIDS2018_MAP).fillna("unknown")
+            )
+            df["_sentinel_y"] = df["_sentinel_label"].map(LABEL_TO_IDX)
 
-    # Identify the label column
-    label_col = None
-    for candidate in ("label", "labels", "attack", "class"):
-        if candidate in df.columns:
-            label_col = candidate
-            break
-    if label_col is None:
-        raise KeyError(f"Cannot find label column. Columns: {list(df.columns)}")
+        y_chunk = df["_sentinel_y"].values.astype(np.int64)
+        df_features = df[feature_cols].copy()
+        del df
+        df_features = _safe_numeric(df_features)
+        df_features.replace([np.inf, -np.inf], np.nan, inplace=True)
+        df_features.fillna(0, inplace=True)
+        X_chunk = df_features.values.astype(np.float32)
+        del df_features
+        X_chunk = _pad_or_truncate(X_chunk, N_FEATURES)
+        X_parts.append(X_chunk)
+        y_parts.append(y_chunk)
 
-    # Map labels
-    df["_sentinel_label"] = (
-        df[label_col]
-        .astype(str)
-        .str.strip()
-        .map(_CICIDS2018_MAP)
-        .fillna("unknown")
-    )
-    df["_sentinel_y"] = df["_sentinel_label"].map(LABEL_TO_IDX)
+    X = np.vstack(X_parts)
+    y = np.concatenate(y_parts)
+    del X_parts, y_parts
 
-    # Drop non-numeric / label / id columns
-    drop_cols = [c for c in df.columns if c in (
-        label_col, "_sentinel_label", "timestamp", "flow_id",
-        "src_ip", "src_port", "dst_ip", "dst_port", "protocol",
-    ) or c.startswith("_sentinel")]
-    feature_cols = [c for c in df.columns if c not in drop_cols]
-
-    df_features = df[feature_cols].copy()
-    df_features = _safe_numeric(df_features)
-    df_features.replace([np.inf, -np.inf], np.nan, inplace=True)
-    df_features.fillna(0, inplace=True)
-
-    y = df["_sentinel_y"].values.astype(np.int64)
-
-    if max_rows and len(df_features) > max_rows:
-        idx = np.random.RandomState(42).choice(len(df_features), max_rows, replace=False)
-        df_features = df_features.iloc[idx]
+    if max_rows and len(X) > max_rows:
+        rng = np.random.RandomState(42)
+        idx = rng.choice(len(X), max_rows, replace=False)
+        X = X[idx]
         y = y[idx]
-
-    X = df_features.values.astype(np.float32)
-    X = _pad_or_truncate(X, N_FEATURES)
-    feature_names = list(df_features.columns[:N_FEATURES])
-    feature_names += [f"pad_{i}" for i in range(N_FEATURES - len(feature_names))]
 
     logger.info("CIC-IDS2018 loaded: X=%s  classes=%s", X.shape, np.unique(y).tolist())
     return X, y, feature_names[:N_FEATURES]
