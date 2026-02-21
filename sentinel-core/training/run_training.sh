@@ -46,6 +46,7 @@ if [ ! -d "${DATA_PATH}" ] || [ -z "$(ls -A "${DATA_PATH}" 2>/dev/null)" ]; then
 fi
 
 log "Starting training: dataset=${DATASET} device=${DEVICE} output=${OUTPUT_PATH}"
+export PYTHONPATH="${PROJECT_DIR}/sentinel-core${PYTHONPATH:+:${PYTHONPATH}}"
 python training/train_all.py \
     --data-path "${DATA_PATH}" \
     --dataset "${DATASET}" \
