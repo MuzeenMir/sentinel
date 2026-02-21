@@ -14,7 +14,8 @@ set -euo pipefail
 REPO_URL="${SENTINEL_REPO:-https://github.com/MuzeenMir/sentinel.git}"
 BRANCH="${SENTINEL_BRANCH:-main}"
 PYTHON_VERSION="3.12"
-CUDA_VERSION="12-1"
+# Ubuntu 24.04 NVIDIA repo has 12-5/12-6, not 12-1; use 12-6 for compatibility
+CUDA_VERSION="${CUDA_VERSION:-12-6}"
 PROJECT_DIR="$HOME/sentinel"
 VENV_DIR="$HOME/sentinel-venv"
 
@@ -67,9 +68,14 @@ install_nvidia_cuda() {
     rm /tmp/cuda-keyring.deb
 
     sudo apt-get update -qq
-    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+    # Try specific version first; fallback to cuda-toolkit-12 (meta) for Ubuntu 24.04
+    if ! sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
         "cuda-toolkit-${CUDA_VERSION}" \
-        cuda-drivers
+        cuda-drivers 2>/dev/null; then
+        log "Trying cuda-toolkit-12 meta-package..."
+        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+            cuda-toolkit-12 cuda-drivers
+    fi
 
     # Set up environment
     cat >> "$HOME/.bashrc" <<'EOF'

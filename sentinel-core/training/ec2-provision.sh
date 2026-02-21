@@ -125,9 +125,9 @@ REGION="${AWS_REGION:-us-east-1}"
 aws ec2 stop-instances --instance-ids "$INSTANCE_ID" --region "$REGION"
 aws ec2 wait instance-stopped --instance-ids "$INSTANCE_ID" --region "$REGION"
 
-# 2. Change to GPU instance type
+# 2. Change to GPU instance type (g4dn.2xlarge = 8 vCPU; fits typical G/VT quota)
 #    g4dn.2xlarge = 8 vCPU, 32GB RAM, 1x T4 16GB  (~$0.75/hr on-demand)
-#    g4dn.4xlarge = 16 vCPU, 64GB RAM, 1x T4 16GB  (~$1.20/hr) if more RAM needed
+#    g4dn.4xlarge = 16 vCPU (requires higher quota)
 aws ec2 modify-instance-attribute \
     --instance-id "$INSTANCE_ID" \
     --instance-type '{"Value": "g4dn.2xlarge"}' \

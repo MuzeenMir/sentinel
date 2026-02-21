@@ -122,6 +122,8 @@ backend/ai-engine/trained_models/
 | Training | `g4dn.2xlarge` | 8 vCPU, 32 GB RAM, T4 GPU | ~$0.75/hr |
 | Training (more RAM) | `g4dn.4xlarge` | 16 vCPU, 64 GB RAM, T4 GPU | ~$1.20/hr |
 
+**Note:** Default GPU choice is `g4dn.2xlarge` (8 vCPU). If your AWS account has an 8 vCPU limit for G/VT instances, use only `g4dn.2xlarge`; `g4dn.4xlarge` requires a quota increase.
+
 Storage: 150 GB gp3 EBS.
 
 ### Upgrade / Downgrade
