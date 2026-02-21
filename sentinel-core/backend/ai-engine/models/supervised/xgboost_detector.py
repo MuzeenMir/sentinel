@@ -286,11 +286,10 @@ class XGBoostDetector(BaseDetector):
         # Initialize model with parameters
         self.model = xgb.XGBClassifier(**self.params)
         
-        # Training arguments
+        # Training arguments (XGBoost 2.x+ no longer accepts early_stopping_rounds in fit())
         fit_params = {}
         if eval_set:
             fit_params['eval_set'] = [eval_set]
-            fit_params['early_stopping_rounds'] = 10
             fit_params['verbose'] = False
         
         # Train
