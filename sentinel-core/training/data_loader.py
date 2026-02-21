@@ -186,6 +186,9 @@ def load_cicids2018(
         df_features = df[feature_cols].copy()
         del df
         df_features = _safe_numeric(df_features)
+        # Force every column to numeric (handles duplicate header rows / stray strings)
+        for col in list(df_features.columns):
+            df_features[col] = pd.to_numeric(df_features[col], errors="coerce")
         df_features.replace([np.inf, -np.inf], np.nan, inplace=True)
         df_features.fillna(0, inplace=True)
         X_chunk = df_features.values.astype(np.float32)
