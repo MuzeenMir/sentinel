@@ -10,7 +10,6 @@ VENV_DIR="${HOME}/sentinel-venv"
 DATA_PATH="${PROJECT_DIR}/sentinel-core/training/datasets/data"
 OUTPUT_PATH="${PROJECT_DIR}/sentinel-core/backend/ai-engine/trained_models"
 DATASET="${SENTINEL_DATASET:-cicids2018}"
-MAX_ROWS="${SENTINEL_MAX_ROWS:-}"
 
 log() { echo "[$(date '+%H:%M:%S')] $*"; }
 
@@ -48,13 +47,10 @@ fi
 
 log "Starting training: dataset=${DATASET} device=${DEVICE} output=${OUTPUT_PATH}"
 # Run as module so 'training' package is found (cwd is sentinel-core)
-EXTRA_ARGS=()
-[ -n "${MAX_ROWS}" ] && EXTRA_ARGS+=(--max-rows "${MAX_ROWS}")
 PYTHONPATH="${PROJECT_DIR}/sentinel-core" python -m training.train_all \
     --data-path "${DATA_PATH}" \
     --dataset "${DATASET}" \
     --device "${DEVICE}" \
-    --output-path "${OUTPUT_PATH}" \
-    "${EXTRA_ARGS[@]}"
+    --output-path "${OUTPUT_PATH}"
 
 log "Training finished. Models in ${OUTPUT_PATH}"

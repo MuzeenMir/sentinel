@@ -25,6 +25,9 @@ bash sentinel-core/training/download_datasets.sh
 # 6. Upgrade to GPU (from local machine) -- see ec2-provision.sh upgrade section
 #    Stop -> change type to g4dn.2xlarge -> start -> SSH back in
 
+# 6b. (Optional) Add 48GB swap to avoid OOM during full-dataset training
+sudo bash sentinel-core/training/ec2-add-swap.sh
+
 # 7. Train all models (on EC2)
 cd ~/sentinel/sentinel-core
 python training/train_all.py \
@@ -182,6 +185,7 @@ aws s3 sync backend/ai-engine/trained_models/ \
 | `aws-setup.sh` | Install AWS CLI, configure credentials, create key pair + security group |
 | `ec2-provision.sh` | Launch EC2 instance, print SSH command, upgrade instructions |
 | `ec2-setup.sh` | On-instance: system deps, Python 3.12, CUDA, venv, pip packages |
+| `ec2-add-swap.sh` | On-instance: add 48GB swap (run once: `sudo bash training/ec2-add-swap.sh`) |
 | `download_datasets.sh` | Download CIC-IDS2018, CIC-IDS2017, UNSW-NB15 |
 | `train_all.py` | Main training orchestrator with checkpointing |
 | `data_loader.py` | Dataset loading, label mapping, preprocessing |
