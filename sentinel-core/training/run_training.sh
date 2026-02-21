@@ -35,7 +35,7 @@ fi
 if [ "$DEVICE" = "cuda" ]; then
     if ! python -c "import torch; exit(0 if torch.cuda.is_available() else 1)" 2>/dev/null; then
         log "Installing PyTorch with CUDA support..."
-        pip install --force-reinstall torch==2.1.0+cu121 torchvision==0.16.0+cu121 \
+        pip install --force-reinstall torch==2.2.2+cu121 torchvision==0.17.2+cu121 \
             --extra-index-url https://download.pytorch.org/whl/cu121
     fi
 fi

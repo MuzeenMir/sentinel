@@ -14,9 +14,9 @@ lightgbm>=4.1.0
 
 # ── Deep Learning (PyTorch) ───────────────────────────────────────────────────
 # NOTE: For CUDA support, install separately after this file:
-#   pip install --force-reinstall torch==2.1.0+cu121 torchvision==0.16.0+cu121 \
+#   pip install --force-reinstall torch==2.2.2+cu121 torchvision==0.17.2+cu121 \
 #       --extra-index-url https://download.pytorch.org/whl/cu121
-torch>=2.1.0
+torch>=2.2.0
 torchvision>=0.16.0
 
 # ── Reinforcement Learning ────────────────────────────────────────────────────

@@ -125,8 +125,8 @@ setup_python_env() {
 
     # Install PyTorch with CUDA support (override the CPU-only version)
     pip install --force-reinstall \
-        torch==2.1.0+cu121 \
-        torchvision==0.16.0+cu121 \
+        torch==2.2.2+cu121 \
+        torchvision==0.17.2+cu121 \
         --extra-index-url https://download.pytorch.org/whl/cu121
 
     # Add venv activation to .bashrc
