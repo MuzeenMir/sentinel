@@ -504,7 +504,7 @@ def train_drl(
 
     total_timesteps = 50_000
     logger.info("PPO training for %d timesteps...", total_timesteps)
-    model.learn(total_timesteps=total_timesteps, progress_bar=True)
+    model.learn(total_timesteps=total_timesteps, progress_bar=False)
 
     model_path = os.path.join(model_dir, "ppo_firewall")
     model.save(model_path)
