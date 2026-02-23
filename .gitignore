@@ -53,10 +53,12 @@ sentinel-core/training/datasets/data/MANIFEST.txt
 # Trained model weights (large binary files)
 sentinel-core/backend/ai-engine/trained_models/
 
-# AWS keys (never commit)
+# AWS keys and local CLI install (never commit)
 *.pem
 .sentinel-instance-id
 .sentinel-instance-ip
+sentinel-core/training/aws/
+sentinel-core/training/awscliv2.zip
 
 # Cursor sync
 .cursor-sync/chat-history-backup/
