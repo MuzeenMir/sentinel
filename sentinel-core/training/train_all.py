@@ -31,7 +31,7 @@ import logging
 import os
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -538,7 +538,7 @@ def train_drl(
             "n_actions": n_actions,
             "total_timesteps": total_timesteps,
             "metrics": metrics,
-            "trained_at": datetime.utcnow().isoformat(),
+            "trained_at": datetime.now(timezone.utc).isoformat(),
         }, f, indent=2)
 
     logger.info("DRL eval: mean_reward=%.4f  correct_rate=%.4f",
@@ -645,7 +645,7 @@ def run_training(args: argparse.Namespace) -> None:
 
     # Write summary report
     report = {
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "dataset": args.dataset,
         "device": args.device,
         "max_rows": args.max_rows,
