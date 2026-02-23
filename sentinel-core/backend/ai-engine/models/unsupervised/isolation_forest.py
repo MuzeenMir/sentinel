@@ -38,7 +38,7 @@ class IsolationForestDetector(BaseDetector):
     DEFAULT_PARAMS = {
         'n_estimators': 200,
         'max_samples': 'auto',
-        'contamination': 0.1,  # Expected proportion of outliers
+        'contamination': 'auto',
         'max_features': 1.0,
         'bootstrap': False,
         'n_jobs': -1,
@@ -150,7 +150,9 @@ class IsolationForestDetector(BaseDetector):
                 'last_updated': datetime.utcnow().isoformat(),
                 'metrics': self._metrics,
                 'threshold': self._threshold,
-                'params': self.params
+                'score_percentiles': getattr(self, '_score_percentiles', {}),
+                'params': {k: v for k, v in self.params.items()
+                           if not callable(v)},
             }
             with open(meta_file, 'w') as f:
                 json.dump(meta, f, indent=2)
@@ -185,12 +187,11 @@ class IsolationForestDetector(BaseDetector):
             if self.scaler:
                 features = self.scaler.transform(features)
             
-            # Get prediction and anomaly score
-            prediction = self.model.predict(features)[0]  # -1 for anomaly, 1 for normal
-            anomaly_score = self.model.decision_function(features)[0]  # Lower = more anomalous
+            # Get anomaly score (lower = more anomalous)
+            anomaly_score = self.model.decision_function(features)[0]
             
-            # Convert to threat detection format
-            is_anomaly = prediction == -1
+            # Use calibrated/percentile threshold instead of sklearn's built-in
+            is_anomaly = anomaly_score < self._threshold
             
             # Normalize anomaly score to confidence (0-1)
             # Score typically ranges from -0.5 (anomaly) to 0.5 (normal)
@@ -235,13 +236,12 @@ class IsolationForestDetector(BaseDetector):
             if self.scaler:
                 features = self.scaler.transform(features)
             
-            # Batch predictions
-            predictions = self.model.predict(features)
+            # Batch predictions using calibrated threshold
             anomaly_scores = self.model.decision_function(features)
             
             results = []
-            for pred, score in zip(predictions, anomaly_scores):
-                is_anomaly = pred == -1
+            for score in anomaly_scores:
+                is_anomaly = score < self._threshold
                 confidence = self._score_to_confidence(score)
                 
                 results.append({
@@ -293,6 +293,15 @@ class IsolationForestDetector(BaseDetector):
         n_anomalies = np.sum(predictions == -1)
         anomaly_rate = n_anomalies / len(predictions)
         
+        # Use percentile-based threshold: the score at which 5% of normal
+        # training data would be flagged (controls false-positive rate).
+        self._threshold = float(np.percentile(anomaly_scores, 5))
+        self._score_percentiles = {
+            'p1': float(np.percentile(anomaly_scores, 1)),
+            'p5': float(np.percentile(anomaly_scores, 5)),
+            'p10': float(np.percentile(anomaly_scores, 10)),
+        }
+        
         self._metrics = {
             'n_samples': len(X),
             'n_features': X.shape[1],
@@ -306,7 +315,52 @@ class IsolationForestDetector(BaseDetector):
         self._last_updated = datetime.utcnow().isoformat()
         
         logger.info(f"Isolation Forest training complete. Metrics: {self._metrics}")
+        logger.info(f"Threshold (5th-percentile): {self._threshold:.6f}")
         return self._metrics
+    
+    def calibrate_threshold(self, X_benign: np.ndarray, X_attack: np.ndarray,
+                            target_fpr: float = 0.05) -> float:
+        """
+        Calibrate the decision threshold using labeled validation data.
+        
+        Finds the threshold that achieves the target false-positive rate
+        on benign data while maximising detection of attacks.
+        
+        Args:
+            X_benign: Benign validation samples
+            X_attack: Attack validation samples
+            target_fpr: Target false-positive rate (default 5%)
+            
+        Returns:
+            Optimal threshold value
+        """
+        if self.scaler is not None:
+            benign_scaled = self.scaler.transform(X_benign)
+            attack_scaled = self.scaler.transform(X_attack)
+        else:
+            benign_scaled = X_benign
+            attack_scaled = X_attack
+        
+        benign_scores = self.model.decision_function(benign_scaled)
+        attack_scores = self.model.decision_function(attack_scaled)
+        
+        # Threshold = percentile on benign scores that gives target_fpr
+        self._threshold = float(np.percentile(benign_scores, target_fpr * 100))
+        
+        detected = np.sum(attack_scores < self._threshold)
+        detection_rate = detected / max(len(attack_scores), 1)
+        actual_fpr = np.sum(benign_scores < self._threshold) / max(len(benign_scores), 1)
+        
+        logger.info(
+            f"Calibrated threshold={self._threshold:.6f}  "
+            f"detection_rate={detection_rate:.4f}  fpr={actual_fpr:.4f}"
+        )
+        
+        self._metrics['calibrated_threshold'] = self._threshold
+        self._metrics['calibrated_detection_rate'] = float(detection_rate)
+        self._metrics['calibrated_fpr'] = float(actual_fpr)
+        
+        return self._threshold
     
     def _score_to_confidence(self, score: float) -> float:
         """

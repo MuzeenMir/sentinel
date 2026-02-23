@@ -171,6 +171,9 @@ class AutoencoderDetector(BaseDetector):
                     self._threshold = saved_config.get('threshold', 0.1)
                     self._mean_error = saved_config.get('mean_error', 0.0)
                     self._std_error = saved_config.get('std_error', 0.1)
+                    self._median_error = saved_config.get('median_error', self._mean_error)
+                    self._p95_error = saved_config.get('p95_error', self._threshold)
+                    self._p99_error = saved_config.get('p99_error', self._threshold)
                     self._feature_mean = np.array(saved_config.get('feature_mean', []))
                     self._feature_std = np.array(saved_config.get('feature_std', []))
             
@@ -215,6 +218,9 @@ class AutoencoderDetector(BaseDetector):
                 'threshold': self._threshold,
                 'mean_error': self._mean_error,
                 'std_error': self._std_error,
+                'median_error': getattr(self, '_median_error', self._mean_error),
+                'p95_error': getattr(self, '_p95_error', self._threshold),
+                'p99_error': getattr(self, '_p99_error', self._threshold),
                 'feature_mean': self._feature_mean.tolist() if self._feature_mean is not None else [],
                 'feature_std': self._feature_std.tolist() if self._feature_std is not None else []
             }
@@ -484,8 +490,14 @@ class AutoencoderDetector(BaseDetector):
         self._mean_error = float(np.mean(errors_np))
         self._std_error = float(np.std(errors_np))
         
-        # Set threshold as mean + 2*std (captures ~95% of normal data)
-        self._threshold = self._mean_error + 2 * self._std_error
+        # Use robust percentile-based threshold instead of mean+2*std.
+        # The old formula (mean + 2*std) fails when outliers inflate std
+        # (e.g. std=254 vs mean=0.31 -> threshold=508 that nothing exceeds).
+        # 99th percentile on normal training data keeps FPR ~1%.
+        self._median_error = float(np.median(errors_np))
+        self._p95_error = float(np.percentile(errors_np, 95))
+        self._p99_error = float(np.percentile(errors_np, 99))
+        self._threshold = self._p99_error
         
         self._metrics = {
             'n_samples': len(X),
@@ -493,7 +505,10 @@ class AutoencoderDetector(BaseDetector):
             'final_loss': float(best_loss),
             'mean_reconstruction_error': self._mean_error,
             'std_reconstruction_error': self._std_error,
-            'threshold': self._threshold
+            'median_reconstruction_error': self._median_error,
+            'threshold_p95': self._p95_error,
+            'threshold_p99': self._p99_error,
+            'threshold': self._threshold,
         }
         
         self._is_ready = True
@@ -501,6 +516,68 @@ class AutoencoderDetector(BaseDetector):
         
         logger.info(f"Autoencoder training complete. Metrics: {self._metrics}")
         return self._metrics
+    
+    def calibrate_threshold(self, X_benign: np.ndarray, X_attack: np.ndarray,
+                            target_fpr: float = 0.01) -> float:
+        """
+        Calibrate the anomaly threshold using labeled validation data.
+        
+        Finds the reconstruction error threshold that achieves the target
+        false-positive rate on benign data.
+        
+        Args:
+            X_benign: Benign validation samples
+            X_attack: Attack validation samples
+            target_fpr: Target false-positive rate (default 1%)
+            
+        Returns:
+            Calibrated threshold
+        """
+        benign_errors = self._compute_errors(X_benign)
+        attack_errors = self._compute_errors(X_attack)
+        
+        # Set threshold at (1 - target_fpr) percentile of benign errors
+        self._threshold = float(np.percentile(benign_errors, (1 - target_fpr) * 100))
+        
+        detected = np.sum(attack_errors > self._threshold)
+        detection_rate = detected / max(len(attack_errors), 1)
+        actual_fpr = np.sum(benign_errors > self._threshold) / max(len(benign_errors), 1)
+        
+        logger.info(
+            f"Calibrated threshold={self._threshold:.6f}  "
+            f"detection_rate={detection_rate:.4f}  fpr={actual_fpr:.4f}"
+        )
+        
+        self._metrics['calibrated_threshold'] = self._threshold
+        self._metrics['calibrated_detection_rate'] = float(detection_rate)
+        self._metrics['calibrated_fpr'] = float(actual_fpr)
+        
+        return self._threshold
+    
+    def _compute_errors(self, X: np.ndarray) -> np.ndarray:
+        """Compute reconstruction errors for a dataset in batches."""
+        X = self._validate_features(X)
+        if X.shape[-1] != self.config['input_dim']:
+            if X.shape[-1] < self.config['input_dim']:
+                X = np.pad(X, ((0, 0), (0, self.config['input_dim'] - X.shape[-1])))
+            else:
+                X = X[:, :self.config['input_dim']]
+        
+        X_norm = self._normalize_features(X)
+        dataset = TensorDataset(torch.FloatTensor(X_norm), torch.FloatTensor(X_norm))
+        loader = DataLoader(dataset, batch_size=self.config['batch_size'], shuffle=False,
+                            pin_memory=(self.device.type == 'cuda'))
+        
+        errors_list = []
+        self.model.eval()
+        with torch.no_grad():
+            for batch_x, _ in loader:
+                batch_x = batch_x.to(self.device, non_blocking=True)
+                _, reconstructed = self.model(batch_x)
+                batch_errors = self._calculate_reconstruction_error(batch_x, reconstructed)
+                errors_list.append(batch_errors.detach().cpu())
+        
+        return torch.cat(errors_list, dim=0).numpy()
     
     def _error_to_confidence(self, error: float) -> float:
         """Convert reconstruction error to confidence score."""

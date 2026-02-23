@@ -54,12 +54,12 @@ class NetworkSecurityEnv:
             )
             self.action_space = spaces.Discrete(action_dim)
     
-    def reset(self) -> np.ndarray:
+    def reset(self, *, seed=None, options=None) -> Tuple[np.ndarray, Dict]:
         """
         Reset the environment.
         
         Returns:
-            Initial observation
+            (observation, info)
         """
         self._episode_step = 0
         self._total_reward = 0.0
@@ -69,9 +69,9 @@ class NetworkSecurityEnv:
         # Generate initial state
         self._current_state = self._generate_observation()
         
-        return self._current_state
+        return self._current_state, {}
     
-    def step(self, action: int) -> Tuple[np.ndarray, float, bool, Dict]:
+    def step(self, action: int) -> Tuple[np.ndarray, float, bool, bool, Dict]:
         """
         Execute one step in the environment.
         
@@ -79,7 +79,7 @@ class NetworkSecurityEnv:
             action: Action to take
             
         Returns:
-            observation, reward, done, info
+            observation, reward, terminated, truncated, info
         """
         self._episode_step += 1
         
@@ -92,7 +92,8 @@ class NetworkSecurityEnv:
         self._current_state = self._generate_observation()
         
         # Check if episode is done
-        done = self._episode_step >= self._max_steps
+        terminated = False
+        truncated = self._episode_step >= self._max_steps
         
         info.update({
             'episode_step': self._episode_step,
@@ -101,7 +102,7 @@ class NetworkSecurityEnv:
             'false_positives': self._false_positives
         })
         
-        return self._current_state, reward, done, info
+        return self._current_state, reward, terminated, truncated, info
     
     def _generate_observation(self) -> np.ndarray:
         """Generate a state observation."""
@@ -152,53 +153,55 @@ class NetworkSecurityEnv:
         """
         Simulate the outcome of an action.
         
+        Uses a probabilistic threat model: the true threat probability is
+        derived from the threat score with noise, so the agent cannot simply
+        threshold a single feature.
+        
         Returns:
             reward, info dict
         """
         threat_score = self._current_state[0]
-        is_internal = self._current_state[7] > 0.5
+        asset_criticality = self._current_state[2]
         
-        # Determine if this is actually a threat
-        is_threat = np.random.random() < threat_score
+        # Probabilistic threat: add noise so the relationship is not trivial
+        noise = np.random.normal(0, 0.15)
+        is_threat = (threat_score + noise) > 0.5
         
-        # Action effects
         # 0: ALLOW, 1: DENY, 2-4: RATE_LIMIT, 5-6: QUARANTINE, 7: MONITOR
-        blocked = action in [1, 5, 6]  # DENY or QUARANTINE
+        blocked = action in [1, 5, 6]
         
-        # Calculate reward
-        if blocked:
-            if is_threat:
-                # Correctly blocked threat
+        if is_threat:
+            if blocked:
                 reward = 1.0
                 self._blocked_threats += 1
                 outcome = 'blocked_threat'
+            elif action in [2, 3, 4]:
+                reward = 0.4
+                outcome = 'mitigated'
+            elif action == 7:
+                reward = -0.5
+                outcome = 'monitored_threat'
             else:
-                # False positive
-                reward = -2.0 if not is_internal else -1.0  # Less penalty for internal
+                reward = -1.0 - asset_criticality
+                outcome = 'missed_threat'
+        else:
+            if action == 0:
+                reward = 0.3
+                outcome = 'correct_allow'
+            elif action == 7:
+                reward = 0.1
+                outcome = 'appropriate_monitor'
+            elif action in [2, 3, 4]:
+                reward = -0.2
+                self._false_positives += 1
+                outcome = 'unnecessary_rate_limit'
+            else:
+                reward = -1.0
                 self._false_positives += 1
                 outcome = 'false_positive'
-        else:
-            if is_threat:
-                # Missed threat
-                reward = -1.5
-                outcome = 'missed_threat'
-            else:
-                # Correct allow
-                reward = 0.2
-                outcome = 'correct_allow'
-        
-        # Rate limiting partial credit
-        if action in [2, 3, 4] and is_threat:
-            reward = 0.5  # Partial mitigation
-            outcome = 'mitigated'
-        
-        # Monitor bonus for low threats
-        if action == 7 and threat_score < 0.3:
-            reward = 0.3
-            outcome = 'appropriate_monitor'
         
         info = {
-            'is_threat': is_threat,
+            'is_threat': bool(is_threat),
             'blocked': blocked,
             'outcome': outcome,
             'action': action
