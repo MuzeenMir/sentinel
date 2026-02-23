@@ -363,16 +363,18 @@ class LSTMSequenceDetector(BaseDetector):
         # Initialize model
         self._initialize_default_model()
         
-        # Prepare data
+        # Keep tensors on CPU and stream mini-batches to device.
+        # Moving full sequence tensors to GPU can OOM on large training sets.
         X = self._validate_features(X)
-        X_tensor = torch.FloatTensor(X).to(self.device)
-        y_tensor = torch.LongTensor(y).to(self.device)
+        X_tensor = torch.FloatTensor(X)
+        y_tensor = torch.LongTensor(y)
         
         train_dataset = TensorDataset(X_tensor, y_tensor)
         train_loader = DataLoader(
             train_dataset, 
             batch_size=self.config['batch_size'],
-            shuffle=True
+            shuffle=True,
+            pin_memory=(self.device.type == "cuda"),
         )
         
         # Loss and optimizer
@@ -392,6 +394,8 @@ class LSTMSequenceDetector(BaseDetector):
             total_loss = 0
             
             for batch_x, batch_y in train_loader:
+                batch_x = batch_x.to(self.device, non_blocking=True)
+                batch_y = batch_y.to(self.device, non_blocking=True)
                 optimizer.zero_grad()
                 logits, _ = self.model(batch_x)
                 loss = criterion(logits, batch_y)
@@ -410,9 +414,19 @@ class LSTMSequenceDetector(BaseDetector):
         
         # Calculate metrics
         self.model.eval()
+        eval_loader = DataLoader(
+            train_dataset,
+            batch_size=self.config['batch_size'],
+            shuffle=False,
+            pin_memory=(self.device.type == "cuda"),
+        )
+        preds = []
         with torch.no_grad():
-            _, probas = self.model(X_tensor)
-            y_pred = probas.argmax(dim=1).cpu().numpy()
+            for batch_x, _ in eval_loader:
+                batch_x = batch_x.to(self.device, non_blocking=True)
+                _, probas = self.model(batch_x)
+                preds.append(probas.argmax(dim=1).cpu().numpy())
+        y_pred = np.concatenate(preds) if preds else np.array([], dtype=np.int64)
         
         from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
         

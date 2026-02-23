@@ -411,13 +411,15 @@ class AutoencoderDetector(BaseDetector):
             hidden_dims=self.config['hidden_dims']
         ).to(self.device)
         
-        # Prepare data
-        X_tensor = torch.FloatTensor(X_norm).to(self.device)
+        # Keep full tensors on CPU and stream mini-batches to device.
+        # Moving the entire dataset to GPU at once can OOM on large datasets.
+        X_tensor = torch.FloatTensor(X_norm)
         train_dataset = TensorDataset(X_tensor, X_tensor)
         train_loader = DataLoader(
             train_dataset,
             batch_size=self.config['batch_size'],
-            shuffle=True
+            shuffle=True,
+            pin_memory=(self.device.type == "cuda"),
         )
         
         # Loss and optimizer
@@ -439,6 +441,7 @@ class AutoencoderDetector(BaseDetector):
             total_loss = 0
             
             for batch_x, _ in train_loader:
+                batch_x = batch_x.to(self.device, non_blocking=True)
                 optimizer.zero_grad()
                 _, reconstructed = self.model(batch_x)
                 loss = criterion(reconstructed, batch_x)
@@ -461,13 +464,23 @@ class AutoencoderDetector(BaseDetector):
             if (epoch + 1) % 10 == 0:
                 logger.info(f"Epoch {epoch+1}/{self.config['epochs']}, Loss: {avg_loss:.6f}")
         
-        # Calculate reconstruction error statistics on training data
+        # Calculate reconstruction error statistics in batches (avoid full-tensor GPU eval)
         self.model.eval()
+        eval_loader = DataLoader(
+            train_dataset,
+            batch_size=self.config['batch_size'],
+            shuffle=False,
+            pin_memory=(self.device.type == "cuda"),
+        )
+        errors_list = []
         with torch.no_grad():
-            _, reconstructed = self.model(X_tensor)
-            errors = self._calculate_reconstruction_error(X_tensor, reconstructed)
-        
-        errors_np = errors.cpu().numpy()
+            for batch_x, _ in eval_loader:
+                batch_x = batch_x.to(self.device, non_blocking=True)
+                _, reconstructed = self.model(batch_x)
+                batch_errors = self._calculate_reconstruction_error(batch_x, reconstructed)
+                errors_list.append(batch_errors.detach().cpu())
+
+        errors_np = torch.cat(errors_list, dim=0).numpy()
         self._mean_error = float(np.mean(errors_np))
         self._std_error = float(np.std(errors_np))
         
