@@ -65,12 +65,15 @@ python training/train_all.py \
     --dataset cicids2018 \
     --device cuda
 
-# Train specific models only
+# Train specific models only (no retraining of others; never use --force)
 python training/train_all.py \
     --data-path training/datasets/data \
     --dataset cicids2018 \
-    --models xgboost isolation_forest \
-    --device cpu
+    --models autoencoder lstm \
+    --device cuda
+
+# Train only missing/failed models (e.g. after some failed: --models autoencoder lstm)
+# Do NOT use --force; that retrains everything and costs time/money.
 
 # Quick test run (limited rows, CPU)
 python training/train_all.py \
