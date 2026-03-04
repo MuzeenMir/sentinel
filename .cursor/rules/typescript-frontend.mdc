@@ -1,0 +1,13 @@
+---
+description: React and TypeScript frontend conventions
+globs: sentinel-core/frontend/**/*.ts,sentinel-core/frontend/**/*.tsx
+alwaysApply: false
+---
+
+# Frontend standards (React + TypeScript + Vite)
+
+- **Stack**: React 18, TypeScript, Vite 7, TanStack Query, Zustand, Tailwind, Recharts. Config in `sentinel-core/frontend/admin-console/`.
+- **Sensitive data**: Do not store secrets or tokens in localStorage/sessionStorage without using existing auth/token patterns from the codebase.
+- **API**: Use existing API client and auth patterns; avoid ad-hoc fetch with hardcoded credentials.
+- **Types**: Prefer explicit types for API responses and shared state; avoid `any` for public APIs.
+- **Components**: Functional components; extract reusable logic into hooks; keep components focused.

@@ -1,0 +1,13 @@
+---
+description: Core SENTINEL project standards and architecture
+alwaysApply: true
+---
+
+# SENTINEL project standards
+
+- **Product**: Enterprise-grade, AI-powered security platform (threat detection, DRL policy, compliance, hardening).
+- **Layout**: App in `sentinel-core/`. Backend microservices in `sentinel-core/backend/`, frontend in `sentinel-core/frontend/admin-console/`, Flink in `sentinel-core/stream-processing/flink-jobs/`, training in `sentinel-core/training/`, Terraform in `sentinel-core/infrastructure/`.
+- **Principles**: Security-first, zero-trust style; defense-in-depth; least privilege; audit and explainability.
+- **Docs**: Use `sentinel-core/docs/ARCHITECTURE-DESIGN-DEVELOPMENT.md` and `sentinel-core/readme.md` for design and conventions; `sentinel-core/docs/security.md` for security patterns.
+- **No secrets in code**: Use env vars and `.env.example` placeholders; no hardcoded API keys, passwords, or tokens.
+- **Errors**: Log and handle errors; avoid bare `except:` or swallowing exceptions without logging.

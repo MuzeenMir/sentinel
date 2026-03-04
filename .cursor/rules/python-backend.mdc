@@ -1,0 +1,14 @@
+---
+description: Python backend, Flink, and training conventions
+globs: sentinel-core/backend/**/*.py,sentinel-core/stream-processing/**/*.py,sentinel-core/training/**/*.py
+alwaysApply: false
+---
+
+# Python backend standards
+
+- **Services**: Each service under `sentinel-core/backend/<service>/` has `app.py`, `requirements.txt`, and usually a `Dockerfile`. Entrypoint is `app.py`.
+- **No eval/exec on untrusted input**: Use safe parsers, allowlists, or documented exceptions with tests.
+- **SQL**: Use parameterized queries or ORM; never build SQL from string concatenation with user/request data.
+- **Logging**: Use structured logging; log errors with context (e.g. request id, user) for audit.
+- **Tests**: Backend and stream-processing changes should include or update tests (`*test*`, `tests/`, `__tests__/`).
+- **Dependencies**: Add new deps to the relevant service `requirements.txt`; keep versions pinned where possible.

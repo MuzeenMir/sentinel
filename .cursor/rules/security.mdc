@@ -1,0 +1,13 @@
+---
+description: Security and compliance requirements for SENTINEL
+alwaysApply: true
+---
+
+# Security rules
+
+- **No dangerous execution**: No `eval()`, `exec()`, or unsafe `__import__()` on user or external input. Use allowlists and safe parsers.
+- **No secrets in repo**: No API keys, passwords, private keys, or long-lived tokens. Use env vars, Secrets Manager, or `.env.example` placeholders only.
+- **Auth**: Follow JWT (RS256) and RBAC patterns in `sentinel-core/docs/security.md`. New endpoints must enforce auth and role checks.
+- **Injection**: Parameterized queries for SQL; sanitize/escape when rendering user content; avoid building commands or queries from unsanitized input.
+- **Audit**: Security-sensitive actions (login failures, policy changes, alert acks) must be logged for audit.
+- **Dependencies**: Avoid adding dependencies with GPL/AGPL unless explicitly approved; prefer MIT/Apache/BSD for OSS.
