@@ -1,5 +1,6 @@
 """Root-level pytest configuration and debug instrumentation for SENTINEL backend."""
 
+import importlib.util
 import os
 import sys
 import json as _agent_json
@@ -41,4 +42,24 @@ _agent_log_backend_root(
     },
 )
 # endregion
+
+sys.path.insert(0, str(_backend_root))
+
+# Allow "import ebpf_lib" even though the directory on disk is "ebpf-lib".
+_ebpf_lib_dir = _backend_root / "ebpf-lib"
+_ebpf_lib_link = _backend_root / "ebpf_lib"
+if not _ebpf_lib_link.exists() and _ebpf_lib_dir.is_dir():
+    try:
+        _ebpf_lib_link.symlink_to("ebpf-lib")
+    except OSError:
+        _spec = importlib.util.spec_from_file_location(
+            "ebpf_lib",
+            _ebpf_lib_dir / "__init__.py",
+            submodule_search_locations=[str(_ebpf_lib_dir)],
+        )
+        if _spec and _spec.loader:
+            _module = importlib.util.module_from_spec(_spec)
+            _module.__path__ = [str(_ebpf_lib_dir)]
+            sys.modules["ebpf_lib"] = _module
+            _spec.loader.exec_module(_module)
 

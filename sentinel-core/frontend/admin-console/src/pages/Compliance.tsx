@@ -78,10 +78,6 @@ export function Compliance() {
 
   const frameworks: Framework[] = frameworksResponse?.data?.frameworks ?? []
 
-  const overallScore = frameworks.length > 0
-    ? Math.round(frameworks.reduce((acc, _fw, _i) => acc + 0, 0) / Math.max(frameworks.length, 1))
-    : 0
-
   const handleRunAssessment = (frameworkId: string) => {
     setSelectedFramework(frameworkId)
     assessMutation.mutate(frameworkId)

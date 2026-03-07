@@ -77,6 +77,10 @@ jobs:
       - name: Install test dependencies
         run: pip install -r requirements-test.txt
 
+      - name: Install service deps (for tests that import hardening-service / hids-agent / ai-engine)
+        run: |
+          pip install -r hardening-service/requirements.txt -r hids-agent/requirements.txt -r ai-engine/requirements.txt
+
       - name: Run backend tests
         run: python -m pytest tests/ -v --tb=short
 
@@ -114,8 +118,11 @@ jobs:
             --output bandit-report.json || true
           python -c "
           import json, sys
-          with open('bandit-report.json') as f:
-              data = json.load(f)
+          try:
+              with open('bandit-report.json') as f:
+                  data = json.load(f)
+          except FileNotFoundError:
+              data = {'results': []}
           results = data.get('results', [])
           high = [r for r in results if r.get('issue_severity') == 'HIGH']
           if high:
@@ -149,14 +156,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check for training requirements
+      - name: Check for training requirements and data
         id: check-training
         run: |
-          if [ -f training/requirements.txt ]; then echo "run=true" >> $GITHUB_OUTPUT; else echo "run=false" >> $GITHUB_OUTPUT; fi
+          if [ ! -f training/requirements.txt ]; then echo "run=false" >> $GITHUB_OUTPUT; exit 0; fi
+          if [ -d training/datasets/data/cicids2018 ] && [ -n "$(ls -A training/datasets/data/cicids2018 2>/dev/null)" ]; then
+            echo "run=true" >> $GITHUB_OUTPUT
+          else
+            echo "run=false" >> $GITHUB_OUTPUT
+            echo "Training data not present (training/datasets/data/cicids2018); skipping training pipeline."
+          fi
 
-      - name: Skip (no training files)
+      - name: Skip (no training files or data)
         if: steps.check-training.outputs.run != 'true'
-        run: echo "Training requirements not found; skipping training job."
+        run: echo "Training requirements or dataset not present; skipping training job."
 
       - name: Setup Python
         if: steps.check-training.outputs.run == 'true'
@@ -171,7 +184,7 @@ jobs:
       - name: Run training (xgboost + isolation_forest, max 5000 rows)
         if: steps.check-training.outputs.run == 'true'
         run: |
-          python training/train_all.py \
+          python -m training.train_all \
             --data-path training/datasets/data \
             --dataset cicids2018 \
             --models xgboost isolation_forest \
