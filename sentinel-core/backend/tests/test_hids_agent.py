@@ -1,18 +1,25 @@
 """Tests for the HIDS agent service."""
 
+import importlib.util
 import os
 import sys
 import tempfile
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "hids-agent"))
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+_backend = os.path.join(os.path.dirname(__file__), "..")
+_hids_agent_dir = os.path.join(_backend, "hids-agent")
+sys.path.insert(0, _backend)
 
 os.environ.setdefault("HOST_ROOT", "")
 os.environ.setdefault("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
 os.environ.setdefault("FIM_PATHS", "")
 
-import app as hids_app
+# Load hids-agent app in isolation so we don't get hardening-service's cached 'app'
+_spec = importlib.util.spec_from_file_location("hids_agent_app", os.path.join(_hids_agent_dir, "app.py"))
+_hids_module = importlib.util.module_from_spec(_spec)
+sys.modules["hids_agent_app"] = _hids_module
+_spec.loader.exec_module(_hids_module)
+hids_app = _hids_module
 
 
 class TestBaselineRuleEngine:

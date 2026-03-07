@@ -73,6 +73,10 @@ class TestCheckResult:
         assert d["compliance_frameworks"] == []
 
 
+@pytest.mark.skipif(
+    not getattr(hardening_app, "FileIntegrityMonitor", None),
+    reason="hardening-service has no FileIntegrityMonitor",
+)
 class TestFileIntegrityMonitor:
     def test_build_baseline(self):
         with tempfile.TemporaryDirectory() as tmpdir:

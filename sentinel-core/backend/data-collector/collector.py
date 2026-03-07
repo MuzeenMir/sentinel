@@ -311,10 +311,10 @@ class CIMNormalizer:
         return self._is_internal_ip(src_ip) and self._is_internal_ip(dst_ip)
     
     def _hash_data(self, data: Dict) -> str:
-        """Generate hash of data for deduplication."""
+        """Generate hash of data for deduplication (non-security use)."""
         key_fields = ['source_ip', 'dest_ip', 'source_port', 'dest_port', 'protocol']
         values = [str(data.get(f, '')) for f in key_fields]
-        return hashlib.md5(':'.join(values).encode()).hexdigest()
+        return hashlib.md5(':'.join(values).encode(), usedforsecurity=False).hexdigest()
 
 
 class NetFlowParser:

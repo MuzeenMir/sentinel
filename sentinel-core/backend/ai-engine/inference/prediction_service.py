@@ -237,7 +237,7 @@ class PredictionService:
         
         import hashlib
         key_str = ':'.join(key_fields)
-        hash_val = hashlib.md5(key_str.encode()).hexdigest()[:16]
+        hash_val = hashlib.md5(key_str.encode(), usedforsecurity=False).hexdigest()[:16]
         
         return f"pred_cache:{hash_val}"
     
