@@ -59,8 +59,12 @@ export const policyApi = {
 
 export const complianceApi = {
   getFrameworks: () => api.get('/api/v1/frameworks'),
-  runAssessment: (framework: string, policies: Record<string, unknown>[]) => 
-    api.post('/api/v1/assess', { framework, policies }),
+  runAssessment: (framework: string, policies?: Record<string, unknown>[]) =>
+    api.post('/api/v1/assess', { framework, policies: policies ?? [] }),
+  getGapAnalysis: (framework: string) =>
+    api.get(`/api/v1/frameworks/${framework}/gap-analysis`),
+  getReport: (framework: string) =>
+    api.get(`/api/v1/frameworks/${framework}/report`),
 }
 
 export const statsApi = {

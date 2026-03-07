@@ -1,0 +1,44 @@
+"""Root-level pytest configuration and debug instrumentation for SENTINEL backend."""
+
+import os
+import sys
+import json as _agent_json
+from datetime import datetime as _agent_dt
+import time as _agent_time
+from pathlib import Path
+
+
+def _agent_log_backend_root(hypothesis_id, message, data):
+    """Write a single NDJSON debug log line for backend-wide pytest state."""
+    try:
+        payload = {
+            "sessionId": "ba9959",
+            "id": f"log_{int(_agent_time.time() * 1000)}",
+            "timestamp": int(_agent_dt.utcnow().timestamp() * 1000),
+            "location": "backend/conftest.py:session_start",
+            "message": message,
+            "data": data,
+            "runId": "pre-fix",
+            "hypothesisId": hypothesis_id,
+        }
+        with open("/home/mir/sentinel/.cursor/debug-ba9959.log", "a") as _f:
+            _f.write(_agent_json.dumps(payload) + "\n")
+    except Exception:
+        # Never let debug logging break tests
+        pass
+
+
+# region agent log
+_backend_root = Path(__file__).resolve().parent
+_agent_log_backend_root(
+    "H2",
+    "backend_pytest_session_start",
+    {
+        "cwd": os.getcwd(),
+        "backend_root": str(_backend_root),
+        "has_tests_pkg": (_backend_root / "tests" / "__init__.py").exists(),
+        "sys_path_sample": sys.path[:5],
+    },
+)
+# endregion
+

@@ -299,7 +299,7 @@ services:
       - sentinel-network
     restart: unless-stopped
 
-  # HIDS Agent - Host-based Intrusion Detection
+  # HIDS Agent - eBPF-powered host intrusion detection
   hids-agent:
     build:
       context: ./backend/hids-agent
@@ -308,15 +308,15 @@ services:
     ports:
       - "5010:5010"
     environment:
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - KAFKA_SERVERS=kafka:9092
+      - REDIS_URL=redis://redis:6379
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - FIM_PATHS=/etc/passwd,/etc/shadow,/etc/sudoers,/etc/ssh/sshd_config
+      - HOST_ROOT=/host
+      - FIM_CHECK_INTERVAL=60
     volumes:
       - /etc:/host/etc:ro
       - /var/log:/host/var/log:ro
       - /proc:/host/proc:ro
-      - hids_data:/var/lib/sentinel
     depends_on:
       - redis
       - kafka
@@ -325,7 +325,7 @@ services:
     privileged: true
     restart: unless-stopped
 
-  # System Hardening Service
+  # System Hardening Service (eBPF runtime enforcement + CIS benchmarks)
   hardening-service:
     build:
       context: ./backend/hardening-service
@@ -334,10 +334,12 @@ services:
     ports:
       - "5011:5011"
     environment:
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
+      - REDIS_URL=redis://redis:6379
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - HOST_ROOT=/host
     volumes:
       - /etc:/host/etc:rw
+      - /proc:/host/proc:ro
       - hardening_backups:/var/lib/sentinel/backups
     depends_on:
       - redis
@@ -364,6 +366,41 @@ services:
       - sentinel-network
     restart: unless-stopped
 
+  # Prometheus metrics collection
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: sentinel-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=30d"
+    networks:
+      - sentinel-network
+    restart: unless-stopped
+
+  # Grafana dashboards
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: sentinel-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-sentinel}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+    networks:
+      - sentinel-network
+    restart: unless-stopped
+
 networks:
   sentinel-network:
     driver: bridge
@@ -373,5 +410,6 @@ volumes:
   postgres_data:
   es_data:
   ai_models:
-  hids_data:
   hardening_backups:
+  prometheus_data:
+  grafana_data:

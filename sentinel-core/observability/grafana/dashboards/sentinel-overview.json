@@ -1,0 +1,129 @@
+{
+  "annotations": { "list": [] },
+  "description": "SENTINEL Security Platform Overview",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [],
+  "panels": [
+    {
+      "title": "Service Health",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "up",
+          "legendFormat": "{{job}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } }, "type": "value" }
+          ]
+        }
+      }
+    },
+    {
+      "title": "Request Rate by Service",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "targets": [
+        {
+          "expr": "rate(sentinel_http_requests_total[5m])",
+          "legendFormat": "{{job}} {{method}} {{status}}"
+        }
+      ]
+    },
+    {
+      "title": "Detection Pipeline Latency",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, rate(sentinel_detection_latency_seconds_bucket[5m]))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.50, rate(sentinel_detection_latency_seconds_bucket[5m]))",
+          "legendFormat": "p50"
+        }
+      ]
+    },
+    {
+      "title": "Threats Detected",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "targets": [
+        {
+          "expr": "rate(sentinel_threats_detected_total[5m])",
+          "legendFormat": "{{severity}}"
+        }
+      ]
+    },
+    {
+      "title": "eBPF Events Rate",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "targets": [
+        {
+          "expr": "rate(sentinel_ebpf_events_total[5m])",
+          "legendFormat": "{{event_type}}"
+        }
+      ]
+    },
+    {
+      "title": "Hardening Posture Score",
+      "type": "gauge",
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 20 },
+      "targets": [
+        {
+          "expr": "sentinel_hardening_posture_score",
+          "legendFormat": "Score"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "steps": [
+              { "value": 0, "color": "red" },
+              { "value": 70, "color": "yellow" },
+              { "value": 90, "color": "green" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "XDP Packets/sec",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 20 },
+      "targets": [
+        {
+          "expr": "rate(sentinel_xdp_packets_total[1m])",
+          "legendFormat": "pps"
+        }
+      ]
+    },
+    {
+      "title": "FIM Alerts",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 20 },
+      "targets": [
+        {
+          "expr": "sentinel_fim_alerts_total",
+          "legendFormat": "Total FIM Alerts"
+        }
+      ]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["sentinel", "security"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "title": "SENTINEL Security Overview",
+  "uid": "sentinel-overview"
+}

@@ -1,2 +1,5 @@
 # Test dependencies for backend services
 pytest>=7.0.0
+
+# Shared runtime deps needed by tests (for service imports, fakes, etc.)
+redis==5.0.1

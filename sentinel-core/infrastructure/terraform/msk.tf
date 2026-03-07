@@ -98,13 +98,13 @@ resource "aws_msk_cluster" "sentinel" {
   number_of_broker_nodes = 2
 
   broker_node_group_info {
-    instance_type   = var.msk_instance_type
+    instance_type   = var.kafka_instance_type
     client_subnets  = aws_subnet.private_subnets[*].id
     security_groups = [aws_security_group.msk.id]
 
     storage_info {
       ebs_storage_info {
-        volume_size = var.msk_ebs_volume_size
+        volume_size = var.kafka_ebs_volume_size
       }
     }
   }

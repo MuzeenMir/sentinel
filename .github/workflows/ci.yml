@@ -80,6 +80,66 @@ jobs:
       - name: Run backend tests
         run: python -m pytest tests/ -v --tb=short
 
+  security-scan:
+    name: Security Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Python audit tools
+        run: pip install pip-audit bandit
+
+      - name: pip-audit (auth-service)
+        run: pip-audit -r sentinel-core/backend/auth-service/requirements.txt
+
+      - name: pip-audit (ai-engine)
+        run: pip-audit -r sentinel-core/backend/ai-engine/requirements.txt
+
+      - name: Bandit (backend Python)
+        run: |
+          bandit -r sentinel-core/backend/ \
+            --exclude sentinel-core/backend/.venv-backend \
+            -ll -ii \
+            --format json \
+            --output bandit-report.json || true
+          python -c "
+          import json, sys
+          with open('bandit-report.json') as f:
+              data = json.load(f)
+          results = data.get('results', [])
+          high = [r for r in results if r.get('issue_severity') == 'HIGH']
+          if high:
+              print(f'::error::Bandit found {len(high)} HIGH severity issue(s); job failed.', file=sys.stderr)
+              for h in high[:10]:
+                  print(f'  {h[\"filename\"]}:{h[\"line_number\"]} - {h[\"issue_text\"]}', file=sys.stderr)
+              sys.exit(1)
+          print('No HIGH severity issues found')
+          "
+
+      - name: npm audit (frontend)
+        working-directory: sentinel-core/frontend/admin-console
+        run: |
+          npm ci
+          npm audit --audit-level=high
+
+      - name: Upload Bandit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-report
+          path: bandit-report.json
+          if-no-files-found: ignore
+
   training:
     name: Training pipeline
     runs-on: ubuntu-latest

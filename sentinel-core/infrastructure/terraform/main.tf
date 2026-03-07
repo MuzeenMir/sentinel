@@ -356,36 +356,8 @@ resource "aws_elasticache_cluster" "sentinel_redis" {
   }
 }
 
-# MSK Kafka Cluster
-resource "aws_msk_cluster" "sentinel_kafka" {
-  cluster_name           = "${var.environment}-sentinel-kafka"
-  kafka_version          = "2.8.1"
-  number_of_broker_nodes = var.kafka_broker_nodes
-
-  broker_node_group_info {
-    instance_type   = var.kafka_instance_type
-    client_subnets  = aws_subnet.private_subnets[*].id
-    security_groups = [aws_security_group.kafka_sg.id]
-
-    storage_info {
-      ebs_storage_info {
-        volume_size = 100
-      }
-    }
-  }
-
-  encryption_info {
-    encryption_in_transit {
-      client_broker = "TLS"
-      in_cluster    = true
-    }
-  }
-
-  tags = {
-    Name        = "${var.environment}-sentinel-kafka"
-    Environment = var.environment
-  }
-}
+# MSK Kafka Cluster is defined in msk.tf (aws_msk_cluster.sentinel)
+# with KMS encryption, logging, and custom configuration.
 
 # API Gateway Load Balancer
 resource "aws_lb" "sentinel_api_lb" {
