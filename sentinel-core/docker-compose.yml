@@ -144,6 +144,7 @@ services:
     network_mode: "host"
     privileged: true
     environment:
+      - PORT=5012
       - XDP_ENABLED=true
       - XDP_INTERFACE=eth0
       - XDP_QUEUE_COUNT=1
@@ -185,11 +186,13 @@ services:
       - MODEL_PATH=/models
       - CONFIDENCE_THRESHOLD=0.85
       - BATCH_SIZE=1000
+      - AUTH_SERVICE_URL=http://auth-service:5000
     volumes:
       - ai_models:/models
     depends_on:
       - redis
       - kafka
+      - auth-service
     networks:
       - sentinel-network
     restart: unless-stopped
@@ -238,8 +241,10 @@ services:
       - "5004:5004"
     environment:
       - REDIS_URL=redis://redis:6379
+      - AUTH_SERVICE_URL=http://auth-service:5000
     depends_on:
       - redis
+      - auth-service
     networks:
       - sentinel-network
     restart: unless-stopped
@@ -257,12 +262,14 @@ services:
       - AI_ENGINE_URL=http://ai-engine:5003
       - POLICY_SERVICE_URL=http://policy-orchestrator:5004
       - MODEL_PATH=/models/drl
+      - AUTH_SERVICE_URL=http://auth-service:5000
     volumes:
       - ai_models:/models
     depends_on:
       - redis
       - ai-engine
       - policy-orchestrator
+      - auth-service
     networks:
       - sentinel-network
     restart: unless-stopped
@@ -277,8 +284,12 @@ services:
       - "5006:5006"
     environment:
       - REDIS_URL=redis://redis:6379
+      - AI_ENGINE_URL=http://ai-engine:5003
+      - DRL_ENGINE_URL=http://drl-engine:5005
+      - AUTH_SERVICE_URL=http://auth-service:5000
     depends_on:
       - redis
+      - auth-service
     networks:
       - sentinel-network
     restart: unless-stopped
@@ -293,8 +304,10 @@ services:
       - "5007:5007"
     environment:
       - REDIS_URL=redis://redis:6379
+      - AUTH_SERVICE_URL=http://auth-service:5000
     depends_on:
       - redis
+      - auth-service
     networks:
       - sentinel-network
     restart: unless-stopped
@@ -397,6 +410,60 @@ services:
       - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
     depends_on:
       - prometheus
+    networks:
+      - sentinel-network
+    restart: unless-stopped
+
+  # ── Flink Stream Processing Jobs ──────────────────────────────────────────
+
+  flink-anomaly-detection:
+    build:
+      context: ../stream-processing/flink-jobs
+      dockerfile: Dockerfile.anomaly
+    container_name: sentinel-flink-anomaly
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - FLINK_PARALLELISM=2
+      - CHECKPOINT_DIR=file:///tmp/flink-checkpoints/anomaly
+    depends_on:
+      - kafka
+    networks:
+      - sentinel-network
+    restart: unless-stopped
+
+  flink-feature-extraction:
+    build:
+      context: ../stream-processing/flink-jobs
+      dockerfile: Dockerfile.feature
+    container_name: sentinel-flink-features
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_INPUT_TOPIC=sentinel-network-events
+      - KAFKA_OUTPUT_TOPIC=extracted_features
+      - FLINK_PARALLELISM=2
+      - CHECKPOINT_DIR=file:///tmp/flink-checkpoints/features
+    depends_on:
+      - kafka
+    networks:
+      - sentinel-network
+    restart: unless-stopped
+
+  flink-drl-feed:
+    build:
+      context: ../stream-processing/flink-jobs
+      dockerfile: Dockerfile.drl-feed
+    container_name: sentinel-flink-drl-feed
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - DRL_ENGINE_URL=http://drl-engine:5005
+      - POLICY_SERVICE_URL=http://policy-orchestrator:5004
+      - INTERNAL_SERVICE_TOKEN=${INTERNAL_SERVICE_TOKEN:-}
+      - FLINK_PARALLELISM=1
+      - CHECKPOINT_DIR=file:///tmp/flink-checkpoints/drl-feed
+    depends_on:
+      - kafka
+      - drl-engine
+      - policy-orchestrator
     networks:
       - sentinel-network
     restart: unless-stopped

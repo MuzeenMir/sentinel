@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts'
 import { statsApi } from '../services/api'
@@ -193,7 +194,7 @@ export function Dashboard() {
             <h3 className="font-semibold">Recent Threats</h3>
             <p className="text-xs text-slate-500 mt-1">Latest detections across sensors</p>
           </div>
-          <a href="/threats" className="text-sm text-blue-400 hover:text-blue-300">View All</a>
+          <Link to="/threats" className="text-sm text-blue-400 hover:text-blue-300">View All</Link>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -222,7 +223,12 @@ export function Dashboard() {
                     <td className="px-6 py-4 text-sm font-mono text-slate-300">{threat.source}</td>
                     <td className="px-6 py-4 text-sm text-slate-400">{timeLabel}</td>
                     <td className="px-6 py-4">
-                      <button className="text-blue-400 hover:text-blue-300 text-sm">Investigate</button>
+                      <Link
+                        to={`/threats/${threat.id}`}
+                        className="text-blue-400 hover:text-blue-300 text-sm"
+                      >
+                        Investigate
+                      </Link>
                     </td>
                   </tr>
                 )

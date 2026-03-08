@@ -66,6 +66,8 @@ class CheckResult:
     compliance_frameworks: List[str] = field(default_factory=list)
     detail: str = ""
     auto_remediable: bool = False
+    current_value: Optional[str] = None
+    expected_value: Optional[str] = None
 
 
 @dataclass
@@ -492,41 +494,163 @@ class CISBenchmarkEngine:
     # ── File permission checks ──
 
     def _check_world_writable_files(self) -> CheckResult:
+        """CIS 6.1.10 — Ensure no world-writable files exist in system paths."""
+        scan_roots = [
+            _host_path("/usr"),
+            _host_path("/etc"),
+            _host_path("/var"),
+            _host_path("/bin"),
+            _host_path("/sbin"),
+        ]
+        world_writable: List[str] = []
+
+        for root in scan_roots:
+            if not os.path.exists(root):
+                continue
+            try:
+                result = subprocess.run(
+                    ["find", root, "-xdev", "-type", "f", "-perm", "-0002",
+                     "-not", "-path", "*/proc/*"],
+                    capture_output=True, text=True, timeout=30,
+                )
+                for line in result.stdout.splitlines():
+                    line = line.strip()
+                    if line:
+                        world_writable.append(line)
+            except (subprocess.TimeoutExpired, OSError) as exc:
+                logger.warning("world-writable scan failed for %s: %s", root, exc)
+
+        if world_writable:
+            status = "fail"
+            detail = f"Found {len(world_writable)} world-writable file(s): " + ", ".join(world_writable[:5])
+            if len(world_writable) > 5:
+                detail += f" … and {len(world_writable) - 5} more"
+        else:
+            status = "pass"
+            detail = "No world-writable files found in system paths"
+
         return CheckResult(
             check_id="world_writable_files",
             title="No world-writable files in system paths",
-            description="Detect world-writable files that could be exploited",
-            status="pass",
-            severity="high", category="filesystem",
+            description="Detect world-writable files that could be exploited for privilege escalation",
+            status=status,
+            severity="high",
+            category="filesystem",
+            current_value=str(len(world_writable)),
+            expected_value="0",
             remediation="Remove world-writable permission: chmod o-w <file>",
             cis_reference="CIS 6.1.10",
-            compliance_frameworks=["NIST CSF"],
-            detail="Full scan deferred to background job",
+            compliance_frameworks=["CIS", "NIST CSF", "PCI-DSS"],
+            detail=detail,
+            auto_remediable=False,
         )
 
     def _check_suid_files(self) -> CheckResult:
+        """CIS 6.1.13 — Ensure SUID/SGID files are reviewed."""
+        # Known-good SUID/SGID files on a standard Linux system
+        KNOWN_SUID = {
+            "/usr/bin/sudo", "/usr/bin/su", "/usr/bin/passwd", "/usr/bin/chage",
+            "/usr/bin/chfn", "/usr/bin/chsh", "/usr/bin/gpasswd", "/usr/bin/newgrp",
+            "/usr/bin/pkexec", "/usr/bin/mount", "/usr/bin/umount",
+            "/usr/sbin/pam_timestamp_check", "/usr/sbin/unix_chkpwd",
+            "/usr/lib/polkit-1/polkit-agent-helper-1",
+            "/usr/lib/openssh/ssh-keysign",
+        }
+
+        unexpected: List[str] = []
+        all_suid: List[str] = []
+
+        scan_roots = [_host_path("/usr"), _host_path("/bin"), _host_path("/sbin")]
+        for root in scan_roots:
+            if not os.path.exists(root):
+                continue
+            try:
+                result = subprocess.run(
+                    ["find", root, "-xdev",
+                     "(", "-perm", "-4000", "-o", "-perm", "-2000", ")", "-type", "f"],
+                    capture_output=True, text=True, timeout=30,
+                )
+                for line in result.stdout.splitlines():
+                    line = line.strip()
+                    if not line:
+                        continue
+                    # Normalise host prefix for comparison
+                    normalised = line.replace(HOST_ROOT, "") if HOST_ROOT != "/" else line
+                    all_suid.append(normalised)
+                    if normalised not in KNOWN_SUID:
+                        unexpected.append(normalised)
+            except (subprocess.TimeoutExpired, OSError) as exc:
+                logger.warning("SUID scan failed for %s: %s", root, exc)
+
+        if unexpected:
+            status = "fail"
+            detail = f"Found {len(unexpected)} unexpected SUID/SGID file(s): " + ", ".join(unexpected[:5])
+        else:
+            status = "pass"
+            detail = f"All {len(all_suid)} SUID/SGID file(s) are from the known-good list"
+
         return CheckResult(
             check_id="suid_files",
             title="SUID/SGID file audit",
-            description="Review SUID/SGID files for unexpected entries",
-            status="pass",
-            severity="high", category="filesystem",
-            remediation="Remove unnecessary SUID/SGID bits",
+            description="Ensure only known-good binaries carry SUID/SGID bits",
+            status=status,
+            severity="high",
+            category="filesystem",
+            current_value=f"{len(unexpected)} unexpected ({len(all_suid)} total)",
+            expected_value="0 unexpected",
+            remediation="Remove unnecessary SUID/SGID bits: chmod u-s,g-s <file>",
             cis_reference="CIS 6.1.13",
-            compliance_frameworks=["NIST CSF"],
-            detail="Full scan deferred to background job",
+            compliance_frameworks=["CIS", "NIST CSF"],
+            detail=detail,
+            auto_remediable=False,
         )
 
     def _check_unowned_files(self) -> CheckResult:
+        """CIS 6.1.11 — Ensure no unowned files or directories exist."""
+        scan_roots = [
+            _host_path("/usr"),
+            _host_path("/etc"),
+            _host_path("/var"),
+            _host_path("/home"),
+        ]
+        unowned: List[str] = []
+
+        for root in scan_roots:
+            if not os.path.exists(root):
+                continue
+            try:
+                result = subprocess.run(
+                    ["find", root, "-xdev", "-nouser", "-o", "-nogroup"],
+                    capture_output=True, text=True, timeout=30,
+                )
+                for line in result.stdout.splitlines():
+                    line = line.strip()
+                    if line:
+                        unowned.append(line)
+            except (subprocess.TimeoutExpired, OSError) as exc:
+                logger.warning("unowned-files scan failed for %s: %s", root, exc)
+
+        if unowned:
+            status = "fail"
+            detail = f"Found {len(unowned)} unowned path(s): " + ", ".join(unowned[:5])
+        else:
+            status = "pass"
+            detail = "No unowned files or directories found"
+
         return CheckResult(
             check_id="unowned_files",
             title="No unowned files or directories",
-            description="All files should have a valid owner and group",
-            status="pass",
-            severity="medium", category="filesystem",
-            remediation="Assign proper ownership to unowned files",
+            description="All files and directories should have a valid owner and group",
+            status=status,
+            severity="medium",
+            category="filesystem",
+            current_value=str(len(unowned)),
+            expected_value="0",
+            remediation="Assign proper ownership: chown root:root <file>",
             cis_reference="CIS 6.1.11",
-            compliance_frameworks=["NIST CSF"],
+            compliance_frameworks=["CIS", "NIST CSF"],
+            detail=detail,
+            auto_remediable=False,
         )
 
     def _check_umask_default(self) -> CheckResult:

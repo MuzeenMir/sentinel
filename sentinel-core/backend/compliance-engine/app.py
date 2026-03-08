@@ -6,9 +6,11 @@ Automated compliance assessment and reporting for:
 - HIPAA (Health Insurance Portability and Accountability Act)
 - PCI-DSS (Payment Card Industry Data Security Standard)
 - NIST CSF (Cybersecurity Framework)
-- SOC2 (Service Organization Control 2)
+- SOC2 (AICPA Trust Services Criteria — Security, Availability, Confidentiality,
+         Processing Integrity, Privacy)
 """
 import os
+import sys
 import json
 import logging
 from datetime import datetime
@@ -16,14 +18,17 @@ from typing import Dict, List, Any, Optional
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import redis
-from functools import wraps
 
 from frameworks.gdpr import GDPRFramework
 from frameworks.hipaa import HIPAAFramework
 from frameworks.pci_dss import PCIDSSFramework
 from frameworks.nist_csf import NISTCSFFramework
+from frameworks.soc2 import SOC2Framework
 from mappings.policy_mapper import PolicyToControlMapper
 from reports.compliance_reporter import ComplianceReporter
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from auth_middleware import require_auth  # noqa: E402
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -44,21 +49,14 @@ frameworks = {
     'GDPR': GDPRFramework(),
     'HIPAA': HIPAAFramework(),
     'PCI-DSS': PCIDSSFramework(),
-    'NIST': NISTCSFFramework()
+    'NIST': NISTCSFFramework(),
+    'SOC2': SOC2Framework(),
 }
 
 policy_mapper = PolicyToControlMapper(frameworks)
 reporter = ComplianceReporter(redis_client)
 
 
-def require_auth(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        auth_header = request.headers.get('Authorization')
-        if not auth_header or not auth_header.startswith('Bearer '):
-            return jsonify({'error': 'Authorization required'}), 401
-        return f(*args, **kwargs)
-    return decorated_function
 
 
 @app.route('/health', methods=['GET'])

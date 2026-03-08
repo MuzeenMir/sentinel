@@ -6,6 +6,7 @@ Supports multiple firewall vendors and provides policy validation,
 conflict detection, and rollback capabilities.
 """
 import os
+import sys
 import json
 import time
 import logging
@@ -14,13 +15,15 @@ from typing import Dict, List, Any, Optional
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import redis
-from functools import wraps
 import uuid
 
 from policies.policy_engine import PolicyEngine
 from policies.rule_generator import RuleGenerator
 from vendors.vendor_factory import VendorFactory
 from validation.policy_validator import PolicyValidator
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from auth_middleware import require_auth, require_role  # noqa: E402
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -50,26 +53,6 @@ vendor_factory = VendorFactory()
 policy_validator = PolicyValidator()
 
 
-def require_auth(f):
-    """Authentication decorator."""
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        auth_header = request.headers.get('Authorization')
-        if not auth_header or not auth_header.startswith('Bearer '):
-            return jsonify({'error': 'Authorization token required'}), 401
-        return f(*args, **kwargs)
-    return decorated_function
-
-
-def require_role(role):
-    """Role requirement decorator."""
-    def decorator(f):
-        @wraps(f)
-        def decorated_function(*args, **kwargs):
-            # In production, verify role from token
-            return f(*args, **kwargs)
-        return decorated_function
-    return decorator
 
 
 @app.route('/health', methods=['GET'])
@@ -493,6 +476,71 @@ def get_statistics():
     except Exception as e:
         logger.error(f"Statistics error: {e}")
         return jsonify({'error': 'Failed to get statistics'}), 500
+
+
+@app.route('/api/v1/policies/auto-apply', methods=['POST'])
+@require_auth
+def auto_apply_policy():
+    """
+    Apply a policy decision emitted by the DRL engine / Flink feed job.
+
+    This endpoint is called by internal services (drl_feed_job) only.
+    It creates a time-limited firewall rule without requiring admin RBAC so
+    that automated pipeline decisions reach the firewall in real-time.
+
+    Request body:
+    {
+        "name": "auto-deny-192.168.1.100-...",
+        "action": "DENY" | "RATE_LIMIT" | "MONITOR" | "ALLOW",
+        "source": {"ip": "192.168.1.100", "cidr": "/32"},
+        "priority": 50,
+        "duration": 1800,
+        "auto_applied": true,
+        "drl_decision": {...}
+    }
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Request body required'}), 400
+
+        required = ['name', 'action']
+        for field in required:
+            if field not in data:
+                return jsonify({'error': f'Missing required field: {field}'}), 400
+
+        rules = rule_generator.generate(data)
+        validation_result = policy_validator.validate(rules)
+        if not validation_result['valid']:
+            return jsonify({
+                'error': 'Policy validation failed',
+                'issues': validation_result['issues']
+            }), 400
+
+        policy_id = policy_engine.create_policy(
+            data,
+            rules=rules,
+            auto_applied=True,
+            source='drl-engine',
+        )
+
+        logger.info(
+            "Auto-applied policy: id=%s action=%s source=%s",
+            policy_id,
+            data.get('action'),
+            data.get('source', {}).get('ip', 'n/a'),
+        )
+
+        return jsonify({
+            'policy_id': policy_id,
+            'status': 'applied',
+            'action': data.get('action'),
+            'auto_applied': True,
+        }), 201
+
+    except Exception as e:
+        logger.error(f"Auto-apply policy error: {e}")
+        return jsonify({'error': 'Failed to auto-apply policy'}), 500
 
 
 # Error handlers

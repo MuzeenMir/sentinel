@@ -21,8 +21,13 @@ type NavItem = {
 const navigation: NavItem[] = [
   { name: 'Dashboard', href: '/', Icon: DashboardIcon },
   { name: 'Threats', href: '/threats', Icon: ThreatsIcon },
+  { name: 'Alerts', href: '/alerts', Icon: AlertsIcon },
   { name: 'Policies', href: '/policies', Icon: PoliciesIcon },
   { name: 'Compliance', href: '/compliance', Icon: ComplianceIcon },
+  { name: 'Hardening', href: '/hardening', Icon: HardeningIcon },
+  { name: 'HIDS Events', href: '/hids', Icon: HidsIcon },
+  { name: 'Users', href: '/users', Icon: UsersIcon },
+  { name: 'Audit Log', href: '/audit', Icon: AuditIcon },
   { name: 'Settings', href: '/settings', Icon: SettingsIcon },
 ]
 
@@ -71,8 +76,8 @@ export function Layout({ children }: LayoutProps) {
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <div className="flex">
       {/* Sidebar */}
-        <aside className="w-72 bg-slate-950/90 border-r border-slate-800/80 backdrop-blur">
-          <div className="p-6">
+        <aside className="w-72 bg-slate-950/90 border-r border-slate-800/80 backdrop-blur flex flex-col min-h-screen sticky top-0">
+          <div className="p-6 shrink-0">
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-xl bg-blue-600/20 text-blue-300 flex items-center justify-center font-semibold">
                 S
@@ -86,7 +91,7 @@ export function Layout({ children }: LayoutProps) {
             </div>
           </div>
 
-          <nav className="px-3 space-y-1">
+          <nav className="px-3 space-y-1 flex-1 overflow-y-auto pb-2">
             {navigation.map((item) => {
               const isActive = isActiveRoute(item.href, location.pathname)
               return (
@@ -107,7 +112,7 @@ export function Layout({ children }: LayoutProps) {
             })}
           </nav>
 
-          <div className="mt-auto p-4 border-t border-slate-800/80" ref={profileRef}>
+          <div className="shrink-0 p-4 border-t border-slate-800/80" ref={profileRef}>
             <div
               role="button"
               tabIndex={0}
@@ -268,17 +273,58 @@ function ComplianceIcon({ className }: IconProps) {
 
 function SettingsIcon({ className }: IconProps) {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-    >
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
       <path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7z" />
       <path d="M4.5 12h2M17.5 12h2M7.1 7.1l1.4 1.4M15.5 15.5l1.4 1.4M15.5 8.5l1.4-1.4M7.1 16.9l1.4-1.4" />
+    </svg>
+  )
+}
+
+function AlertsIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+    </svg>
+  )
+}
+
+function HardeningIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <rect x="3" y="11" width="18" height="11" rx="2" />
+      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+    </svg>
+  )
+}
+
+function HidsIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <rect x="2" y="3" width="20" height="14" rx="2" />
+      <path d="M8 21h8M12 17v4" />
+      <path d="M7 8h.01M11 8h6" />
+      <path d="M7 12h.01M11 12h6" />
+    </svg>
+  )
+}
+
+function UsersIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  )
+}
+
+function AuditIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <path d="M14 2v6h6" />
+      <path d="M9 13h6M9 17h4" />
     </svg>
   )
 }

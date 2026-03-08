@@ -68,7 +68,7 @@ class FeatureExtractionJob:
             self.env = StreamExecutionEnvironment.get_execution_environment()
             
             # Configure checkpointing
-            self.env.enable_checkpointing(config.checkpoint_interval)
+            self.env.enable_checkpointing(config.checkpoint_interval_ms)
             self.env.get_checkpoint_config().set_checkpointing_mode(CheckpointingMode.EXACTLY_ONCE)
             self.env.get_checkpoint_config().set_min_pause_between_checkpoints(500)
             

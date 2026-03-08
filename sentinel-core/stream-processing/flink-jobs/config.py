@@ -56,7 +56,7 @@ class FlinkConfig:
     """Flink job configuration."""
     job_name: str = "sentinel-feature-extraction"
     parallelism: int = int(os.environ.get('FLINK_PARALLELISM', '4'))
-    checkpoint_interval: int = 60000  # 1 minute in ms
+    checkpoint_interval_ms: int = 60000  # 1 minute in ms
     checkpoint_dir: str = os.environ.get('CHECKPOINT_DIR', 'file:///tmp/flink-checkpoints')
     
     kafka: KafkaConfig = None

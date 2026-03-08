@@ -229,7 +229,7 @@ resource "aws_ecs_task_definition" "ai_engine" {
       environment = [
         {
           name  = "REDIS_URL"
-          value = "redis://${aws_elasticache_cluster.sentinel_redis.cache_nodes[0].address}:6379"
+          value = "rediss://${aws_elasticache_replication_group.sentinel_redis.primary_endpoint_address}:6379"
         },
         {
           name  = "KAFKA_BOOTSTRAP_SERVERS"
@@ -238,6 +238,10 @@ resource "aws_ecs_task_definition" "ai_engine" {
         {
           name  = "MODEL_PATH"
           value = "/models"
+        },
+        {
+          name  = "AUTH_SERVICE_URL"
+          value = "http://auth-service.sentinel.local:5000"
         }
       ]
       
@@ -357,8 +361,8 @@ locals {
       cpu    = 512
       memory = 1024
       env = [
-        { name = "DATABASE_URL", value = "postgresql://sentinel:change-in-production@${aws_db_instance.sentinel_postgres.address}:5432/sentinel_db" },
-        { name = "REDIS_URL", value = "redis://${aws_elasticache_cluster.sentinel_redis.cache_nodes[0].address}:6379" },
+        # DATABASE_URL is injected via Secrets Manager (see secrets block in task definition below)
+        { name = "REDIS_URL", value = "rediss://${aws_elasticache_replication_group.sentinel_redis.primary_endpoint_address}:6379" },
       ]
     }
     alert-service = {
@@ -366,7 +370,7 @@ locals {
       cpu    = 256
       memory = 512
       env = [
-        { name = "REDIS_URL", value = "redis://${aws_elasticache_cluster.sentinel_redis.cache_nodes[0].address}:6379" },
+        { name = "REDIS_URL", value = "rediss://${aws_elasticache_replication_group.sentinel_redis.primary_endpoint_address}:6379" },
       ]
     }
     data-collector = {
@@ -375,7 +379,7 @@ locals {
       memory = 1024
       env = [
         { name = "KAFKA_BOOTSTRAP_SERVERS", value = aws_msk_cluster.sentinel.bootstrap_brokers_tls },
-        { name = "REDIS_URL", value = "redis://${aws_elasticache_cluster.sentinel_redis.cache_nodes[0].address}:6379" },
+        { name = "REDIS_URL", value = "rediss://${aws_elasticache_replication_group.sentinel_redis.primary_endpoint_address}:6379" },
       ]
     }
     drl-engine = {
@@ -383,7 +387,8 @@ locals {
       cpu    = 1024
       memory = 2048
       env = [
-        { name = "REDIS_URL", value = "redis://${aws_elasticache_cluster.sentinel_redis.cache_nodes[0].address}:6379" },
+        { name = "REDIS_URL", value = "rediss://${aws_elasticache_replication_group.sentinel_redis.primary_endpoint_address}:6379" },
+        { name = "AUTH_SERVICE_URL", value = "http://auth-service.sentinel.local:5000" },
       ]
     }
     policy-orchestrator = {
@@ -391,7 +396,8 @@ locals {
       cpu    = 256
       memory = 512
       env = [
-        { name = "REDIS_URL", value = "redis://${aws_elasticache_cluster.sentinel_redis.cache_nodes[0].address}:6379" },
+        { name = "REDIS_URL", value = "rediss://${aws_elasticache_replication_group.sentinel_redis.primary_endpoint_address}:6379" },
+        { name = "AUTH_SERVICE_URL", value = "http://auth-service.sentinel.local:5000" },
       ]
     }
     xai-service = {
@@ -399,7 +405,8 @@ locals {
       cpu    = 256
       memory = 512
       env = [
-        { name = "REDIS_URL", value = "redis://${aws_elasticache_cluster.sentinel_redis.cache_nodes[0].address}:6379" },
+        { name = "REDIS_URL", value = "rediss://${aws_elasticache_replication_group.sentinel_redis.primary_endpoint_address}:6379" },
+        { name = "AUTH_SERVICE_URL", value = "http://auth-service.sentinel.local:5000" },
       ]
     }
     compliance-engine = {
@@ -407,7 +414,8 @@ locals {
       cpu    = 256
       memory = 512
       env = [
-        { name = "REDIS_URL", value = "redis://${aws_elasticache_cluster.sentinel_redis.cache_nodes[0].address}:6379" },
+        { name = "REDIS_URL", value = "rediss://${aws_elasticache_replication_group.sentinel_redis.primary_endpoint_address}:6379" },
+        { name = "AUTH_SERVICE_URL", value = "http://auth-service.sentinel.local:5000" },
       ]
     }
   }
@@ -452,6 +460,74 @@ resource "aws_ecs_task_definition" "services" {
     Environment = var.environment
     Project     = "SENTINEL"
     Service     = each.key
+  }
+}
+
+# ── auth-service task definition override: inject DB URL from Secrets Manager ──
+#
+# The for_each task definition above handles most services. auth-service is
+# overridden here so that DATABASE_URL is sourced from Secrets Manager rather
+# than a plaintext environment variable.  Terraform selects the auth-service
+# ECS service to use this task definition instead.
+
+resource "aws_ecs_task_definition" "auth_service" {
+  family                   = "${var.environment}-sentinel-auth-service"
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  cpu                      = 512
+  memory                   = 1024
+  execution_role_arn       = aws_iam_role.ecs_task_execution_role.arn
+  task_role_arn            = aws_iam_role.ecs_task_role.arn
+
+  container_definitions = jsonencode([
+    {
+      name  = "auth-service"
+      image = "${aws_ecr_repository.sentinel_services["auth-service"].repository_url}:latest"
+
+      portMappings = [{ containerPort = 5000, protocol = "tcp" }]
+
+      environment = [
+        {
+          name  = "REDIS_URL"
+          value = "rediss://${aws_elasticache_replication_group.sentinel_redis.primary_endpoint_address}:6379"
+        }
+      ]
+
+      # DATABASE_URL injected securely from Secrets Manager
+      secrets = [
+        {
+          name      = "DATABASE_URL"
+          valueFrom = "${aws_secretsmanager_secret.rds_credentials.arn}:database_url::"
+        },
+        {
+          name      = "REDIS_AUTH_TOKEN"
+          valueFrom = "${aws_secretsmanager_secret.redis_auth.arn}:auth_token::"
+        }
+      ]
+
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.sentinel_ecs.name
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "auth-service"
+        }
+      }
+
+      healthCheck = {
+        command     = ["CMD-SHELL", "curl -f http://localhost:5000/health || exit 1"]
+        interval    = 30
+        timeout     = 5
+        retries     = 3
+        startPeriod = 30
+      }
+    }
+  ])
+
+  tags = {
+    Environment = var.environment
+    Project     = "SENTINEL"
+    Service     = "auth-service"
   }
 }
 

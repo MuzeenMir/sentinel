@@ -100,21 +100,19 @@ export const useAuthStore = create<AuthState>()(
 
       refreshAccessToken: async () => {
         const { refreshToken } = get()
-        
+
         if (!refreshToken) {
           throw new Error('No refresh token available')
         }
 
         try {
-          const response = await authApi.verifyToken()
-          const newToken = response.data.user ? get().token : null
-          
-          if (newToken) {
-            localStorage.setItem('sentinel-token', newToken)
-            set({ token: newToken })
-          }
+          const response = await authApi.refreshToken(refreshToken)
+          const newAccessToken = response.data.access_token
+
+          localStorage.setItem('sentinel-token', newAccessToken)
+          set({ token: newAccessToken })
         } catch {
-          // Refresh failed - logout
+          // Refresh failed — clear the session entirely.
           await get().logout()
           throw new Error('Session expired')
         }

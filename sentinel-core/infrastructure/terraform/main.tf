@@ -207,40 +207,8 @@ resource "aws_security_group" "cache_sg" {
   }
 }
 
-# Kafka Security Group
-resource "aws_security_group" "kafka_sg" {
-  name        = "${var.environment}-sentinel-kafka-sg"
-  description = "Security group for Kafka brokers"
-  vpc_id      = aws_vpc.sentinel_vpc.id
-
-  ingress {
-    description = "Kafka access from VPC"
-    from_port   = 9092
-    to_port     = 9092
-    protocol    = "tcp"
-    cidr_blocks = [var.vpc_cidr]
-  }
-
-  ingress {
-    description = "Zookeeper access from VPC"
-    from_port   = 2181
-    to_port     = 2181
-    protocol    = "tcp"
-    cidr_blocks = [var.vpc_cidr]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name        = "${var.environment}-sentinel-kafka-sg"
-    Environment = var.environment
-  }
-}
+# Kafka Security Group is defined in msk.tf as aws_security_group.msk
+# (supports plaintext 9092, TLS 9094, and Zookeeper 2181).
 
 # Data Collector Security Group
 resource "aws_security_group" "data_collector_sg" {
@@ -329,8 +297,10 @@ resource "aws_db_instance" "sentinel_postgres" {
   vpc_security_group_ids  = [aws_security_group.database_sg.id]
   db_subnet_group_name    = aws_db_subnet_group.sentinel_rds_subnet_group.name
   skip_final_snapshot     = var.environment != "production"
-  backup_retention_period = 7
+  backup_retention_period = var.rds_backup_retention_period
   deletion_protection     = var.environment == "production"
+  multi_az                = var.rds_multi_az
+  storage_encrypted       = true
 
   tags = {
     Name        = "${var.environment}-sentinel-postgres"
@@ -338,17 +308,26 @@ resource "aws_db_instance" "sentinel_postgres" {
   }
 }
 
-# ElastiCache Redis Cluster
-resource "aws_elasticache_cluster" "sentinel_redis" {
-  cluster_id           = "${var.environment}-sentinel-redis"
-  engine               = "redis"
-  node_type            = var.redis_node_type
-  num_cache_nodes      = var.redis_num_nodes
-  parameter_group_name = "default.redis6.x"
-  engine_version       = "6.2"
-  port                 = 6379
-  subnet_group_name    = aws_elasticache_subnet_group.sentinel_redis_subnet_group.name
-  security_group_ids   = [aws_security_group.cache_sg.id]
+# ElastiCache Redis — replication group enables transit encryption and auth token
+resource "aws_elasticache_replication_group" "sentinel_redis" {
+  replication_group_id       = "${var.environment}-sentinel-redis"
+  description                = "SENTINEL Redis cache with in-transit encryption"
+  node_type                  = var.redis_node_type
+  num_cache_clusters         = var.redis_num_nodes
+  parameter_group_name       = "default.redis6.x"
+  engine_version             = var.redis_engine_version
+  port                       = 6379
+  subnet_group_name          = aws_elasticache_subnet_group.sentinel_redis_subnet_group.name
+  security_group_ids         = [aws_security_group.cache_sg.id]
+  transit_encryption_enabled = true
+  at_rest_encryption_enabled = true
+
+  # auth_token is required when transit_encryption_enabled = true.
+  # Must be 16-128 printable ASCII chars (no spaces).
+  # Set var.redis_auth_token via TF_VAR_redis_auth_token or tfvars.
+  auth_token = var.redis_auth_token != "" ? var.redis_auth_token : null
+
+  automatic_failover_enabled = var.redis_num_nodes > 1 ? true : false
 
   tags = {
     Name        = "${var.environment}-sentinel-redis"
@@ -402,8 +381,8 @@ resource "aws_lb_listener" "sentinel_api_https" {
   load_balancer_arn = aws_lb.sentinel_api_lb.arn
   port              = "443"
   protocol          = "HTTPS"
-  ssl_policy        = "ELBSecurityPolicy-TLS-1-2-2017-01"
-  certificate_arn   = var.ssl_certificate_arn
+  ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
+  certificate_arn   = local.effective_certificate_arn
 
   default_action {
     type             = "forward"

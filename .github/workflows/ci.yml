@@ -196,3 +196,21 @@ jobs:
         run: |
           test -f backend/ai-engine/trained_models/xgboost/xgboost_model.json
           test -f backend/ai-engine/trained_models/isolation_forest/isolation_forest.joblib
+
+      - name: Run model validation gate
+        if: steps.check-training.outputs.run == 'true'
+        run: |
+          python training/validate_models.py \
+            --model-path backend/ai-engine/trained_models
+
+      - name: Upload validation report
+        if: steps.check-training.outputs.run == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-validation-report
+          path: sentinel-core/backend/ai-engine/trained_models/validation_report.json
+          if-no-files-found: ignore
+
+      - name: Verify SageMaker inference.py exists
+        run: |
+          test -f training/inference.py || (echo "::error::training/inference.py is missing" && exit 1)

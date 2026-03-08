@@ -8,6 +8,7 @@ Provides explanations for AI detection and DRL policy decisions using:
 - Decision audit trails
 """
 import os
+import sys
 import json
 import logging
 from datetime import datetime
@@ -16,12 +17,14 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import redis
 import numpy as np
-from functools import wraps
 
 from explainers.shap_explainer import SHAPExplainer
 from explainers.text_explainer import TextExplainer
 from reports.audit_trail import AuditTrail
 from reports.compliance_report import ComplianceReportGenerator
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from auth_middleware import require_auth  # noqa: E402
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -49,15 +52,6 @@ audit_trail = AuditTrail(redis_client)
 compliance_reporter = ComplianceReportGenerator()
 
 
-def require_auth(f):
-    """Authentication decorator."""
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        auth_header = request.headers.get('Authorization')
-        if not auth_header or not auth_header.startswith('Bearer '):
-            return jsonify({'error': 'Authorization token required'}), 401
-        return f(*args, **kwargs)
-    return decorated_function
 
 
 @app.route('/health', methods=['GET'])

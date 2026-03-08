@@ -14,7 +14,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import redis
 import numpy as np
-from functools import wraps
+import sys
 
 from agent.ppo_agent import PPOAgent
 from agent.state_builder import StateBuilder
@@ -22,6 +22,9 @@ from agent.action_space import ActionSpace
 from agent.reward_function import RewardFunction
 from environment.network_env import NetworkSecurityEnv
 from training.trainer import DRLTrainer
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from auth_middleware import require_auth, require_role  # noqa: E402
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -87,25 +90,6 @@ def initialize_agent():
         return False
 
 
-def require_auth(f):
-    """Authentication decorator."""
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        auth_header = request.headers.get('Authorization')
-        if not auth_header or not auth_header.startswith('Bearer '):
-            return jsonify({'error': 'Authorization token required'}), 401
-        return f(*args, **kwargs)
-    return decorated_function
-
-
-def require_role(role):
-    """Role requirement decorator."""
-    def decorator(f):
-        @wraps(f)
-        def decorated_function(*args, **kwargs):
-            return f(*args, **kwargs)
-        return decorated_function
-    return decorator
 
 
 @app.route('/health', methods=['GET'])

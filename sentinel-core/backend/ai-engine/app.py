@@ -6,6 +6,7 @@ Supports supervised (XGBoost, LSTM), unsupervised (Isolation Forest, Autoencoder
 and ensemble methods for comprehensive threat detection.
 """
 import os
+import sys
 import json
 import time
 import logging
@@ -15,7 +16,6 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import redis
 import numpy as np
-from functools import wraps
 
 from models.supervised.xgboost_detector import XGBoostDetector
 from models.supervised.lstm_sequence import LSTMSequenceDetector
@@ -27,6 +27,9 @@ from features.behavioral import BehavioralFeatureExtractor
 from features.contextual import ContextualFeatureExtractor
 from inference.prediction_service import PredictionService
 from learning.retraining_pipeline import RetrainingPipeline
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from auth_middleware import require_auth  # noqa: E402
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -110,16 +113,6 @@ def initialize_models():
         return False
 
 
-def require_auth(f):
-    """Authentication decorator."""
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        auth_header = request.headers.get('Authorization')
-        if not auth_header or not auth_header.startswith('Bearer '):
-            return jsonify({'error': 'Authorization token required'}), 401
-        # In production, verify token with auth service
-        return f(*args, **kwargs)
-    return decorated_function
 
 
 # Health check endpoint

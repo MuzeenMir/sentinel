@@ -6,6 +6,11 @@ import { Threats } from './pages/Threats'
 import { ThreatDetail } from './pages/ThreatDetail'
 import { Policies } from './pages/Policies'
 import { Compliance } from './pages/Compliance'
+import { Alerts } from './pages/Alerts'
+import { Hardening } from './pages/Hardening'
+import { HidsEvents } from './pages/HidsEvents'
+import { Users } from './pages/Users'
+import { AuditLog } from './pages/AuditLog'
 import { Settings } from './pages/Settings'
 import { Login } from './pages/Login'
 import { useAuthStore } from './store/authStore'
@@ -72,8 +77,13 @@ function App() {
         <Route path="/" element={<Dashboard />} />
         <Route path="/threats" element={<Threats />} />
         <Route path="/threats/:id" element={<ThreatDetail />} />
+        <Route path="/alerts" element={<Alerts />} />
         <Route path="/policies" element={<Policies />} />
         <Route path="/compliance" element={<Compliance />} />
+        <Route path="/hardening" element={<Hardening />} />
+        <Route path="/hids" element={<HidsEvents />} />
+        <Route path="/users" element={<Users />} />
+        <Route path="/audit" element={<AuditLog />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

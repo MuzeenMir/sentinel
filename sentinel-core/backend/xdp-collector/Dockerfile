@@ -22,9 +22,9 @@ COPY . /app
 # XDP collector needs privileged access: --cap-add=CAP_BPF --cap-add=CAP_NET_ADMIN
 # or --privileged with --network=host
 
-EXPOSE 5010
+EXPOSE 5012
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:5010/health || exit 1
+    CMD curl -f http://localhost:5012/health || exit 1
 
-CMD ["gunicorn", "--bind", "0.0.0.0:5010", "--workers", "2", "--timeout", "120", "app:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:5012", "--workers", "2", "--timeout", "120", "app:app"]

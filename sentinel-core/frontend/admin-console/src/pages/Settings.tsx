@@ -43,20 +43,27 @@ export function Settings() {
     setSaveMessage(null)
     try {
       await configApi.updateConfig({
+        organization: { name: organizationName, timezone },
         ai_engine: {
           model_path: '/models/current_model.pkl',
           confidence_threshold: confidenceThreshold / 100,
           batch_size: 1000,
+          auto_block_high_threats: autoBlockHighThreats,
+          drl_auto_decisions: drlAutoDecisions,
         },
         firewall: { max_rules: 10000, sync_interval: 30 },
         monitoring: { alert_threshold: 0.95, retention_days: 90 },
+        notifications: {
+          email_alerts: emailAlerts,
+          slack_integration: slackIntegration,
+        },
       })
-      setSaveMessage({ type: 'success', text: 'Settings saved successfully.' })
+      setSaveMessage({ type: 'success', text: 'Settings saved to backend successfully.' })
     } catch {
-      setSaveMessage({ type: 'success', text: 'Local settings saved.' })
+      setSaveMessage({ type: 'error', text: 'Backend unreachable — settings saved locally only.' })
     }
     setSaving(false)
-    setTimeout(() => setSaveMessage(null), 3000)
+    setTimeout(() => setSaveMessage(null), 4000)
   }
 
   return (
