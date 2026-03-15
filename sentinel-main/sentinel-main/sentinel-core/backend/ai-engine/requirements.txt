@@ -1,0 +1,54 @@
+# SENTINEL AI Detection Engine Dependencies
+
+# Web Framework
+# Align Flask version with api-gateway and pick patched releases for CI security audit.
+Flask>=3.1.3
+Flask-CORS>=6.0.0
+gunicorn>=22.0.0
+
+# Machine Learning - Core
+numpy>=1.26.0
+# pandas 2.0.x does not support Python 3.12; require a compatible release.
+pandas>=2.1.1,<3.0.0
+# scikit-learn 1.5.0+ resolves PYSEC-2024-110.
+scikit-learn>=1.5.0
+xgboost>=2.0.0
+scipy==1.11.2
+
+# Deep Learning
+# Use PyTorch/PyTorchVision versions compatible with Python 3.12.
+torch>=2.2.0,<3.0.0
+torchvision>=0.17.0,<1.0.0
+
+# Gradient Boosting
+# lightgbm 4.6.0+ resolves PYSEC-2024-231.
+lightgbm>=4.6.0
+
+# Anomaly Detection
+pyod==1.1.0
+
+# Feature Engineering
+tsfresh==0.20.1
+featuretools==1.27.0
+
+# Data Processing
+redis==5.0.1
+kafka-python==2.0.2
+
+# Explainability
+shap==0.43.0
+lime==0.2.0.1
+
+# Model Serialization
+joblib==1.3.2
+# Use ONNX/ONNX Runtime versions with Python 3.12 wheels.
+onnx>=1.20.1,<2.0.0
+onnxruntime>=1.20.0,<2.0.0
+
+# Monitoring & Logging
+prometheus-client==0.17.1
+
+# Utilities
+python-dotenv==1.0.0
+pyyaml==6.0.1
+requests>=2.31.0

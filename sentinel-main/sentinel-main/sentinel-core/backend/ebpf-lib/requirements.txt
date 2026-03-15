@@ -1,0 +1,4 @@
+# SENTINEL eBPF library Python dependencies
+# The C eBPF programs are compiled separately via the Makefile.
+# Python user-space only needs:
+pyroute2>=0.7.0

@@ -1,0 +1,216 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sentinel-core/frontend/admin-console
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: sentinel-core/frontend/admin-console/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run type-check
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm run test -- --run
+
+  e2e:
+    name: E2E
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sentinel-core/frontend/admin-console
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: sentinel-core/frontend/admin-console/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+
+      - name: Run E2E tests
+        run: npm run test:e2e
+
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sentinel-core/backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install test dependencies
+        run: pip install -r requirements-test.txt
+
+      - name: Install service deps (for tests that import hardening-service / hids-agent / ai-engine)
+        run: |
+          pip install -r hardening-service/requirements.txt -r hids-agent/requirements.txt -r ai-engine/requirements.txt
+
+      - name: Run backend tests
+        run: python -m pytest tests/ -v --tb=short
+
+  security-scan:
+    name: Security Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Python audit tools
+        run: pip install pip-audit bandit
+
+      - name: pip-audit (auth-service)
+        run: pip-audit -r sentinel-core/backend/auth-service/requirements.txt
+
+      - name: pip-audit (ai-engine)
+        run: pip-audit -r sentinel-core/backend/ai-engine/requirements.txt
+
+      - name: Bandit (backend Python)
+        run: |
+          bandit -r sentinel-core/backend/ \
+            --exclude sentinel-core/backend/.venv-backend \
+            -ll -ii \
+            --format json \
+            --output bandit-report.json || true
+          python -c "
+          import json, sys
+          try:
+              with open('bandit-report.json') as f:
+                  data = json.load(f)
+          except FileNotFoundError:
+              data = {'results': []}
+          results = data.get('results', [])
+          high = [r for r in results if r.get('issue_severity') == 'HIGH']
+          if high:
+              print(f'::error::Bandit found {len(high)} HIGH severity issue(s); job failed.', file=sys.stderr)
+              for h in high[:10]:
+                  print(f'  {h[\"filename\"]}:{h[\"line_number\"]} - {h[\"issue_text\"]}', file=sys.stderr)
+              sys.exit(1)
+          print('No HIGH severity issues found')
+          "
+
+      - name: npm audit (frontend)
+        working-directory: sentinel-core/frontend/admin-console
+        run: |
+          npm ci
+          npm audit --audit-level=high
+
+      - name: Upload Bandit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-report
+          path: bandit-report.json
+          if-no-files-found: ignore
+
+  training:
+    name: Training pipeline
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sentinel-core
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for training requirements and data
+        id: check-training
+        run: |
+          if [ ! -f training/requirements.txt ]; then echo "run=false" >> $GITHUB_OUTPUT; exit 0; fi
+          if [ -d training/datasets/data/cicids2018 ] && [ -n "$(ls -A training/datasets/data/cicids2018 2>/dev/null)" ]; then
+            echo "run=true" >> $GITHUB_OUTPUT
+          else
+            echo "run=false" >> $GITHUB_OUTPUT
+            echo "Training data not present (training/datasets/data/cicids2018); skipping training pipeline."
+          fi
+
+      - name: Skip (no training files or data)
+        if: steps.check-training.outputs.run != 'true'
+        run: echo "Training requirements or dataset not present; skipping training job."
+
+      - name: Setup Python
+        if: steps.check-training.outputs.run == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install training dependencies
+        if: steps.check-training.outputs.run == 'true'
+        run: pip install -r training/requirements.txt
+
+      - name: Run training (xgboost + isolation_forest, max 5000 rows)
+        if: steps.check-training.outputs.run == 'true'
+        run: |
+          python -m training.train_all \
+            --data-path training/datasets/data \
+            --dataset cicids2018 \
+            --models xgboost isolation_forest \
+            --max-rows 5000 \
+            --device cpu
+
+      - name: Check artifacts
+        if: steps.check-training.outputs.run == 'true'
+        run: |
+          test -f backend/ai-engine/trained_models/xgboost/xgboost_model.json
+          test -f backend/ai-engine/trained_models/isolation_forest/isolation_forest.joblib
+
+      - name: Run model validation gate
+        if: steps.check-training.outputs.run == 'true'
+        run: |
+          python training/validate_models.py \
+            --model-path backend/ai-engine/trained_models
+
+      - name: Upload validation report
+        if: steps.check-training.outputs.run == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-validation-report
+          path: sentinel-core/backend/ai-engine/trained_models/validation_report.json
+          if-no-files-found: ignore
+
+      - name: Verify SageMaker inference.py exists
+        run: |
+          test -f training/inference.py || (echo "::error::training/inference.py is missing" && exit 1)

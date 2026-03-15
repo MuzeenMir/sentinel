@@ -1,0 +1,64 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: "api-gateway"
+    static_configs:
+      - targets: ["api-gateway:8080"]
+    metrics_path: /metrics
+
+  - job_name: "auth-service"
+    static_configs:
+      - targets: ["auth-service:5000"]
+    metrics_path: /metrics
+
+  - job_name: "ai-engine"
+    static_configs:
+      - targets: ["ai-engine:5003"]
+    metrics_path: /metrics
+
+  - job_name: "drl-engine"
+    static_configs:
+      - targets: ["drl-engine:5005"]
+    metrics_path: /metrics
+
+  - job_name: "alert-service"
+    static_configs:
+      - targets: ["alert-service:5002"]
+    metrics_path: /metrics
+
+  - job_name: "data-collector"
+    static_configs:
+      - targets: ["data-collector:5001"]
+    metrics_path: /metrics
+
+  - job_name: "xdp-collector"
+    static_configs:
+      - targets: ["localhost:5010"]
+    metrics_path: /metrics
+
+  - job_name: "hids-agent"
+    static_configs:
+      - targets: ["hids-agent:5010"]
+    metrics_path: /metrics
+
+  - job_name: "hardening-service"
+    static_configs:
+      - targets: ["hardening-service:5011"]
+    metrics_path: /metrics
+
+  - job_name: "policy-orchestrator"
+    static_configs:
+      - targets: ["policy-orchestrator:5004"]
+    metrics_path: /metrics
+
+  - job_name: "compliance-engine"
+    static_configs:
+      - targets: ["compliance-engine:5007"]
+    metrics_path: /metrics
+
+  - job_name: "xai-service"
+    static_configs:
+      - targets: ["xai-service:5006"]
+    metrics_path: /metrics
