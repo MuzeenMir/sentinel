@@ -23,6 +23,11 @@ SENTINEL is an enterprise-grade, AI-powered security platform for real-time thre
 - **Tests**: Backend and stream changes should include or update tests.
 - **Dependencies**: Per-service `requirements.txt` for Python; `package.json` in frontend. Prefer MIT/Apache/BSD; avoid GPL/AGPL unless approved.
 
+## Git — canonical remote
+
+- **Primary (default) remote**: [https://github.com/MuzeenMir/sentinel](https://github.com/MuzeenMir/sentinel) — treat this as the main, original repository.
+- **Pushes**: Use `origin` → `MuzeenMir/sentinel` for normal work (`git push origin <branch>`). Do not push to another remote or fork unless the user explicitly asks.
+
 ## Bugbot and Cursor
 
 - Bugbot PR rules: `.cursor/BUGBOT.md`.
