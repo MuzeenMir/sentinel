@@ -4,9 +4,9 @@ services:
     image: postgres:13
     container_name: sentinel-postgres
     environment:
-      POSTGRES_DB: sentinel_db
-      POSTGRES_USER: sentinel
-      POSTGRES_PASSWORD: sentinel_password
+      POSTGRES_DB: ${POSTGRES_DB:-sentinel_db}
+      POSTGRES_USER: ${POSTGRES_USER:-sentinel}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sentinel_password}
     ports:
       - "5433:5432"  # host 5433 to avoid conflict with local PostgreSQL on 5432
     volumes:
@@ -35,18 +35,18 @@ services:
   # Authentication service with dependency
   auth-service:
     build:
-      context: ./backend/auth-service
-      dockerfile: Dockerfile
+      context: ./backend
+      dockerfile: auth-service/Dockerfile
     container_name: sentinel-auth-service
     ports:
       - "5000:5000"
     environment:
-      - DATABASE_URL=postgresql://sentinel:sentinel_password@postgres:5432/sentinel_db
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-sentinel}:${POSTGRES_PASSWORD:-sentinel_password}@postgres:5432/${POSTGRES_DB:-sentinel_db}
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-change-this-in-production}
-      - ADMIN_USERNAME=${ADMIN_USERNAME:-Santa}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-Ggxr@123}
-      - ADMIN_EMAIL=${ADMIN_EMAIL:-santa@sentinel.local}
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-ChangeMe!2026}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@yourdomain.com}
     depends_on:
       postgres:
         condition: service_healthy
@@ -93,8 +93,8 @@ services:
   # API Gateway
   api-gateway:
     build:
-      context: ./backend/api-gateway
-      dockerfile: Dockerfile
+      context: ./backend
+      dockerfile: api-gateway/Dockerfile
     container_name: sentinel-api-gateway
     ports:
       - "8080:8080"
@@ -122,8 +122,8 @@ services:
   # Data Collector
   data-collector:
     build:
-      context: ./backend/data-collector
-      dockerfile: Dockerfile
+      context: ./backend
+      dockerfile: data-collector/Dockerfile
     container_name: sentinel-data-collector
     ports:
       - "5001:5001"
@@ -146,8 +146,8 @@ services:
   # High-speed XDP Collector (bare-metal / privileged container)
   xdp-collector:
     build:
-      context: ./backend/xdp-collector
-      dockerfile: Dockerfile
+      context: ./backend
+      dockerfile: xdp-collector/Dockerfile
     container_name: sentinel-xdp-collector
     # XDP requires host networking and privileges to attach to NIC
     network_mode: "host"
@@ -166,8 +166,8 @@ services:
   # Alert Service
   alert-service:
     build:
-      context: ./backend/alert-service
-      dockerfile: Dockerfile
+      context: ./backend
+      dockerfile: alert-service/Dockerfile
     container_name: sentinel-alert-service
     ports:
       - "5002:5002"
@@ -189,8 +189,8 @@ services:
   # AI Detection Engine
   ai-engine:
     build:
-      context: ./backend/ai-engine
-      dockerfile: Dockerfile
+      context: ./backend
+      dockerfile: ai-engine/Dockerfile
     container_name: sentinel-ai-engine
     ports:
       - "5003:5003"
@@ -269,8 +269,8 @@ services:
   # DRL Engine
   drl-engine:
     build:
-      context: ./backend/drl-engine
-      dockerfile: Dockerfile
+      context: ./backend
+      dockerfile: drl-engine/Dockerfile
     container_name: sentinel-drl-engine
     ports:
       - "5005:5005"
@@ -294,8 +294,8 @@ services:
   # XAI Service
   xai-service:
     build:
-      context: ./backend/xai-service
-      dockerfile: Dockerfile
+      context: ./backend
+      dockerfile: xai-service/Dockerfile
     container_name: sentinel-xai-service
     ports:
       - "5006:5006"
@@ -314,8 +314,8 @@ services:
   # Compliance Engine
   compliance-engine:
     build:
-      context: ./backend/compliance-engine
-      dockerfile: Dockerfile
+      context: ./backend
+      dockerfile: compliance-engine/Dockerfile
     container_name: sentinel-compliance-engine
     ports:
       - "5007:5007"
@@ -332,8 +332,8 @@ services:
   # HIDS Agent - eBPF-powered host intrusion detection
   hids-agent:
     build:
-      context: ./backend/hids-agent
-      dockerfile: Dockerfile
+      context: ./backend
+      dockerfile: hids-agent/Dockerfile
     container_name: sentinel-hids-agent
     ports:
       - "5010:5010"
@@ -363,8 +363,8 @@ services:
   # System Hardening Service (eBPF runtime enforcement + CIS benchmarks)
   hardening-service:
     build:
-      context: ./backend/hardening-service
-      dockerfile: Dockerfile
+      context: ./backend
+      dockerfile: hardening-service/Dockerfile
     container_name: sentinel-hardening-service
     ports:
       - "5011:5011"

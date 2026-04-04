@@ -1,8 +1,15 @@
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
+  external_labels:
+    cluster: sentinel
+    environment: production
 
 scrape_configs:
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
   - job_name: "api-gateway"
     static_configs:
       - targets: ["api-gateway:8080"]
@@ -17,6 +24,7 @@ scrape_configs:
     static_configs:
       - targets: ["ai-engine:5003"]
     metrics_path: /metrics
+    scrape_interval: 30s
 
   - job_name: "drl-engine"
     static_configs:
@@ -61,4 +69,19 @@ scrape_configs:
   - job_name: "xai-service"
     static_configs:
       - targets: ["xai-service:5006"]
+    metrics_path: /metrics
+
+  - job_name: "flink-anomaly"
+    static_configs:
+      - targets: ["flink-anomaly-detection:9249"]
+    metrics_path: /metrics
+
+  - job_name: "flink-features"
+    static_configs:
+      - targets: ["flink-feature-extraction:9249"]
+    metrics_path: /metrics
+
+  - job_name: "flink-drl-feed"
+    static_configs:
+      - targets: ["flink-drl-feed:9249"]
     metrics_path: /metrics

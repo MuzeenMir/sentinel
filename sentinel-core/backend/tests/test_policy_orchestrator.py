@@ -130,6 +130,7 @@ _redis_mod.from_url.return_value = _fake_redis
 sys.modules.setdefault("redis", _redis_mod)
 
 # Auth middleware
+_old_auth_middleware = sys.modules.get("auth_middleware")
 sys.modules["auth_middleware"] = MagicMock(
     require_auth=_passthrough_auth,
     require_role=_passthrough_role,
@@ -198,6 +199,16 @@ orch_app.redis_client = _fake_redis
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
+@pytest.fixture(autouse=True, scope="module")
+def _restore_auth_middleware_after_module():
+    """Restore sys.modules['auth_middleware'] after this module's tests finish."""
+    yield
+    if _old_auth_middleware is None:
+        sys.modules.pop("auth_middleware", None)
+    else:
+        sys.modules["auth_middleware"] = _old_auth_middleware
+
 
 @pytest.fixture(autouse=True)
 def _reset():

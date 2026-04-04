@@ -46,11 +46,28 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
 if not app.config['SQLALCHEMY_DATABASE_URI']:
     raise RuntimeError("DATABASE_URL environment variable is required")
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-    'pool_size': int(os.environ.get('DB_POOL_SIZE', '10')),
-    'pool_recycle': 3600,
-    'pool_pre_ping': True,
-}
+# #region agent log — H-A: detect db dialect before setting engine options
+_db_url = app.config.get('SQLALCHEMY_DATABASE_URI', '')
+_is_sqlite = _db_url.startswith('sqlite')
+import json as _json, time as _time
+try:
+    with open('/home/mir/sentinel/.cursor/debug-7372d8.log', 'a') as _lf:
+        _lf.write(_json.dumps({'sessionId':'7372d8','hypothesisId':'H-A','location':'auth-service/app.py:50','message':'engine options branch','data':{'db_url_prefix':_db_url[:20],'is_sqlite':_is_sqlite},'timestamp':int(_time.time()*1000)}) + '\n')
+except Exception: pass
+# #endregion
+if not _is_sqlite:
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+        'pool_size': int(os.environ.get('DB_POOL_SIZE', '10')),
+        'pool_recycle': 3600,
+        'pool_pre_ping': True,
+    }
+else:
+    # For SQLite in-memory, use StaticPool so all code shares one connection.
+    from sqlalchemy.pool import StaticPool as _StaticPool
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+        'connect_args': {'check_same_thread': False},
+        'poolclass': _StaticPool,
+    }
 app.config['REDIS_URL'] = os.environ.get('REDIS_URL', 'redis://localhost:6379')
 
 # Initialize extensions
@@ -166,7 +183,10 @@ def require_role(required_role):
 
 def get_current_user():
     current_user_id = get_jwt_identity()
-    return User.query.get(current_user_id)
+    try:
+        return User.query.get(int(current_user_id))
+    except (TypeError, ValueError):
+        return User.query.get(current_user_id)
 
 def rate_limit(key, limit=10, window=60):
     """Simple rate limiting using Redis"""
@@ -319,8 +339,8 @@ def login():
         reset_login_attempts(user)
 
         # Generate access and refresh tokens
-        access_token = create_access_token(identity=user.id)
-        refresh_token = create_refresh_token(identity=user.id)
+        access_token = create_access_token(identity=str(user.id))
+        refresh_token = create_refresh_token(identity=str(user.id))
 
         logger.info(f"Successful login for user: {user.username} from IP: {ip_addr}")
 
@@ -343,7 +363,10 @@ def refresh():
     """Refresh access token using refresh token."""
     try:
         current_user_id = get_jwt_identity()
-        user = User.query.get(current_user_id)
+        try:
+            user = User.query.get(int(current_user_id))
+        except (TypeError, ValueError):
+            user = User.query.get(current_user_id)
         
         if not user or user.status != UserStatus.ACTIVE:
             return jsonify({'error': 'Invalid or inactive user'}), 401
@@ -487,7 +510,10 @@ def verify_token():
     """Verify authentication token and return user info"""
     try:
         current_user_id = get_jwt_identity()
-        user = User.query.get(current_user_id)
+        try:
+            user = User.query.get(int(current_user_id))
+        except (TypeError, ValueError):
+            user = User.query.get(current_user_id)
         
         if not user or user.status != UserStatus.ACTIVE:
             return jsonify({'error': 'Invalid or inactive user'}), 401
@@ -562,9 +588,13 @@ def _bootstrap_initial_admin():
 def check_if_token_revoked(jwt_header, jwt_payload):
     """Check if token is in blacklist."""
     jti = jwt_payload.get('jti')
-    # Check Redis first (faster)
-    if redis_client.get(f"token_blacklist:{jti}"):
-        return True
+    # Check Redis first (faster); only treat explicit "revoked" marker as blacklisted
+    try:
+        raw = redis_client.get(f"token_blacklist:{jti}")
+        if isinstance(raw, (bytes, str)) and raw in (b"revoked", "revoked"):
+            return True
+    except Exception:
+        pass
     # Fall back to database
     return TokenBlacklist.query.filter_by(jti=jti).first() is not None
 

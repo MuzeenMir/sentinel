@@ -151,6 +151,21 @@ xaiService:
       cpu: 500m
       memory: 512Mi
 
+# ── Data Collector ──────────────────────────────────────────────────
+dataCollector:
+  replicaCount: 1
+  image:
+    name: data-collector
+  port: 5001
+  hostNetwork: true
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
 # ── Hardening Service ────────────────────────────────────────────────
 hardeningService:
   replicaCount: 1

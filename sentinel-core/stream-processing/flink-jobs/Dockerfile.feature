@@ -1,0 +1,23 @@
+FROM python:3.12-slim
+LABEL maintainer="SENTINEL Team"
+LABEL description="SENTINEL stream job — CIM normalisation and feature extraction"
+
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd -r sentinel && useradd -r -g sentinel -d /app -s /sbin/nologin sentinel
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt
+
+COPY base_job.py feature_extraction.py ./
+
+RUN chown -R sentinel:sentinel /app
+USER sentinel
+
+ENV PYTHONUNBUFFERED=1
+
+ENTRYPOINT ["python", "feature_extraction.py"]

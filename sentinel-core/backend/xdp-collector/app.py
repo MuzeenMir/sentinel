@@ -272,6 +272,7 @@ def health():
 
 
 @app.route("/stats", methods=["GET"])
+@app.route("/metrics", methods=["GET"])
 @require_auth
 def stats():
     return jsonify(collector.stats.to_dict()), 200

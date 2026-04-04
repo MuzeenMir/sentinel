@@ -20,7 +20,8 @@ import pytest
 # Fake Redis for Compliance Engine (lpush, ltrim, lrange, scan_iter)
 # ---------------------------------------------------------------------------
 
-_fake_lists: dict = {}  # key -> list of values (JSON strings)
+_fake_lists: dict = {}   # key -> list  (for lpush/ltrim/lrange)
+_fake_store: dict = {}   # key -> value (for setex/get)
 
 
 class _FakeRedis:
@@ -29,6 +30,17 @@ class _FakeRedis:
     def __init__(self, *args, **kwargs):
         pass
 
+    # ── string ops ──────────────────────────────────────────────────
+    def setex(self, key, ttl, value):
+        _fake_store[key] = value
+
+    def set(self, key, value, *args, **kwargs):
+        _fake_store[key] = value
+
+    def get(self, key):
+        return _fake_store.get(key)
+
+    # ── list ops ─────────────────────────────────────────────────────
     def lpush(self, key, *values):
         if key not in _fake_lists:
             _fake_lists[key] = []
@@ -47,11 +59,11 @@ class _FakeRedis:
         """Yield keys matching pattern (prefix match for compliance:reports:*)."""
         prefix = match.replace("*", "")
         if prefix:
-            for k in _fake_lists:
+            for k in list(_fake_lists) + list(_fake_store):
                 if k.startswith(prefix):
                     yield k
         else:
-            for k in _fake_lists:
+            for k in list(_fake_lists) + list(_fake_store):
                 yield k
 
 
@@ -93,8 +105,10 @@ app = _ce_mod.app
 def reset_fake_redis():
     """Clear fake Redis state before each test."""
     _fake_lists.clear()
+    _fake_store.clear()
     yield
     _fake_lists.clear()
+    _fake_store.clear()
 
 
 @pytest.fixture

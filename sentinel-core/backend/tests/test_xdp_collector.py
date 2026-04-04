@@ -79,6 +79,56 @@ _kafka_mod.Producer = MagicMock(return_value=_mock_kafka_producer)
 sys.modules.setdefault("confluent_kafka", _kafka_mod)
 
 # Stub Redis
+import types as _types
+from functools import wraps as _wraps
+
+
+def _make_enforcing_auth_mod():
+    """Return a proper auth_middleware module that enforces JWT auth via _verify_token."""
+    _mod = _types.ModuleType("auth_middleware")
+
+    def _verify_token(token):  # default: reject
+        return None
+
+    _mod._verify_token = _verify_token
+
+    def require_auth(fn):
+        @_wraps(fn)
+        def decorated(*args, **kwargs):
+            from flask import g, jsonify, request
+            auth = request.headers.get("Authorization", "")
+            if not auth.startswith("Bearer "):
+                return jsonify({"error": "Unauthorized"}), 401
+            tok = auth[7:]
+            _m = sys.modules.get("auth_middleware")
+            user = _m._verify_token(tok)
+            if not user:
+                return jsonify({"error": "Unauthorized"}), 401
+            g.current_user = user
+            return fn(*args, **kwargs)
+        return decorated
+
+    def require_role(*roles):
+        def decorator(fn):
+            @_wraps(fn)
+            def inner(*args, **kwargs):
+                from flask import g, jsonify
+                user = getattr(g, "current_user", None)
+                if not user:
+                    return jsonify({"error": "Unauthorized"}), 401
+                if roles and user.get("role") not in roles:
+                    return jsonify({"error": "Forbidden"}), 403
+                return fn(*args, **kwargs)
+            return inner
+        return decorator
+
+    _mod.require_auth = require_auth
+    _mod.require_role = require_role
+    return _mod
+
+
+sys.modules["auth_middleware"] = _make_enforcing_auth_mod()
+
 _mock_redis_client = MagicMock()
 _mock_redis_client.ping.return_value = True
 _redis_patcher = patch("redis.from_url", return_value=_mock_redis_client)

@@ -25,9 +25,12 @@ The following documents remain tracked in git for quick developer reference:
 
 | Document | Purpose |
 |----------|---------|
-| [security.md](security.md) | Quick security patterns reference (referenced by Cursor rules) |
-| [api-reference.md](api-reference.md) | Quick API endpoint reference for developers |
-| [ml-models.md](ml-models.md) | ML/DRL model architecture and training details |
+| [security.md](security.md) | Security patterns, controls, and practices |
+| [api-reference.md](api-reference.md) | Complete API endpoint reference for all services |
+| [ml-models.md](ml-models.md) | ML/DRL model architecture, training, and deployment |
+| [operations.md](operations.md) | Deployment, configuration, monitoring, and troubleshooting |
+| [compliance-readiness.md](compliance-readiness.md) | SOC 2, ISO 27001, audit scope, and pen-test guidelines |
+| [../sdk/README.md](../sdk/README.md) | Python SDK quick start and custom detector development |
 | [../training/README.md](../training/README.md) | Training pipeline setup and datasets |
 | [../readme.md](../readme.md) | Project overview and quick start |
 
