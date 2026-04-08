@@ -37,12 +37,14 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 
-# Ensure the project root is importable (training package + backend services)
+# Ensure the project root is importable (training package + backend services).
+# PROJECT_ROOT must be inserted LAST (at index 0) so that sentinel-core/training/
+# is found before backend/drl-engine/training/ which would otherwise shadow it.
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 sys.path.insert(0, str(PROJECT_ROOT / "backend" / "ai-engine"))
 sys.path.insert(0, str(PROJECT_ROOT / "backend" / "drl-engine"))
+sys.path.insert(0, str(PROJECT_ROOT))
 
 from training.data_loader import (
     LABEL_TO_IDX,

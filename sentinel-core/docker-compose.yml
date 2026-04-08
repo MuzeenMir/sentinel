@@ -79,7 +79,9 @@ services:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
     networks:
       - sentinel-network
@@ -128,7 +130,7 @@ services:
     ports:
       - "5001:5001"
     environment:
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - REDIS_URL=redis://redis:6379
       - AUTH_SERVICE_URL=http://auth-service:5000
     depends_on:
@@ -196,7 +198,7 @@ services:
       - "5003:5003"
     environment:
       - REDIS_URL=redis://redis:6379
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - MODEL_PATH=/models
       - CONFIDENCE_THRESHOLD=0.85
       - BATCH_SIZE=1000
@@ -339,7 +341,7 @@ services:
       - "5010:5010"
     environment:
       - REDIS_URL=redis://redis:6379
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - AUTH_SERVICE_URL=http://auth-service:5000
       - FIM_PATHS=/etc/passwd,/etc/shadow,/etc/sudoers,/etc/ssh/sshd_config
       - HOST_ROOT=/host
@@ -370,7 +372,7 @@ services:
       - "5011:5011"
     environment:
       - REDIS_URL=redis://redis:6379
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - AUTH_SERVICE_URL=http://auth-service:5000
       - HOST_ROOT=/host
     volumes:
@@ -449,7 +451,7 @@ services:
       dockerfile: Dockerfile.anomaly
     container_name: sentinel-flink-anomaly
     environment:
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - FLINK_PARALLELISM=2
       - CHECKPOINT_DIR=file:///tmp/flink-checkpoints/anomaly
     depends_on:
@@ -465,7 +467,7 @@ services:
       dockerfile: Dockerfile.feature
     container_name: sentinel-flink-features
     environment:
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - KAFKA_INPUT_TOPIC=sentinel-network-events
       - KAFKA_OUTPUT_TOPIC=extracted_features
       - FLINK_PARALLELISM=2
@@ -483,7 +485,7 @@ services:
       dockerfile: Dockerfile.drl-feed
     container_name: sentinel-flink-drl-feed
     environment:
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - DRL_ENGINE_URL=http://drl-engine:5005
       - POLICY_SERVICE_URL=http://policy-orchestrator:5004
       - INTERNAL_SERVICE_TOKEN=${INTERNAL_SERVICE_TOKEN:-}

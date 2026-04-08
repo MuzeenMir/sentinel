@@ -13,7 +13,7 @@ COPY auth_middleware.py observability.py metrics.py resilience.py tenant_middlew
 COPY integrations/ integrations/
 
 COPY xai-service/requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip \
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel \
     && pip install --no-cache-dir -r requirements.txt gevent
 
 COPY xai-service/ xai-service/

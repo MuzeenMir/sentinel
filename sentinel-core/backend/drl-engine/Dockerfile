@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.11-slim
 LABEL maintainer="SENTINEL Team"
 LABEL description="SENTINEL DRL engine — deep reinforcement learning policy optimization"
 
@@ -13,7 +13,7 @@ COPY auth_middleware.py observability.py metrics.py resilience.py tenant_middlew
 COPY integrations/ integrations/
 
 COPY drl-engine/requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip \
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel \
     && pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu \
     && pip install --no-cache-dir -r requirements.txt gevent
 

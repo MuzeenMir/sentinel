@@ -86,6 +86,9 @@ sentinel-core/training/awscliv2.zip
 # Specification documents (sensitive, distributed out-of-band)
 sentinel-core/docs/specifications/
 
+# Claude Code — personal project memory (optional; see CLAUDE.md)
+CLAUDE.local.md
+
 # Cursor sync
 .cursor-sync/chat-history-backup/
 .cursor-sync/sync-config.json

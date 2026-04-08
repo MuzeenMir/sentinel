@@ -106,12 +106,22 @@ def initialize_models():
         
         logger.info("All AI models initialized successfully")
         return True
-        
+
     except Exception as e:
         logger.error(f"Failed to initialize models: {e}")
         return False
 
 
+_models_initialized = False
+
+
+@app.before_request
+def _ensure_models_loaded():
+    """Lazy-init models on first request (needed for gunicorn where __main__ block is skipped)."""
+    global _models_initialized
+    if not _models_initialized:
+        initialize_models()
+        _models_initialized = True
 
 
 # Health check endpoint

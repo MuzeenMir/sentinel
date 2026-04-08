@@ -101,8 +101,15 @@ class RetrainingPipeline:
         try:
             X, y = self._parse_samples(samples)
 
-            job.old_metrics = self._evaluate_existing_model(X, y)
-            new_model, new_scaler, job.new_metrics = self._train_new_model(X, y)
+            # Split once so both old and new models are evaluated on the same test set
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=0.2, random_state=42, stratify=y
+            )
+
+            job.old_metrics = self._evaluate_existing_model(X_test, y_test)
+            new_model, new_scaler, job.new_metrics = self._train_new_model(
+                X_train, y_train, X_test, y_test
+            )
 
             old_f1 = job.old_metrics.get("f1_weighted", 0.0)
             new_f1 = job.new_metrics.get("f1_weighted", 0.0)
@@ -190,17 +197,14 @@ class RetrainingPipeline:
 
     @staticmethod
     def _train_new_model(
-        X: np.ndarray, y: np.ndarray
+        X_train: np.ndarray, y_train: np.ndarray,
+        X_val: np.ndarray, y_val: np.ndarray,
     ) -> tuple:
-        X_train, X_val, y_train, y_val = train_test_split(
-            X, y, test_size=0.2, random_state=42, stratify=y
-        )
-
         scaler = StandardScaler()
         X_train_s = scaler.fit_transform(X_train)
         X_val_s = scaler.transform(X_val)
 
-        n_classes = int(np.max(y) + 1)
+        n_classes = int(max(np.max(y_train), np.max(y_val)) + 1)
 
         model = XGBClassifier(
             n_estimators=300,

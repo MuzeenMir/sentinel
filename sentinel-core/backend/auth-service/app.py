@@ -46,15 +46,8 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
 if not app.config['SQLALCHEMY_DATABASE_URI']:
     raise RuntimeError("DATABASE_URL environment variable is required")
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-# #region agent log — H-A: detect db dialect before setting engine options
 _db_url = app.config.get('SQLALCHEMY_DATABASE_URI', '')
 _is_sqlite = _db_url.startswith('sqlite')
-import json as _json, time as _time
-try:
-    with open('/home/mir/sentinel/.cursor/debug-7372d8.log', 'a') as _lf:
-        _lf.write(_json.dumps({'sessionId':'7372d8','hypothesisId':'H-A','location':'auth-service/app.py:50','message':'engine options branch','data':{'db_url_prefix':_db_url[:20],'is_sqlite':_is_sqlite},'timestamp':int(_time.time()*1000)}) + '\n')
-except Exception: pass
-# #endregion
 if not _is_sqlite:
     app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
         'pool_size': int(os.environ.get('DB_POOL_SIZE', '10')),

@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.11-slim
 LABEL maintainer="SENTINEL Team"
 LABEL description="SENTINEL stream job — CIM normalisation and feature extraction"
 
@@ -10,7 +10,7 @@ RUN groupadd -r sentinel && useradd -r -g sentinel -d /app -s /sbin/nologin sent
 WORKDIR /app
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip \
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel \
     && pip install --no-cache-dir -r requirements.txt
 
 COPY base_job.py feature_extraction.py ./

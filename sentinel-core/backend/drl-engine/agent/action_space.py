@@ -14,19 +14,10 @@ Actions (8 total)
 """
 from __future__ import annotations
 
-import json as _json
 import random
-import time as _time
 from enum import IntEnum
 from typing import Any, Dict, List, Optional
 
-# #region agent log — H-B: confirm ActionType is absent before fix
-try:
-    with open('/home/mir/sentinel/.cursor/debug-7372d8.log', 'a') as _lf:
-        _lf.write(_json.dumps({'sessionId':'7372d8','hypothesisId':'H-B','location':'action_space.py:22','message':'module imported — ActionType now defined','data':{'has_ActionType': True},'timestamp':int(_time.time()*1000)}) + '\n')
-except Exception:
-    pass
-# #endregion
 
 
 class ActionType(IntEnum):

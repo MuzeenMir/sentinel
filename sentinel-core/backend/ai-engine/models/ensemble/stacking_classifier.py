@@ -40,13 +40,6 @@ class StackingEnsemble:
         weights: Optional[Any] = None,
         use_meta_learner: bool = True,
     ):
-        # #region agent log — H-C: confirm params accepted
-        import json as _j, time as _t
-        try:
-            with open('/home/mir/sentinel/.cursor/debug-7372d8.log', 'a') as _lf:
-                _lf.write(_j.dumps({'sessionId':'7372d8','hypothesisId':'H-C','location':'stacking_classifier.py:__init__','message':'StackingEnsemble init','data':{'weights_provided': weights is not None,'use_meta_learner':use_meta_learner},'timestamp':int(_t.time()*1000)}) + '\n')
-        except Exception: pass
-        # #endregion
         if LogisticRegression is None:
             raise ImportError("scikit-learn is required for StackingEnsemble")
 
