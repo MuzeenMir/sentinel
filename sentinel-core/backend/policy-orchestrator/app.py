@@ -25,6 +25,7 @@ from validation.policy_validator import PolicyValidator
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from auth_middleware import require_auth, require_role  # noqa: E402
 from tenant_middleware import require_tenant, get_tenant_id  # noqa: E402
+from audit_logger import audit_log, AuditCategory  # noqa: E402
 from observability import configure_logging  # noqa: E402
 from metrics import init_metrics, POLICIES_APPLIED  # noqa: E402
 
@@ -179,11 +180,14 @@ def create_policy():
             policy['apply_results'] = apply_results
         
         POLICIES_APPLIED.labels(action=data.get('action', 'unknown')).inc()
+        audit_log(AuditCategory.POLICY, "policy_created",
+                  detail={"name": data.get("name"), "action": data.get("action")},
+                  redis_client=redis_client)
         return jsonify({
             'message': 'Policy created successfully',
             'policy': policy
         }), 201
-    
+
     except Exception as e:
         logger.error(f"Create policy error: {e}")
         return jsonify({'error': 'Failed to create policy'}), 500

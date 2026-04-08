@@ -27,6 +27,7 @@ from enum import Enum
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from observability import configure_logging
 from metrics import init_metrics
+from audit_logger import audit_log, AuditCategory
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -309,6 +310,8 @@ def register():
         db.session.commit()
 
         logger.info(f"New user registered: {user.username}")
+        audit_log(AuditCategory.AUTH, "user_registered", actor=f"user:{user.id}",
+                  detail={"username": user.username, "role": user.role.value}, redis_client=redis_client)
 
         return jsonify({
             'message': 'User registered successfully',
@@ -347,6 +350,8 @@ def login():
                 increment_failed_login(user)
             redis_client.incr(f"failed_login_ip:{ip_addr}")
             redis_client.expire(f"failed_login_ip:{ip_addr}", 3600)
+            audit_log(AuditCategory.AUTH, "login_failed",
+                      actor=f"user:{username}", detail={"ip": ip_addr}, redis_client=redis_client)
             return jsonify({'error': 'Invalid credentials'}), 401
 
         # Check if user is locked or inactive
@@ -387,6 +392,8 @@ def login():
         )
 
         logger.info(f"Successful login for user: {user.username} from IP: {ip_addr}")
+        audit_log(AuditCategory.AUTH, "login_success", actor=f"user:{user.id}",
+                  detail={"username": user.username, "ip": ip_addr}, redis_client=redis_client)
 
         return jsonify({
             'access_token': access_token,
@@ -525,6 +532,7 @@ def logout():
         redis_client.setex(f"token_blacklist:{jti}", 86400, "revoked")
 
         logger.info(f"User logged out: {user_id}")
+        audit_log(AuditCategory.AUTH, "logout", actor=f"user:{user_id}", redis_client=redis_client)
 
         return jsonify({'message': 'Successfully logged out'}), 200
 
@@ -614,6 +622,8 @@ def update_user(user_id):
         db.session.commit()
 
         logger.info(f"User updated by admin: {get_current_user().username} updated {user.username}")
+        audit_log(AuditCategory.CONFIG_CHANGE, "user_updated",
+                  detail={"target_user": user.username, "changes": data}, redis_client=redis_client)
 
         return jsonify({
             'message': 'User updated successfully',
@@ -646,6 +656,8 @@ def create_tenant():
         db.session.add(tenant)
         db.session.commit()
         logger.info(f"Tenant created: {tenant.name}")
+        audit_log(AuditCategory.CONFIG_CHANGE, "tenant_created",
+                  detail={"tenant_name": tenant.name, "plan": tenant.plan}, redis_client=redis_client)
         return jsonify({'tenant': tenant.to_dict()}), 201
     except Exception as e:
         db.session.rollback()
@@ -696,6 +708,8 @@ def deactivate_tenant(tenant_pk):
         tenant.status = 'deactivated'
         db.session.commit()
         logger.info(f"Tenant deactivated: {tenant.name}")
+        audit_log(AuditCategory.CONFIG_CHANGE, "tenant_deactivated",
+                  detail={"tenant_name": tenant.name}, redis_client=redis_client)
         return jsonify({'message': 'Tenant deactivated'}), 200
     except Exception as e:
         db.session.rollback()

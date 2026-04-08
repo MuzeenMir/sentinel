@@ -15,6 +15,7 @@ import json
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from observability import configure_logging
 from metrics import init_metrics
+from audit_logger import query_audit_log, get_audit_stats, verify_integrity, AuditCategory
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -715,6 +716,58 @@ def bad_request(e):
         'error': 'Bad request',
         'message': 'Invalid request format or parameters'
     }), 400
+
+# ── SOC2 Audit Log Endpoints ──────────────────────────────────────────────
+
+@app.route('/api/v1/audit/events', methods=['GET'])
+@require_auth
+def get_audit_events():
+    """Query the SOC2 audit trail with filters."""
+    category = request.args.get('category')
+    actor = request.args.get('actor')
+    start_time = request.args.get('start_time', type=float)
+    end_time = request.args.get('end_time', type=float)
+    limit = request.args.get('limit', 100, type=int)
+    offset = request.args.get('offset', 0, type=int)
+
+    records = query_audit_log(
+        redis_client, category=category, start_time=start_time,
+        end_time=end_time, actor=actor, limit=min(limit, 1000), offset=offset,
+    )
+    return jsonify({'events': records, 'count': len(records)}), 200
+
+
+@app.route('/api/v1/audit/stats', methods=['GET'])
+@require_auth
+def audit_statistics():
+    """Get audit log statistics for SOC2 compliance dashboard."""
+    stats = get_audit_stats(redis_client)
+    return jsonify(stats), 200
+
+
+@app.route('/api/v1/audit/verify', methods=['POST'])
+@require_auth
+def audit_verify_integrity():
+    """Verify integrity of audit records (tamper detection)."""
+    data = request.get_json() or {}
+    records = data.get('records', [])
+    results = []
+    for record in records:
+        results.append({
+            'id': record.get('id'),
+            'valid': verify_integrity(record),
+        })
+    return jsonify({'results': results, 'total': len(results)}), 200
+
+
+@app.route('/api/v1/audit/categories', methods=['GET'])
+@require_auth
+def audit_categories():
+    """List available audit event categories."""
+    return jsonify({
+        'categories': [c.value for c in AuditCategory]
+    }), 200
+
 
 if __name__ == '__main__':
     debug_mode = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
