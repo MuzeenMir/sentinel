@@ -10,6 +10,9 @@ import { Hardening } from './pages/Hardening'
 import { HidsEvents } from './pages/HidsEvents'
 import { Users } from './pages/Users'
 import { AuditLog } from './pages/AuditLog'
+import { Tenants } from './pages/Tenants'
+import { MfaSetup } from './pages/MfaSetup'
+import { SiemConfig } from './pages/SiemConfig'
 import { Settings } from './pages/Settings'
 import { Login } from './pages/Login'
 import { useAuthStore } from './store/authStore'
@@ -65,6 +68,9 @@ function App() {
         <Route path="/hids" element={<HidsEvents />} />
         <Route path="/users" element={<Users />} />
         <Route path="/audit" element={<AuditLog />} />
+        <Route path="/tenants" element={<Tenants />} />
+        <Route path="/mfa-setup" element={<MfaSetup />} />
+        <Route path="/siem" element={<SiemConfig />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

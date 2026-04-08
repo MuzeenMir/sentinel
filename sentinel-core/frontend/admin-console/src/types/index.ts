@@ -147,6 +147,37 @@ export interface AuditEntry {
   ip_address?: string
 }
 
+export interface Tenant {
+  id: number
+  tenant_id: string
+  name: string
+  plan: string
+  status: string
+  created_at: string
+  max_users: number
+  max_agents: number
+}
+
+export interface MfaStatus {
+  enabled: boolean
+  enrolled: boolean
+  method: string
+  has_backup_codes: boolean
+}
+
+export interface Integration {
+  name: string
+  type: string
+  config_keys: string[]
+}
+
+export interface AuditStats {
+  total_events: number
+  by_category: Record<string, number>
+  retention_days: number
+  timestamp: string
+}
+
 export interface DetectionResult {
   threat_id: string
   models: ModelVerdict[]

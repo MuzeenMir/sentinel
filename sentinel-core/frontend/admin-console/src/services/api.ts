@@ -140,6 +140,40 @@ export const usersApi = {
 }
 
 export const auditApi = {
-  getEvents: (params?: { page?: number; event_type?: string; from?: string; to?: string }) =>
-    api.get('/api/v1/audit/events', { params }),
+  getEvents: (params?: {
+    category?: string
+    actor?: string
+    start_time?: number
+    end_time?: number
+    limit?: number
+    offset?: number
+  }) => api.get('/api/v1/audit/events', { params }),
+  getStats: () => api.get('/api/v1/audit/stats'),
+  getCategories: () => api.get<{ categories: string[] }>('/api/v1/audit/categories'),
+  verifyIntegrity: (records: Record<string, unknown>[]) =>
+    api.post('/api/v1/audit/verify', { records }),
+}
+
+export const tenantApi = {
+  list: () => api.get('/api/v1/tenants'),
+  get: (id: number) => api.get(`/api/v1/tenants/${id}`),
+  create: (data: { name: string; plan: string; max_users?: number; max_agents?: number }) =>
+    api.post('/api/v1/tenants', data),
+  update: (id: number, data: Partial<{ name: string; plan: string; status: string; max_users: number; max_agents: number }>) =>
+    api.put(`/api/v1/tenants/${id}`, data),
+  deactivate: (id: number) => api.delete(`/api/v1/tenants/${id}`),
+}
+
+export const mfaApi = {
+  status: () => api.get('/api/v1/auth/mfa/status'),
+  enroll: () => api.post('/api/v1/auth/mfa/enroll'),
+  verify: (code: string) => api.post('/api/v1/auth/mfa/verify', { code }),
+  disable: (code: string) => api.post('/api/v1/auth/mfa/disable', { code }),
+  generateBackupCodes: () => api.post('/api/v1/auth/mfa/backup-codes'),
+}
+
+export const siemApi = {
+  list: () => api.get('/api/v1/integrations'),
+  create: (data: Record<string, unknown>) => api.post('/api/v1/integrations', data),
+  test: (data: Record<string, unknown>) => api.post('/api/v1/integrations/test', data),
 }

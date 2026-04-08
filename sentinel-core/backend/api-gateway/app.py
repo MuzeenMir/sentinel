@@ -717,6 +717,32 @@ def bad_request(e):
         'message': 'Invalid request format or parameters'
     }), 400
 
+# ── Tenant Management (proxied to auth-service) ──────────────────────────
+
+@app.route('/api/v1/tenants', methods=['GET', 'POST'])
+@require_auth
+def tenants():
+    return _proxy_to(app.config['AUTH_SERVICE_URL'], '/api/v1/tenants')
+
+@app.route('/api/v1/tenants/<int:tenant_pk>', methods=['GET', 'PUT', 'DELETE'])
+@require_auth
+def tenant_detail(tenant_pk):
+    return _proxy_to(app.config['AUTH_SERVICE_URL'], f'/api/v1/tenants/{tenant_pk}')
+
+
+# ── SIEM/SOAR Integrations (proxied to alert-service) ────────────────────
+
+@app.route('/api/v1/integrations', methods=['GET', 'POST'])
+@require_auth
+def integrations():
+    return _proxy_to(app.config['ALERT_SERVICE_URL'], '/api/v1/integrations')
+
+@app.route('/api/v1/integrations/test', methods=['POST'])
+@require_auth
+def integrations_test():
+    return _proxy_to(app.config['ALERT_SERVICE_URL'], '/api/v1/integrations/test')
+
+
 # ── SOC2 Audit Log Endpoints ──────────────────────────────────────────────
 
 @app.route('/api/v1/audit/events', methods=['GET'])
