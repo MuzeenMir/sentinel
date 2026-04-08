@@ -36,6 +36,7 @@ from flask_cors import CORS
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from auth_middleware import require_auth, require_role
+from tenant_middleware import require_tenant, get_tenant_id
 from observability import configure_logging
 from metrics import init_metrics, EBPF_EVENTS, FIM_ALERTS as FIM_ALERTS_METRIC
 from ebpf_lib.schemas.events import (
@@ -460,6 +461,7 @@ def health():
 
 @app.route("/status", methods=["GET"])
 @require_auth
+@require_tenant
 def status():
     loaded_progs = (
         {k: {"sha256": v.sha256, "type": v.prog_type}
@@ -476,6 +478,7 @@ def status():
 
 @app.route("/events", methods=["GET"])
 @require_auth
+@require_tenant
 def get_events():
     limit = request.args.get("limit", 50, type=int)
     event_type = request.args.get("type")
@@ -487,6 +490,7 @@ def get_events():
 
 @app.route("/baselines", methods=["GET"])
 @require_auth
+@require_tenant
 def get_baselines():
     return jsonify({
         "file_hashes": hids.fim.get_baselines(),
@@ -522,6 +526,7 @@ def update_allowed_execs():
 
 @app.route("/fim/alerts", methods=["GET"])
 @require_auth
+@require_tenant
 def get_fim_alerts():
     return jsonify(hids.fim.get_alerts()), 200
 

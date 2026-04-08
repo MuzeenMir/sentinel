@@ -161,6 +161,35 @@ class TokenBlacklist(db.Model):
     jti = db.Column(db.String(36), unique=True, nullable=False)
     revoked_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+class Tenant(db.Model):
+    __tablename__ = 'tenants'
+    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    tenant_id = db.Column(db.String(36), unique=True, nullable=False)
+    name = db.Column(db.String(200), unique=True, nullable=False)
+    display_name = db.Column(db.String(200))
+    status = db.Column(db.String(20), default='active', nullable=False)
+    plan = db.Column(db.String(50), default='professional', nullable=False)
+    settings = db.Column(db.Text, default='{}')
+    data_region = db.Column(db.String(50), default='us-east-1')
+    retention_days = db.Column(db.Integer, default=90)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'tenant_id': self.tenant_id,
+            'name': self.name,
+            'display_name': self.display_name,
+            'status': self.status,
+            'plan': self.plan,
+            'settings': self.settings,
+            'data_region': self.data_region,
+            'retention_days': self.retention_days,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
 # Utility Functions
 def require_role(required_role):
     def decorator(f):
@@ -331,9 +360,17 @@ def login():
         # Reset login attempts and update last login
         reset_login_attempts(user)
 
-        # Generate access and refresh tokens
-        access_token = create_access_token(identity=str(user.id))
-        refresh_token = create_refresh_token(identity=str(user.id))
+        # Generate access and refresh tokens with tenant context
+        additional_claims = {
+            "tenant_id": user.tenant_id,
+            "role": user.role.value,
+        }
+        access_token = create_access_token(
+            identity=str(user.id), additional_claims=additional_claims
+        )
+        refresh_token = create_refresh_token(
+            identity=str(user.id), additional_claims=additional_claims
+        )
 
         logger.info(f"Successful login for user: {user.username} from IP: {ip_addr}")
 
@@ -364,14 +401,20 @@ def refresh():
         if not user or user.status != UserStatus.ACTIVE:
             return jsonify({'error': 'Invalid or inactive user'}), 401
             
-        access_token = create_access_token(identity=current_user_id)
-        
+        additional_claims = {
+            "tenant_id": user.tenant_id,
+            "role": user.role.value,
+        }
+        access_token = create_access_token(
+            identity=current_user_id, additional_claims=additional_claims
+        )
+
         return jsonify({
             'access_token': access_token,
             'token_type': 'Bearer',
             'expires_in': int(app.config['JWT_ACCESS_TOKEN_EXPIRES'].total_seconds())
         }), 200
-        
+
     except Exception as e:
         logger.error(f"Token refresh error: {str(e)}")
         return jsonify({'error': 'Token refresh failed'}), 500
@@ -494,6 +537,84 @@ def update_user(user_id):
 
     except Exception as e:
         logger.error(f"Update user error: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+# ── Tenant CRUD (admin only) ───────────────────────────────────────────────
+
+@app.route('/api/v1/tenants', methods=['POST'])
+@require_role(UserRole.ADMIN)
+def create_tenant():
+    try:
+        data = request.get_json()
+        if not data or 'name' not in data:
+            return jsonify({'error': 'Tenant name required'}), 400
+
+        import uuid
+        tenant = Tenant(
+            tenant_id=str(uuid.uuid4()),
+            name=data['name'],
+            display_name=data.get('display_name', data['name']),
+            plan=data.get('plan', 'professional'),
+            data_region=data.get('data_region', 'us-east-1'),
+            retention_days=data.get('retention_days', 90),
+        )
+        db.session.add(tenant)
+        db.session.commit()
+        logger.info(f"Tenant created: {tenant.name}")
+        return jsonify({'tenant': tenant.to_dict()}), 201
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Create tenant error: {e}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+@app.route('/api/v1/tenants', methods=['GET'])
+@require_role(UserRole.ADMIN)
+def list_tenants():
+    try:
+        tenants = Tenant.query.filter(Tenant.status != 'deactivated').all()
+        return jsonify({'tenants': [t.to_dict() for t in tenants]}), 200
+    except Exception as e:
+        logger.error(f"List tenants error: {e}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+@app.route('/api/v1/tenants/<int:tenant_pk>', methods=['GET'])
+@require_role(UserRole.ADMIN)
+def get_tenant(tenant_pk):
+    try:
+        tenant = Tenant.query.get_or_404(tenant_pk)
+        return jsonify({'tenant': tenant.to_dict()}), 200
+    except Exception as e:
+        logger.error(f"Get tenant error: {e}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+@app.route('/api/v1/tenants/<int:tenant_pk>', methods=['PUT'])
+@require_role(UserRole.ADMIN)
+def update_tenant(tenant_pk):
+    try:
+        tenant = Tenant.query.get_or_404(tenant_pk)
+        data = request.get_json()
+        for field in ('display_name', 'plan', 'data_region', 'retention_days', 'settings'):
+            if field in data:
+                setattr(tenant, field, data[field])
+        db.session.commit()
+        return jsonify({'tenant': tenant.to_dict()}), 200
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Update tenant error: {e}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+@app.route('/api/v1/tenants/<int:tenant_pk>', methods=['DELETE'])
+@require_role(UserRole.ADMIN)
+def deactivate_tenant(tenant_pk):
+    try:
+        tenant = Tenant.query.get_or_404(tenant_pk)
+        tenant.status = 'deactivated'
+        db.session.commit()
+        logger.info(f"Tenant deactivated: {tenant.name}")
+        return jsonify({'message': 'Tenant deactivated'}), 200
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Deactivate tenant error: {e}")
         return jsonify({'error': 'Internal server error'}), 500
 
 # Verify token endpoint

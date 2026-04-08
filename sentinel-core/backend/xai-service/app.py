@@ -25,6 +25,7 @@ from reports.compliance_report import ComplianceReportGenerator
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from auth_middleware import require_auth  # noqa: E402
+from tenant_middleware import require_tenant, get_tenant_id  # noqa: E402
 from observability import configure_logging  # noqa: E402
 from metrics import init_metrics  # noqa: E402
 
@@ -69,6 +70,7 @@ def health_check():
 
 @app.route('/api/v1/explain/detection', methods=['POST'])
 @require_auth
+@require_tenant
 def explain_detection():
     """
     Explain a threat detection decision.
@@ -136,6 +138,7 @@ def explain_detection():
 
 @app.route('/api/v1/explain/policy', methods=['POST'])
 @require_auth
+@require_tenant
 def explain_policy_decision():
     """
     Explain a DRL policy decision.
@@ -200,6 +203,7 @@ def explain_policy_decision():
 
 @app.route('/api/v1/audit-trail', methods=['GET'])
 @require_auth
+@require_tenant
 def get_audit_trail():
     """Get decision audit trail."""
     try:
@@ -224,6 +228,7 @@ def get_audit_trail():
 
 @app.route('/api/v1/report/compliance', methods=['POST'])
 @require_auth
+@require_tenant
 def generate_compliance_report():
     """
     Generate compliance-ready explanation report.
@@ -272,6 +277,7 @@ def generate_compliance_report():
 
 @app.route('/api/v1/statistics', methods=['GET'])
 @require_auth
+@require_tenant
 def get_statistics():
     """Get XAI service statistics."""
     try:

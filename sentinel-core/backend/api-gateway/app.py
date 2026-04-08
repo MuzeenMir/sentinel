@@ -78,6 +78,7 @@ def require_auth(f):
 
             user_info = response.json()
             g.current_user = user_info['user']
+            g.tenant_id = user_info['user'].get('tenant_id')
 
         except requests.exceptions.RequestException as e:
             logger.error(f"Auth service communication error: {e}")
@@ -537,6 +538,9 @@ def _proxy_to(base_url, path_suffix, methods=None):
     """Forward request to backend; path_suffix is appended to base_url (no leading slash)."""
     url = urljoin(base_url.rstrip('/') + '/', path_suffix.lstrip('/'))
     headers = {'Authorization': request.headers.get('Authorization', '')}
+    tenant_id = getattr(g, 'tenant_id', None)
+    if tenant_id:
+        headers['X-Tenant-ID'] = str(tenant_id)
     try:
         if request.method == 'GET':
             resp = requests.get(url, headers=headers, params=request.args, timeout=30)

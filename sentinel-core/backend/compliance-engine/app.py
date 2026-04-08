@@ -29,6 +29,7 @@ from reports.compliance_reporter import ComplianceReporter
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from auth_middleware import require_auth  # noqa: E402
+from tenant_middleware import require_tenant, get_tenant_id  # noqa: E402
 from observability import configure_logging  # noqa: E402
 from metrics import init_metrics  # noqa: E402
 
@@ -72,6 +73,7 @@ def health_check():
 
 @app.route('/api/v1/frameworks', methods=['GET'])
 @require_auth
+@require_tenant
 def get_frameworks():
     """Get available compliance frameworks."""
     framework_list = []
@@ -87,6 +89,7 @@ def get_frameworks():
 
 @app.route('/api/v1/frameworks/<framework_id>', methods=['GET'])
 @require_auth
+@require_tenant
 def get_framework_details(framework_id):
     """Get framework details and controls."""
     framework = frameworks.get(framework_id.upper())
@@ -104,6 +107,7 @@ def get_framework_details(framework_id):
 
 @app.route('/api/v1/assess', methods=['POST'])
 @require_auth
+@require_tenant
 def assess_compliance():
     """
     Assess compliance status for policies.
@@ -158,6 +162,7 @@ def assess_compliance():
 
 @app.route('/api/v1/gap-analysis', methods=['POST'])
 @require_auth
+@require_tenant
 def gap_analysis():
     """Perform gap analysis between current state and target framework."""
     try:
@@ -186,6 +191,7 @@ def gap_analysis():
 
 @app.route('/api/v1/reports', methods=['POST'])
 @require_auth
+@require_tenant
 def generate_report():
     """Generate compliance report."""
     try:
@@ -209,6 +215,7 @@ def generate_report():
 
 @app.route('/api/v1/reports/history', methods=['GET'])
 @require_auth
+@require_tenant
 def get_report_history():
     """Get historical compliance reports."""
     framework = request.args.get('framework')
@@ -220,6 +227,7 @@ def get_report_history():
 
 @app.route('/api/v1/map-policy', methods=['POST'])
 @require_auth
+@require_tenant
 def map_policy_to_controls():
     """Map a policy to compliance controls."""
     try:

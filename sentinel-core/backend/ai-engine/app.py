@@ -30,6 +30,7 @@ from learning.retraining_pipeline import RetrainingPipeline
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from auth_middleware import require_auth  # noqa: E402
+from tenant_middleware import require_tenant, get_tenant_id  # noqa: E402
 from observability import configure_logging  # noqa: E402
 from metrics import init_metrics, THREATS_DETECTED, DETECTION_LATENCY  # noqa: E402
 
@@ -50,6 +51,13 @@ app.config['BATCH_SIZE'] = int(os.environ.get('BATCH_SIZE', '1000'))
 redis_client = redis.from_url(app.config['REDIS_URL'])
 
 logger = logging.getLogger(__name__)
+
+
+def _tkey(key: str) -> str:
+    """Prefix a Redis key with the current tenant scope."""
+    tid = get_tenant_id()
+    return f"tenant:{tid}:{key}" if tid else key
+
 
 # Initialize components
 feature_extractors = {
@@ -141,6 +149,7 @@ def health_check():
 
 @app.route('/api/v1/detect', methods=['POST'])
 @require_auth
+@require_tenant
 def detect_threat():
     """
     Perform threat detection on network traffic data.
@@ -175,6 +184,7 @@ def detect_threat():
 
 @app.route('/api/v1/detect/batch', methods=['POST'])
 @require_auth
+@require_tenant
 def detect_batch():
     """
     Perform batch threat detection.
@@ -217,6 +227,7 @@ def detect_batch():
 
 @app.route('/api/v1/features/extract', methods=['POST'])
 @require_auth
+@require_tenant
 def extract_features():
     """
     Extract features from raw network data.
@@ -253,6 +264,7 @@ def extract_features():
 
 @app.route('/api/v1/models/status', methods=['GET'])
 @require_auth
+@require_tenant
 def get_model_status():
     """Get detailed status of all detection models."""
     try:
@@ -280,6 +292,7 @@ def get_model_status():
 
 @app.route('/api/v1/models/reload', methods=['POST'])
 @require_auth
+@require_tenant
 def reload_models():
     """Reload all models from disk."""
     try:
@@ -297,13 +310,14 @@ def reload_models():
 
 @app.route('/api/v1/statistics', methods=['GET'])
 @require_auth
+@require_tenant
 def get_statistics():
     """Get detection statistics."""
     try:
         # Get stats from Redis
-        total_detections = int(redis_client.get('ai_engine:total_detections') or 0)
-        threats_detected = int(redis_client.get('ai_engine:threats_detected') or 0)
-        false_positives = int(redis_client.get('ai_engine:false_positives') or 0)
+        total_detections = int(redis_client.get(_tkey('ai_engine:total_detections')) or 0)
+        threats_detected = int(redis_client.get(_tkey('ai_engine:threats_detected')) or 0)
+        false_positives = int(redis_client.get(_tkey('ai_engine:false_positives')) or 0)
         
         # Calculate rates
         threat_rate = threats_detected / max(total_detections, 1)
@@ -325,10 +339,11 @@ def get_statistics():
 
 @app.route('/api/v1/feedback/stats', methods=['GET'])
 @require_auth
+@require_tenant
 def feedback_stats():
     """Get feedback collection statistics for retraining readiness."""
     try:
-        keys = redis_client.keys('ai_engine:feedback:*')
+        keys = redis_client.keys(_tkey('ai_engine:feedback:*'))
         count = len(keys) if keys else 0
         return jsonify({
             'feedback_count': count,
@@ -343,6 +358,7 @@ def feedback_stats():
 
 @app.route('/api/v1/feedback', methods=['POST'])
 @require_auth
+@require_tenant
 def submit_feedback():
     """
     Submit feedback on detection results for model improvement.
@@ -362,7 +378,7 @@ def submit_feedback():
             return jsonify({'error': 'detection_id and is_correct are required'}), 400
         
         # Store feedback for model retraining (optional features for retrain-from-feedback)
-        feedback_key = f"ai_engine:feedback:{data['detection_id']}"
+        feedback_key = _tkey(f"ai_engine:feedback:{data['detection_id']}")
         mapping = {
             'is_correct': str(data['is_correct']),
             'actual_label': data.get('actual_label', ''),
@@ -376,7 +392,7 @@ def submit_feedback():
         
         # Update false positive counter if applicable
         if not data['is_correct'] and data.get('actual_label') == 'benign':
-            redis_client.incr('ai_engine:false_positives')
+            redis_client.incr(_tkey('ai_engine:false_positives'))
         
         return jsonify({'message': 'Feedback submitted successfully'}), 200
         
@@ -387,6 +403,7 @@ def submit_feedback():
 
 @app.route('/api/v1/models/retrain', methods=['POST'])
 @require_auth
+@require_tenant
 def trigger_retrain():
     """
     Trigger on-demand retraining with provided samples.
@@ -447,14 +464,14 @@ def log_detection(result: Dict[str, Any]):
     """Log detection result for audit trail."""
     try:
         # Increment counters
-        redis_client.incr('ai_engine:total_detections')
+        redis_client.incr(_tkey('ai_engine:total_detections'))
         if result.get('is_threat'):
-            redis_client.incr('ai_engine:threats_detected')
+            redis_client.incr(_tkey('ai_engine:threats_detected'))
             severity = result.get('severity', 'medium')
             THREATS_DETECTED.labels(severity=severity).inc()
         
         # Store detection record
-        detection_key = f"ai_engine:detection:{result.get('detection_id', 'unknown')}"
+        detection_key = _tkey(f"ai_engine:detection:{result.get('detection_id', 'unknown')}")
         redis_client.hset(detection_key, mapping={
             'timestamp': datetime.utcnow().isoformat(),
             'is_threat': str(result.get('is_threat', False)),

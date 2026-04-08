@@ -25,6 +25,7 @@ from training.trainer import DRLTrainer
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from auth_middleware import require_auth, require_role  # noqa: E402
+from tenant_middleware import require_tenant, get_tenant_id  # noqa: E402
 from observability import configure_logging  # noqa: E402
 from metrics import init_metrics, DRL_DECISIONS  # noqa: E402
 
@@ -44,6 +45,13 @@ app.config['AI_ENGINE_URL'] = os.environ.get('AI_ENGINE_URL', 'http://ai-engine:
 redis_client = redis.from_url(app.config['REDIS_URL'])
 
 logger = logging.getLogger(__name__)
+
+
+def _tkey(key: str) -> str:
+    """Prefix a Redis key with the current tenant scope."""
+    tid = get_tenant_id()
+    return f"tenant:{tid}:{key}" if tid else key
+
 
 # Initialize components
 state_builder = StateBuilder()
@@ -104,6 +112,7 @@ def health_check():
 
 @app.route('/api/v1/decide', methods=['POST'])
 @require_auth
+@require_tenant
 def get_policy_decision():
     """
     Get a policy decision for a threat detection.
@@ -186,6 +195,7 @@ def get_policy_decision():
 
 @app.route('/api/v1/decide/batch', methods=['POST'])
 @require_auth
+@require_tenant
 def get_batch_decisions():
     """Get policy decisions for multiple detections."""
     try:
@@ -219,6 +229,7 @@ def get_batch_decisions():
 
 @app.route('/api/v1/feedback', methods=['POST'])
 @require_auth
+@require_tenant
 def submit_feedback():
     """
     Submit feedback on a policy decision for learning.
@@ -243,7 +254,7 @@ def submit_feedback():
         decision_id = data['decision_id']
         
         # Retrieve original decision
-        decision_data = redis_client.get(f"drl:decision:{decision_id}")
+        decision_data = redis_client.get(_tkey(f"drl:decision:{decision_id}"))
         if not decision_data:
             return jsonify({'error': 'Decision not found'}), 404
         
@@ -268,15 +279,15 @@ def submit_feedback():
             'timestamp': datetime.utcnow().isoformat()
         }
         
-        redis_client.lpush('drl:experiences', json.dumps(experience))
-        redis_client.ltrim('drl:experiences', 0, 100000)  # Keep last 100K experiences
+        redis_client.lpush(_tkey('drl:experiences'), json.dumps(experience))
+        redis_client.ltrim(_tkey('drl:experiences'), 0, 100000)  # Keep last 100K experiences
         
         # Update statistics
-        redis_client.incr('drl:total_feedback')
+        redis_client.incr(_tkey('drl:total_feedback'))
         if data.get('false_positive'):
-            redis_client.incr('drl:false_positives')
+            redis_client.incr(_tkey('drl:false_positives'))
         if data.get('blocked_threat'):
-            redis_client.incr('drl:blocked_threats')
+            redis_client.incr(_tkey('drl:blocked_threats'))
         
         return jsonify({
             'message': 'Feedback recorded',
@@ -300,7 +311,7 @@ def trigger_training():
         batch_size = data.get('batch_size', 64)
         
         # Get experiences from Redis
-        experiences_raw = redis_client.lrange('drl:experiences', 0, batch_size * 10)
+        experiences_raw = redis_client.lrange(_tkey('drl:experiences'), 0, batch_size * 10)
         
         if len(experiences_raw) < batch_size:
             return jsonify({
@@ -363,13 +374,14 @@ def load_model():
 
 @app.route('/api/v1/statistics', methods=['GET'])
 @require_auth
+@require_tenant
 def get_statistics():
     """Get DRL engine statistics."""
     try:
-        total_decisions = int(redis_client.get('drl:total_decisions') or 0)
-        total_feedback = int(redis_client.get('drl:total_feedback') or 0)
-        false_positives = int(redis_client.get('drl:false_positives') or 0)
-        blocked_threats = int(redis_client.get('drl:blocked_threats') or 0)
+        total_decisions = int(redis_client.get(_tkey('drl:total_decisions')) or 0)
+        total_feedback = int(redis_client.get(_tkey('drl:total_feedback')) or 0)
+        false_positives = int(redis_client.get(_tkey('drl:false_positives')) or 0)
+        blocked_threats = int(redis_client.get(_tkey('drl:blocked_threats')) or 0)
         
         # Calculate metrics
         fp_rate = false_positives / max(total_feedback, 1)
@@ -383,7 +395,7 @@ def get_statistics():
             'false_positive_rate': fp_rate,
             'block_rate': block_rate,
             'model_version': ppo_agent.get_version() if ppo_agent else None,
-            'experiences_available': redis_client.llen('drl:experiences'),
+            'experiences_available': redis_client.llen(_tkey('drl:experiences')),
             'timestamp': datetime.utcnow().isoformat()
         }), 200
     
@@ -394,6 +406,7 @@ def get_statistics():
 
 @app.route('/api/v1/action-space', methods=['GET'])
 @require_auth
+@require_tenant
 def get_action_space():
     """Get available actions and their descriptions."""
     return jsonify({
@@ -403,6 +416,7 @@ def get_action_space():
 
 @app.route('/api/v1/state-space', methods=['GET'])
 @require_auth
+@require_tenant
 def get_state_space():
     """Get state space dimensions and features."""
     return jsonify({
@@ -415,13 +429,13 @@ def store_decision(decision: Dict, context: Dict):
     """Store decision for later learning."""
     try:
         # Store decision
-        key = f"drl:decision:{decision['decision_id']}"
+        key = _tkey(f"drl:decision:{decision['decision_id']}")
         decision['state'] = state_builder.build_state(context).tolist()
         redis_client.set(key, json.dumps(decision))
         redis_client.expire(key, 86400 * 7)  # 7 days
         
         # Update counter
-        redis_client.incr('drl:total_decisions')
+        redis_client.incr(_tkey('drl:total_decisions'))
         
     except Exception as e:
         logger.error(f"Failed to store decision: {e}")

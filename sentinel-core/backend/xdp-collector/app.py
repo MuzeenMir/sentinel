@@ -29,6 +29,7 @@ from flask_cors import CORS
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from auth_middleware import require_auth, require_role
+from tenant_middleware import require_tenant, get_tenant_id
 from observability import configure_logging
 from metrics import init_metrics, XDP_PACKETS
 from ebpf_lib.schemas.events import (
@@ -274,12 +275,14 @@ def health():
 @app.route("/stats", methods=["GET"])
 @app.route("/metrics", methods=["GET"])
 @require_auth
+@require_tenant
 def stats():
     return jsonify(collector.stats.to_dict()), 200
 
 
 @app.route("/config", methods=["GET"])
 @require_auth
+@require_tenant
 def get_config():
     return jsonify({
         "interface": collector.interface,

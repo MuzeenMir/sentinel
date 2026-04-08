@@ -29,6 +29,7 @@ import ipaddress
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from auth_middleware import require_auth, require_role
+from tenant_middleware import require_tenant, get_tenant_id  # noqa: E402
 from observability import configure_logging  # noqa: E402
 from metrics import init_metrics  # noqa: E402
 
@@ -61,6 +62,13 @@ except Exception as e:
 redis_client = redis.from_url(app.config['REDIS_URL'])
 
 logger = logging.getLogger(__name__)
+
+
+def _tkey(key: str) -> str:
+    """Prefix a Redis key with the current tenant scope."""
+    tid = get_tenant_id()
+    return f"tenant:{tid}:{key}" if tid else key
+
 
 # Protocol Constants
 TCP_PROTOCOL = 6
@@ -899,6 +907,7 @@ def health_check():
 
 @app.route('/api/v1/traffic', methods=['GET'])
 @require_auth
+@require_tenant
 def get_traffic():
     """Get traffic statistics."""
     try:
@@ -942,6 +951,7 @@ def get_traffic():
 
 @app.route('/api/v1/ingest', methods=['POST'])
 @require_auth
+@require_tenant
 def ingest_data():
     """Ingest traffic data via API."""
     try:
@@ -971,6 +981,7 @@ def ingest_data():
 
 @app.route('/api/v1/threats', methods=['GET'])
 @require_auth
+@require_tenant
 def get_threats():
     """Get detected threats."""
     try:
@@ -996,6 +1007,7 @@ def get_threats():
 
 @app.route('/api/v1/collector/status', methods=['GET'])
 @require_auth
+@require_tenant
 def get_collector_status():
     """Get collector status."""
     return jsonify({

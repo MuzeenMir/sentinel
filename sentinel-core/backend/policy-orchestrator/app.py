@@ -24,6 +24,7 @@ from validation.policy_validator import PolicyValidator
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from auth_middleware import require_auth, require_role  # noqa: E402
+from tenant_middleware import require_tenant, get_tenant_id  # noqa: E402
 from observability import configure_logging  # noqa: E402
 from metrics import init_metrics, POLICIES_APPLIED  # noqa: E402
 
@@ -70,6 +71,7 @@ def health_check():
 
 @app.route('/api/v1/policies', methods=['GET'])
 @require_auth
+@require_tenant
 def get_policies():
     """Get all active policies."""
     try:
@@ -85,6 +87,7 @@ def get_policies():
 
 @app.route('/api/v1/policies/<policy_id>', methods=['GET'])
 @require_auth
+@require_tenant
 def get_policy(policy_id):
     """Get specific policy details."""
     try:
@@ -381,6 +384,7 @@ def rollback_policy(policy_id):
 
 @app.route('/api/v1/rules/translate', methods=['POST'])
 @require_auth
+@require_tenant
 def translate_rules():
     """
     Translate generic rules to vendor-specific format.
@@ -419,6 +423,7 @@ def translate_rules():
 
 @app.route('/api/v1/vendors', methods=['GET'])
 @require_auth
+@require_tenant
 def get_vendors():
     """Get available firewall vendors."""
     return jsonify({
@@ -428,6 +433,7 @@ def get_vendors():
 
 @app.route('/api/v1/vendors/<vendor_name>/status', methods=['GET'])
 @require_auth
+@require_tenant
 def get_vendor_status(vendor_name):
     """Get vendor connection status."""
     try:
@@ -445,6 +451,7 @@ def get_vendor_status(vendor_name):
 
 @app.route('/api/v1/validate', methods=['POST'])
 @require_auth
+@require_tenant
 def validate_policy():
     """Validate a policy without applying it."""
     try:
@@ -468,6 +475,7 @@ def validate_policy():
 
 @app.route('/api/v1/statistics', methods=['GET'])
 @require_auth
+@require_tenant
 def get_statistics():
     """Get policy orchestrator statistics."""
     try:
@@ -480,6 +488,7 @@ def get_statistics():
 
 @app.route('/api/v1/policies/auto-apply', methods=['POST'])
 @require_auth
+@require_tenant
 def auto_apply_policy():
     """
     Apply a policy decision emitted by the DRL engine / Flink feed job.

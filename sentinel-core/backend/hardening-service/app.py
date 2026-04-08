@@ -32,6 +32,7 @@ from flask_cors import CORS
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from auth_middleware import require_auth, require_role
+from tenant_middleware import require_tenant, get_tenant_id
 from observability import configure_logging
 from metrics import init_metrics, HARDENING_POSTURE
 from ebpf_lib.schemas.events import PolicyAction
@@ -938,12 +939,14 @@ def health():
 
 @app.route("/posture", methods=["GET"])
 @require_auth
+@require_tenant
 def get_posture():
     return jsonify(service.stats.to_dict()), 200
 
 
 @app.route("/checks", methods=["GET"])
 @require_auth
+@require_tenant
 def list_checks():
     return jsonify({
         "check_ids": service.cis.get_check_ids(),
@@ -953,6 +956,7 @@ def list_checks():
 
 @app.route("/checks/<check_id>", methods=["GET"])
 @require_auth
+@require_tenant
 def run_single_check(check_id):
     result = service.cis.run_check(check_id)
     if not result:

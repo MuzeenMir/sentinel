@@ -24,6 +24,7 @@ import requests
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from auth_middleware import require_auth, require_role
+from tenant_middleware import require_tenant, get_tenant_id  # noqa: E402
 from observability import configure_logging  # noqa: E402
 from metrics import init_metrics, ALERTS_CREATED  # noqa: E402
 
@@ -55,6 +56,13 @@ redis_client = redis.Redis(connection_pool=redis_pool, decode_responses=True)
 notification_executor = ThreadPoolExecutor(max_workers=4)
 
 logger = logging.getLogger(__name__)
+
+
+def _tkey(key: str) -> str:
+    """Prefix a Redis key with the current tenant scope."""
+    tid = get_tenant_id()
+    return f"tenant:{tid}:{key}" if tid else key
+
 
 # Enums
 class AlertSeverity(Enum):
@@ -118,15 +126,15 @@ class AlertEngine:
             }
 
             # Store alert in Redis
-            redis_client.hset(f"alert:{alert_id}", mapping=alert_record)
-            redis_client.sadd('alerts:all', alert_id)
-            redis_client.sadd(f"alerts:severity:{alert_record['severity']}", alert_id)
-            redis_client.sadd(f"alerts:status:new", alert_id)
+            redis_client.hset(_tkey(f"alert:{alert_id}"), mapping=alert_record)
+            redis_client.sadd(_tkey('alerts:all'), alert_id)
+            redis_client.sadd(_tkey(f"alerts:severity:{alert_record['severity']}"), alert_id)
+            redis_client.sadd(_tkey("alerts:status:new"), alert_id)
 
             # Set TTL for alert data (30 days)
-            redis_client.expire(f"alert:{alert_id}", 2592000)  # 30 days
-            redis_client.expire(f"alerts:severity:{alert_record['severity']}", 2592000)
-            redis_client.expire(f"alerts:status:new", 2592000)
+            redis_client.expire(_tkey(f"alert:{alert_id}"), 2592000)  # 30 days
+            redis_client.expire(_tkey(f"alerts:severity:{alert_record['severity']}"), 2592000)
+            redis_client.expire(_tkey("alerts:status:new"), 2592000)
 
             # Publish to SSE channel so the API gateway can relay to dashboards
             try:
@@ -159,7 +167,7 @@ class AlertEngine:
     def get_alert(self, alert_id: str) -> Optional[Dict[str, Any]]:
         """Get specific alert details"""
         try:
-            alert_data = redis_client.hgetall(f"alert:{alert_id}")
+            alert_data = redis_client.hgetall(_tkey(f"alert:{alert_id}"))
             if not alert_data:
                 return None
 
@@ -194,15 +202,15 @@ class AlertEngine:
             if severity and status:
                 # Intersection of severity and status sets
                 alert_ids = redis_client.sinter(
-                    f"alerts:severity:{severity}",
-                    f"alerts:status:{status}"
+                    _tkey(f"alerts:severity:{severity}"),
+                    _tkey(f"alerts:status:{status}")
                 )
             elif severity:
-                alert_ids = redis_client.smembers(f"alerts:severity:{severity}")
+                alert_ids = redis_client.smembers(_tkey(f"alerts:severity:{severity}"))
             elif status:
-                alert_ids = redis_client.smembers(f"alerts:status:{status}")
+                alert_ids = redis_client.smembers(_tkey(f"alerts:status:{status}"))
             else:
-                alert_ids = redis_client.smembers('alerts:all')
+                alert_ids = redis_client.smembers(_tkey('alerts:all'))
 
             alert_ids_list = sorted(alert_ids)[offset:offset + limit]
 
@@ -227,16 +235,16 @@ class AlertEngine:
                 return False
 
             # Update status
-            redis_client.hset(f"alert:{alert_id}", "status", new_status.value)
+            redis_client.hset(_tkey(f"alert:{alert_id}"), "status", new_status.value)
 
             # Update sets
             old_status = current_alert['status']
-            redis_client.srem(f"alerts:status:{old_status}", alert_id)
-            redis_client.sadd(f"alerts:status:{new_status.value}", alert_id)
+            redis_client.srem(_tkey(f"alerts:status:{old_status}"), alert_id)
+            redis_client.sadd(_tkey(f"alerts:status:{new_status.value}"), alert_id)
 
             # Update assignment if provided
             if assigned_to:
-                redis_client.hset(f"alert:{alert_id}", "assigned_to", assigned_to)
+                redis_client.hset(_tkey(f"alert:{alert_id}"), "assigned_to", assigned_to)
 
             logger.info(f"Updated alert {alert_id} status to {new_status.value}")
             return True
@@ -402,6 +410,7 @@ def health_check():
 
 @app.route('/api/v1/alerts', methods=['GET'])
 @require_auth
+@require_tenant
 def get_alerts():
     """Get list of alerts"""
     try:
@@ -425,6 +434,7 @@ def get_alerts():
 
 @app.route('/api/v1/alerts', methods=['POST'])
 @require_auth
+@require_tenant
 def create_alert():
     """Create a new alert"""
     try:
@@ -446,6 +456,7 @@ def create_alert():
 
 @app.route('/api/v1/alerts/<alert_id>', methods=['GET'])
 @require_auth
+@require_tenant
 def get_alert(alert_id):
     """Get specific alert details"""
     try:
@@ -461,6 +472,7 @@ def get_alert(alert_id):
 
 @app.route('/api/v1/alerts/<alert_id>', methods=['PUT'])
 @require_auth
+@require_tenant
 def update_alert(alert_id):
     """Update alert status or other properties"""
     try:
@@ -488,6 +500,7 @@ def update_alert(alert_id):
 
 @app.route('/api/v1/alerts/<alert_id>/acknowledge', methods=['POST'])
 @require_auth
+@require_tenant
 @require_role('admin', 'operator', 'security_analyst')
 def acknowledge_alert(alert_id):
     """Acknowledge an alert"""
@@ -505,6 +518,7 @@ def acknowledge_alert(alert_id):
 
 @app.route('/api/v1/alerts/<alert_id>/resolve', methods=['POST'])
 @require_auth
+@require_tenant
 @require_role('admin', 'operator', 'security_analyst')
 def resolve_alert(alert_id):
     """Resolve an alert"""
@@ -528,17 +542,17 @@ def get_alert_statistics():
         # Get counts by severity
         severity_counts = {}
         for severity in AlertSeverity:
-            count = redis_client.scard(f"alerts:severity:{severity.value}")
+            count = redis_client.scard(_tkey(f"alerts:severity:{severity.value}"))
             severity_counts[severity.value] = count
 
         # Get counts by status
         status_counts = {}
         for status in AlertStatus:
-            count = redis_client.scard(f"alerts:status:{status.value}")
+            count = redis_client.scard(_tkey(f"alerts:status:{status.value}"))
             status_counts[status.value] = count
 
         # Get total count
-        total_count = redis_client.scard('alerts:all')
+        total_count = redis_client.scard(_tkey('alerts:all'))
 
         return jsonify({
             'total_alerts': total_count,
