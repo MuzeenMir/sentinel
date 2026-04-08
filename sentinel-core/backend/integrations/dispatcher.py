@@ -338,6 +338,32 @@ class IntegrationDispatcher:
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
+def format_leef(event: Dict[str, Any]) -> str:
+    """Format a SENTINEL event as LEEF 2.0 (Log Event Extended Format) for IBM QRadar."""
+    severity_map = {"low": 3, "medium": 5, "high": 7, "critical": 10}
+    sev = severity_map.get(event.get("severity", "medium"), 5)
+
+    attrs = [f"sev={sev}"]
+    if event.get("source_ip"):
+        attrs.append(f"src={event['source_ip']}")
+    if event.get("dest_ip"):
+        attrs.append(f"dst={event['dest_ip']}")
+    if event.get("description"):
+        attrs.append(f"msg={event['description'][:200]}")
+    if event.get("source_port"):
+        attrs.append(f"srcPort={event['source_port']}")
+    if event.get("dest_port"):
+        attrs.append(f"dstPort={event['dest_port']}")
+
+    attr_str = "\t".join(attrs)
+
+    return (
+        f"LEEF:2.0|SENTINEL|SecurityPlatform|1.0|"
+        f"{event.get('type', 'generic')}|"
+        f"{attr_str}"
+    )
+
+
 def _map_severity_to_xsoar(severity: str) -> int:
     return {"low": 1, "medium": 2, "high": 3, "critical": 4}.get(severity.lower(), 2)
 

@@ -27,6 +27,7 @@ from auth_middleware import require_auth, require_role
 from tenant_middleware import require_tenant, get_tenant_id  # noqa: E402
 from observability import configure_logging  # noqa: E402
 from metrics import init_metrics, ALERTS_CREATED  # noqa: E402
+from integrations.dispatcher import IntegrationDispatcher, format_cef, format_leef, ADAPTER_REGISTRY  # noqa: E402
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -56,6 +57,26 @@ redis_client = redis.Redis(connection_pool=redis_pool, decode_responses=True)
 notification_executor = ThreadPoolExecutor(max_workers=4)
 
 logger = logging.getLogger(__name__)
+
+# SIEM / SOAR integration dispatcher
+_dispatcher = IntegrationDispatcher()
+
+INTEGRATIONS_KEY = "sentinel:integrations"
+
+
+def _load_integrations():
+    """Load saved integration configs from Redis and register with dispatcher."""
+    try:
+        raw = redis_client.lrange(INTEGRATIONS_KEY, 0, -1)
+        for entry in raw:
+            config = json.loads(entry)
+            _dispatcher.register(config)
+        logger.info("Loaded %d integrations from Redis", len(raw))
+    except Exception as exc:
+        logger.warning("Could not load integrations: %s", exc)
+
+
+_load_integrations()
 
 
 def _tkey(key: str) -> str:
@@ -156,6 +177,12 @@ class AlertEngine:
 
             self.trigger_notifications(alert_record)
             ALERTS_CREATED.labels(severity=alert_record['severity']).inc()
+
+            # Dispatch to SIEM/SOAR integrations
+            try:
+                _dispatcher.dispatch(alert_record)
+            except Exception as disp_err:
+                logger.warning(f"Integration dispatch failed: {disp_err}")
 
             logger.info(f"Created alert: {alert_id}")
             return alert_id
@@ -574,6 +601,78 @@ def get_alert_types():
         'severities': [asev.value for asev in AlertSeverity],
         'statuses': [astat.value for astat in AlertStatus]
     }), 200
+
+# ── SIEM/SOAR Integration Management ──────────────────────────────────────
+
+@app.route('/api/v1/integrations', methods=['GET'])
+@require_auth
+def list_integrations():
+    """List all configured SIEM/SOAR integrations."""
+    return jsonify({
+        'integrations': _dispatcher.get_adapters(),
+        'available_types': list(ADAPTER_REGISTRY.keys()),
+    }), 200
+
+
+@app.route('/api/v1/integrations', methods=['POST'])
+@require_auth
+@require_tenant
+def create_integration():
+    """Register a new SIEM/SOAR integration."""
+    try:
+        data = request.get_json()
+        if not data or 'type' not in data or 'name' not in data:
+            return jsonify({'error': 'type and name required'}), 400
+
+        if data['type'] not in ADAPTER_REGISTRY:
+            return jsonify({'error': f'Unknown type. Available: {list(ADAPTER_REGISTRY.keys())}'}), 400
+
+        adapter = _dispatcher.register(data)
+        if not adapter:
+            return jsonify({'error': 'Failed to register integration'}), 400
+
+        # Persist config to Redis
+        redis_client.rpush(INTEGRATIONS_KEY, json.dumps(data))
+
+        return jsonify({
+            'message': f'Integration {data["name"]} registered',
+            'integration': {'name': adapter.name, 'type': adapter.type},
+        }), 201
+    except Exception as e:
+        logger.error(f"Create integration error: {e}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+
+@app.route('/api/v1/integrations/test', methods=['POST'])
+@require_auth
+def test_integration():
+    """Send a test event to all registered integrations."""
+    test_event = {
+        'type': 'test',
+        'severity': 'low',
+        'description': 'SENTINEL integration connectivity test',
+        'timestamp': time.time(),
+        'source': 'sentinel-test',
+    }
+    results = _dispatcher.dispatch(test_event)
+    return jsonify({'results': results}), 200
+
+
+@app.route('/api/v1/integrations/formats/cef', methods=['POST'])
+@require_auth
+def preview_cef():
+    """Preview CEF format for an event."""
+    data = request.get_json() or {}
+    return jsonify({'cef': format_cef(data)}), 200
+
+
+@app.route('/api/v1/integrations/formats/leef', methods=['POST'])
+@require_auth
+def preview_leef():
+    """Preview LEEF format for an event."""
+    data = request.get_json() or {}
+    return jsonify({'leef': format_leef(data)}), 200
+
 
 if __name__ == '__main__':
     # For development only - use gunicorn in production
