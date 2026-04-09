@@ -538,7 +538,7 @@ class TestSSEPublish:
 class TestNotificationTriggering:
     def test_email_triggered_for_high_severity(self):
         engine = alert_app.alert_engine
-        with patch.object(alert_app.notification_executor, "submit") as mock_submit:
+        with alert_app.app.app_context(), patch.object(alert_app.notification_executor, "submit") as mock_submit:
             engine.create_alert({
                 "type": "brute_force",
                 "description": "test",
@@ -549,7 +549,7 @@ class TestNotificationTriggering:
 
     def test_email_triggered_for_critical_severity(self):
         engine = alert_app.alert_engine
-        with patch.object(alert_app.notification_executor, "submit") as mock_submit:
+        with alert_app.app.app_context(), patch.object(alert_app.notification_executor, "submit") as mock_submit:
             engine.create_alert({
                 "type": "malware_detected",
                 "description": "test",
@@ -560,7 +560,7 @@ class TestNotificationTriggering:
 
     def test_email_not_triggered_for_low_severity(self):
         engine = alert_app.alert_engine
-        with patch.object(alert_app.notification_executor, "submit") as mock_submit:
+        with alert_app.app.app_context(), patch.object(alert_app.notification_executor, "submit") as mock_submit:
             engine.create_alert({
                 "type": "configuration_change",
                 "description": "test",
@@ -573,7 +573,7 @@ class TestNotificationTriggering:
         engine = alert_app.alert_engine
         alert_app.app.config["SLACK_WEBHOOK_URL"] = "https://hooks.slack.com/test"
         try:
-            with patch.object(alert_app.notification_executor, "submit") as mock_submit:
+            with alert_app.app.app_context(), patch.object(alert_app.notification_executor, "submit") as mock_submit:
                 engine.create_alert({
                     "type": "malware_detected",
                     "description": "test",
@@ -587,7 +587,7 @@ class TestNotificationTriggering:
     def test_slack_not_triggered_without_webhook(self):
         engine = alert_app.alert_engine
         alert_app.app.config["SLACK_WEBHOOK_URL"] = ""
-        with patch.object(alert_app.notification_executor, "submit") as mock_submit:
+        with alert_app.app.app_context(), patch.object(alert_app.notification_executor, "submit") as mock_submit:
             engine.create_alert({
                 "type": "malware_detected",
                 "description": "test",
@@ -600,7 +600,7 @@ class TestNotificationTriggering:
         engine = alert_app.alert_engine
         alert_app.app.config["SLACK_WEBHOOK_URL"] = "https://hooks.slack.com/test"
         try:
-            with patch.object(alert_app.notification_executor, "submit") as mock_submit:
+            with alert_app.app.app_context(), patch.object(alert_app.notification_executor, "submit") as mock_submit:
                 engine.create_alert({
                     "type": "brute_force",
                     "description": "test",
@@ -619,41 +619,47 @@ class TestNotificationTriggering:
 class TestAlertEngineUnit:
     def test_create_returns_id_string(self):
         engine = alert_app.AlertEngine()
-        aid = engine.create_alert({
-            "type": "test", "description": "unit", "severity": "low",
-        })
+        with alert_app.app.app_context():
+            aid = engine.create_alert({
+                "type": "test", "description": "unit", "severity": "low",
+            })
         assert isinstance(aid, str)
         assert aid.startswith("alert_")
 
     def test_get_alert_returns_none_for_missing(self):
         engine = alert_app.AlertEngine()
-        assert engine.get_alert("nonexistent") is None
+        with alert_app.app.app_context():
+            assert engine.get_alert("nonexistent") is None
 
     def test_get_alerts_empty(self):
         engine = alert_app.AlertEngine()
-        assert engine.get_alerts() == []
+        with alert_app.app.app_context():
+            assert engine.get_alerts() == []
 
     def test_update_status_returns_false_for_missing(self):
         engine = alert_app.AlertEngine()
-        result = engine.update_alert_status("fake", alert_app.AlertStatus.RESOLVED)
+        with alert_app.app.app_context():
+            result = engine.update_alert_status("fake", alert_app.AlertStatus.RESOLVED)
         assert result is False
 
     def test_correlation_id_stored(self):
         engine = alert_app.AlertEngine()
-        aid = engine.create_alert({
-            "type": "test",
-            "description": "corr",
-            "correlation_id": "corr-999",
-        })
-        alert = engine.get_alert(aid)
+        with alert_app.app.app_context():
+            aid = engine.create_alert({
+                "type": "test",
+                "description": "corr",
+                "correlation_id": "corr-999",
+            })
+            alert = engine.get_alert(aid)
         assert alert["correlation_id"] == "corr-999"
 
     def test_tags_round_trip(self):
         engine = alert_app.AlertEngine()
-        aid = engine.create_alert({
-            "type": "test",
-            "description": "tags",
-            "tags": ["ssh", "external"],
-        })
-        alert = engine.get_alert(aid)
+        with alert_app.app.app_context():
+            aid = engine.create_alert({
+                "type": "test",
+                "description": "tags",
+                "tags": ["ssh", "external"],
+            })
+            alert = engine.get_alert(aid)
         assert alert["tags"] == ["ssh", "external"]

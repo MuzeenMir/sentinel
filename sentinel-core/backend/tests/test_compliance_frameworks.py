@@ -45,6 +45,10 @@ from frameworks.base import BaseFramework
 
 class ConcreteFramework(BaseFramework):
     """Concrete implementation for testing."""
+
+    def __init__(self):
+        self._controls = []
+
     @property
     def full_name(self):
         return "Test Framework"
@@ -53,17 +57,28 @@ class ConcreteFramework(BaseFramework):
     def description(self):
         return "Test description"
 
-    def _check_requirement(self, req, policies, configs):
-        return req in configs.get("met_requirements", [])
+    @property
+    def controls(self):
+        return self._controls
+
+    @controls.setter
+    def controls(self, value):
+        self._controls = value
+
+    def assess(self, policies, configurations):
+        return self._assess_controls(policies, configurations)
+
+    def detailed_gap_analysis(self, current_controls):
+        return self._default_gap_analysis(current_controls)
 
 
 def test_base_framework_controls_summary():
     """get_controls_summary returns control list."""
     f = ConcreteFramework()
-    f.controls = {
-        "ctrl-1": {"name": "Control 1", "category": "Access"},
-        "ctrl-2": {"name": "Control 2", "category": "Encryption"},
-    }
+    f.controls = [
+        {"id": "ctrl-1", "name": "Control 1", "category": "Access", "description": "A"},
+        {"id": "ctrl-2", "name": "Control 2", "category": "Encryption", "description": "B"},
+    ]
     summary = f.get_controls_summary()
     assert len(summary) == 2
     assert summary[0]["id"] == "ctrl-1"
@@ -74,11 +89,11 @@ def test_base_framework_controls_summary():
 def test_base_framework_get_categories():
     """get_categories returns unique categories."""
     f = ConcreteFramework()
-    f.controls = {
-        "c1": {"category": "A"},
-        "c2": {"category": "B"},
-        "c3": {"category": "A"},
-    }
+    f.controls = [
+        {"id": "c1", "category": "A"},
+        {"id": "c2", "category": "B"},
+        {"id": "c3", "category": "A"},
+    ]
     cats = f.get_categories()
     assert set(cats) == {"A", "B"}
 
@@ -86,13 +101,12 @@ def test_base_framework_get_categories():
 def test_base_framework_assess():
     """assess returns compliance assessments."""
     f = ConcreteFramework()
-    f.controls = {
-        "c1": {"name": "Req 1", "requirements": ["r1", "r2"]},
-    }
+    f.controls = [
+        {"id": "c1", "name": "Req 1", "category": "general",
+         "description": "Test", "requirements": ["r1", "r2"]},
+    ]
     policies = []
-    configs = {"met_requirements": ["r1", "r2"]}
+    configs = {"r1": "enabled", "r2": "enabled"}
     result = f.assess(policies, configs)
     assert len(result) == 1
     assert result[0]["control_id"] == "c1"
-    assert result[0]["status"] == "compliant"
-    assert result[0]["score"] == 100

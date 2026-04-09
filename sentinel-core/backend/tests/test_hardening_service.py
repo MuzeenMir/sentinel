@@ -1,17 +1,28 @@
 """Tests for the hardening service CIS benchmark engine."""
 
+import importlib.util
 import os
 import sys
 import tempfile
+from unittest.mock import MagicMock, patch
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "hardening-service"))
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+_backend = os.path.join(os.path.dirname(__file__), "..")
+_hardening_dir = os.path.join(_backend, "hardening-service")
+sys.path.insert(0, _backend)
 
 os.environ.setdefault("HOST_ROOT", "")
 os.environ.setdefault("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
 
-import app as hardening_app
+# Load hardening-service app in isolation to avoid module cache collisions
+_spec = importlib.util.spec_from_file_location(
+    "hardening_app", os.path.join(_hardening_dir, "app.py"),
+    submodule_search_locations=[_hardening_dir],
+)
+_mod = importlib.util.module_from_spec(_spec)
+sys.modules["hardening_app"] = _mod
+_spec.loader.exec_module(_mod)
+hardening_app = _mod
 
 
 class TestCISBenchmarkEngine:
@@ -84,7 +95,7 @@ class TestFileIntegrityMonitor:
             with open(test_file, "w") as f:
                 f.write("test content")
 
-            from app import FileIntegrityMonitor
+            FileIntegrityMonitor = hardening_app.FileIntegrityMonitor
             fim = FileIntegrityMonitor([test_file], host_root="")
             baselines = fim.build_baseline()
             assert test_file in baselines
@@ -96,7 +107,7 @@ class TestFileIntegrityMonitor:
             with open(test_file, "w") as f:
                 f.write("original content")
 
-            from app import FileIntegrityMonitor
+            FileIntegrityMonitor = hardening_app.FileIntegrityMonitor
             fim = FileIntegrityMonitor([test_file], host_root="")
             fim.build_baseline()
 
@@ -114,7 +125,7 @@ class TestFileIntegrityMonitor:
             with open(test_file, "w") as f:
                 f.write("content")
 
-            from app import FileIntegrityMonitor
+            FileIntegrityMonitor = hardening_app.FileIntegrityMonitor
             fim = FileIntegrityMonitor([test_file], host_root="")
             fim.build_baseline()
             os.remove(test_file)
@@ -129,17 +140,38 @@ class TestFileIntegrityMonitor:
             with open(test_file, "w") as f:
                 f.write("stable content")
 
-            from app import FileIntegrityMonitor
+            FileIntegrityMonitor = hardening_app.FileIntegrityMonitor
             fim = FileIntegrityMonitor([test_file], host_root="")
             fim.build_baseline()
             changes = fim.check()
             assert len(changes) == 0
 
 
+def _mock_admin_user():
+    return {"id": 1, "username": "test", "role": "admin", "tenant_id": 1}
+
+
+def _fake_auth_post(*args, **kwargs):
+    resp = MagicMock()
+    resp.status_code = 200
+    resp.json.return_value = {"user": _mock_admin_user()}
+    return resp
+
+
 class TestFlaskApp:
     def setup_method(self):
         hardening_app.app.config["TESTING"] = True
         self.client = hardening_app.app.test_client()
+        self._auth_patch = patch(
+            "requests.post", side_effect=_fake_auth_post
+        )
+        self._auth_patch.start()
+
+    def teardown_method(self):
+        self._auth_patch.stop()
+
+    def _headers(self):
+        return {"Authorization": "Bearer test-token"}
 
     def test_health_endpoint(self):
         resp = self.client.get("/health")
@@ -148,37 +180,37 @@ class TestFlaskApp:
         assert data["service"] == "hardening-service"
 
     def test_posture_endpoint(self):
-        resp = self.client.get("/posture")
+        resp = self.client.get("/posture", headers=self._headers())
         assert resp.status_code == 200
         data = resp.get_json()
         assert "posture_score" in data
 
     def test_list_checks(self):
-        resp = self.client.get("/checks")
+        resp = self.client.get("/checks", headers=self._headers())
         assert resp.status_code == 200
         data = resp.get_json()
         assert "check_ids" in data
         assert data["total"] >= 20
 
     def test_run_single_check_endpoint(self):
-        resp = self.client.get("/checks/sysctl_aslr")
+        resp = self.client.get("/checks/sysctl_aslr", headers=self._headers())
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["check_id"] == "sysctl_aslr"
 
     def test_nonexistent_check_returns_404(self):
-        resp = self.client.get("/checks/nonexistent")
+        resp = self.client.get("/checks/nonexistent", headers=self._headers())
         assert resp.status_code == 404
 
     def test_scan_endpoint(self):
-        resp = self.client.post("/scan")
+        resp = self.client.post("/scan", headers=self._headers())
         assert resp.status_code == 200
         data = resp.get_json()
         assert "checks_run" in data
         assert "posture_score" in data
 
     def test_enforce_endpoint(self):
-        resp = self.client.get("/enforce")
+        resp = self.client.get("/enforce", headers=self._headers())
         assert resp.status_code == 200
         data = resp.get_json()
         assert "mode" in data

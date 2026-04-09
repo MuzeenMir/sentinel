@@ -1,22 +1,24 @@
+import { lazy, Suspense } from 'react'
 import { Routes, Route, Navigate, Link } from 'react-router-dom'
 import { Layout } from './components/Layout'
-import { Dashboard } from './pages/Dashboard'
-import { Threats } from './pages/Threats'
-import { ThreatDetail } from './pages/ThreatDetail'
-import { Policies } from './pages/Policies'
-import { Compliance } from './pages/Compliance'
-import { Alerts } from './pages/Alerts'
-import { Hardening } from './pages/Hardening'
-import { HidsEvents } from './pages/HidsEvents'
-import { Users } from './pages/Users'
-import { AuditLog } from './pages/AuditLog'
-import { Tenants } from './pages/Tenants'
-import { MfaSetup } from './pages/MfaSetup'
-import { SiemConfig } from './pages/SiemConfig'
-import { Settings } from './pages/Settings'
 import { Login } from './pages/Login'
 import { useAuthStore } from './store/authStore'
 import { appConfig } from './config/runtime'
+
+const Dashboard = lazy(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })))
+const Threats = lazy(() => import('./pages/Threats').then(m => ({ default: m.Threats })))
+const ThreatDetail = lazy(() => import('./pages/ThreatDetail').then(m => ({ default: m.ThreatDetail })))
+const Policies = lazy(() => import('./pages/Policies').then(m => ({ default: m.Policies })))
+const Compliance = lazy(() => import('./pages/Compliance').then(m => ({ default: m.Compliance })))
+const Alerts = lazy(() => import('./pages/Alerts').then(m => ({ default: m.Alerts })))
+const Hardening = lazy(() => import('./pages/Hardening').then(m => ({ default: m.Hardening })))
+const HidsEvents = lazy(() => import('./pages/HidsEvents').then(m => ({ default: m.HidsEvents })))
+const Users = lazy(() => import('./pages/Users').then(m => ({ default: m.Users })))
+const AuditLog = lazy(() => import('./pages/AuditLog').then(m => ({ default: m.AuditLog })))
+const Tenants = lazy(() => import('./pages/Tenants').then(m => ({ default: m.Tenants })))
+const MfaSetup = lazy(() => import('./pages/MfaSetup').then(m => ({ default: m.MfaSetup })))
+const SiemConfig = lazy(() => import('./pages/SiemConfig').then(m => ({ default: m.SiemConfig })))
+const Settings = lazy(() => import('./pages/Settings').then(m => ({ default: m.Settings })))
 
 function App() {
   const { isAuthenticated } = useAuthStore()
@@ -57,23 +59,25 @@ function App() {
 
   return (
     <Layout>
-      <Routes>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/threats" element={<Threats />} />
-        <Route path="/threats/:id" element={<ThreatDetail />} />
-        <Route path="/alerts" element={<Alerts />} />
-        <Route path="/policies" element={<Policies />} />
-        <Route path="/compliance" element={<Compliance />} />
-        <Route path="/hardening" element={<Hardening />} />
-        <Route path="/hids" element={<HidsEvents />} />
-        <Route path="/users" element={<Users />} />
-        <Route path="/audit" element={<AuditLog />} />
-        <Route path="/tenants" element={<Tenants />} />
-        <Route path="/mfa-setup" element={<MfaSetup />} />
-        <Route path="/siem" element={<SiemConfig />} />
-        <Route path="/settings" element={<Settings />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <Suspense fallback={<div className="flex items-center justify-center h-64 text-slate-400">Loading…</div>}>
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/threats" element={<Threats />} />
+          <Route path="/threats/:id" element={<ThreatDetail />} />
+          <Route path="/alerts" element={<Alerts />} />
+          <Route path="/policies" element={<Policies />} />
+          <Route path="/compliance" element={<Compliance />} />
+          <Route path="/hardening" element={<Hardening />} />
+          <Route path="/hids" element={<HidsEvents />} />
+          <Route path="/users" element={<Users />} />
+          <Route path="/audit" element={<AuditLog />} />
+          <Route path="/tenants" element={<Tenants />} />
+          <Route path="/mfa-setup" element={<MfaSetup />} />
+          <Route path="/siem" element={<SiemConfig />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
     </Layout>
   )
 }
