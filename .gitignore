@@ -93,3 +93,4 @@ CLAUDE.local.md
 .cursor-sync/chat-history-backup/
 .cursor-sync/sync-config.json
 # Note: .cursor-sync/agent-transcripts/ is versioned (intentional)
+sentinel-core/backend/.test-venv/
