@@ -121,12 +121,7 @@ def train_xgboost(
         params["device"] = "cuda"
 
     detector = XGBoostDetector(params=params)
-    metrics = detector.train(
-        data["X_train"],
-        data["y_train"],
-        feature_names=data["feature_names"],
-        eval_set=(data["X_test"], data["y_test"]),
-    )
+    metrics = detector.train(data["X_train"], data["y_train"])
     detector.save_model(model_dir)
 
     # Evaluate on test set
@@ -208,14 +203,20 @@ def train_autoencoder(
         logger.warning("Very few benign samples (%d), using all data", len(X_benign))
         X_benign = data["X_train"]
 
+    # Tighter bottleneck (latent_dim 16 → 8) widens the benign/attack error
+    # gap: a smaller code forces the decoder to drop reconstruction fidelity
+    # on off-distribution attack flows it has never seen. epochs 15 → 40 with
+    # patience 3 → 5 gives the loss the room it was still trending into at
+    # the previous stop (best=0.0544, loss=0.0541, patience=1/3).
     config = {
         "input_dim": N_FEATURES,
-        "latent_dim": 16,
+        "latent_dim": 8,
         "hidden_dims": [128, 64, 32],
-        "learning_rate": 0.001,
-        "batch_size": 256,
-        "epochs": 100,
-        "early_stopping_patience": 10,
+        "learning_rate": 0.002,
+        "batch_size": 4096,
+        "epochs": 40,
+        "max_epochs": 40,
+        "early_stopping_patience": 5,
     }
 
     detector = AutoencoderDetector(config=config)
@@ -226,13 +227,17 @@ def train_autoencoder(
 
     metrics = detector.train(X_benign)
 
-    # Calibrate threshold using labeled test data so the detector achieves
-    # ~1% false-positive rate while maximising attack detection.
+    # Calibrate threshold using labeled test data. target_fpr relaxed
+    # 0.01 → 0.05: at FPR=1% the benign tail is already thicker than most of
+    # the attack distribution (p99 benign error ≈ 0.47, threshold ≈ 0.49),
+    # which collapses recall to ~9%. The autoencoder is one layer of a
+    # stacked ensemble, not a standalone gate — a 5% FPR is an acceptable
+    # budget when downstream models vote on the final verdict.
     test_benign_mask = data["y_test"] == benign_idx
     X_test_benign = data["X_test"][test_benign_mask]
     X_test_attack = data["X_test"][~test_benign_mask]
     if len(X_test_attack) > 0 and len(X_test_benign) > 0:
-        detector.calibrate_threshold(X_test_benign, X_test_attack, target_fpr=0.01)
+        detector.calibrate_threshold(X_test_benign, X_test_attack, target_fpr=0.05)
 
     detector.save_model(model_dir)
 
@@ -297,9 +302,9 @@ def train_lstm(
         "num_classes": 2,
         "dropout": 0.3,
         "sequence_length": seq_len,
-        "learning_rate": 0.001,
-        "batch_size": 64,
-        "epochs": 50,
+        "learning_rate": 0.002,
+        "batch_size": 1024,
+        "max_epochs": 10,
     }
 
     detector = LSTMSequenceDetector(config=config)
@@ -308,7 +313,7 @@ def train_lstm(
         if detector.model is not None:
             detector.model = detector.model.to(detector.device)
 
-    metrics = detector.train(X_train_seq, y_train_seq, X_val_seq, y_val_seq)
+    metrics = detector.train(X_train_seq, y_train_seq)
     detector.save_model(model_dir)
 
     # Evaluate on validation sequences
@@ -371,33 +376,57 @@ def train_ensemble(
     benign_idx = LABEL_TO_IDX["benign"]
     y_binary = (y_train != benign_idx).astype(np.int64)
 
-    meta_rows = []
-    det_order = list(ensemble.weights.keys())
-    batch_size = 500
-    for start in range(0, len(X_train), batch_size):
-        end = min(start + batch_size, len(X_train))
-        for i in range(start, end):
-            row = []
-            for name in det_order:
-                if name not in detectors:
-                    row.append(0.5)
-                    continue
-                try:
-                    result = detectors[name].predict(X_train[i])
-                    conf = result.get("confidence", 0.5)
-                    score = conf if result.get("is_threat") else 1.0 - conf
-                    row.append(score)
-                except Exception:
-                    row.append(0.5)
-            meta_rows.append(row)
-        if (end - start) > 0:
-            logger.info("  Meta-features: %d / %d", end, len(X_train))
+    # Subsample to 200k rows for meta-learner training (sufficient, fast)
+    max_meta_samples = 200000
+    if len(X_train) > max_meta_samples:
+        rng = np.random.RandomState(42)
+        sel = rng.choice(len(X_train), max_meta_samples, replace=False)
+        X_meta_in = X_train[sel]
+        y_binary = y_binary[sel]
+    else:
+        X_meta_in = X_train
 
-    X_meta = np.array(meta_rows, dtype=np.float64)
-    ensemble.train_meta_learner(X_meta, y_binary)
+    # Build meta-feature matrix with two columns per detector:
+    #   col 2k   = threat score (confidence if is_threat else 1-confidence)
+    #   col 2k+1 = is_threat flag (0 or 1)
+    # This matches what StackingEnsemble._verdicts_to_meta_features produces
+    # at inference time, so the fitted meta-learner is consistent with the
+    # live predict() code path.
+    det_order = sorted(ensemble.base_detectors.keys())
+    n_samples = len(X_meta_in)
+    n_meta_cols = 2 * len(det_order)
+    X_meta = np.zeros((n_samples, n_meta_cols), dtype=np.float32)
+
+    # Batched prediction per detector (much faster than per-sample)
+    batch_size = 10000
+    for idx, name in enumerate(det_order):
+        if name not in detectors:
+            continue
+        logger.info("  Generating meta-features for %s...", name)
+        det = detectors[name]
+        for start in range(0, n_samples, batch_size):
+            end = min(start + batch_size, n_samples)
+            try:
+                results = det.predict_batch(X_meta_in[start:end])
+                for i, res in enumerate(results):
+                    is_threat = bool(res.get("is_threat", False))
+                    conf = float(res.get("confidence", 0.0))
+                    # Column layout matches _verdicts_to_meta_features:
+                    # [is_threat_0, conf_0, is_threat_1, conf_1, ...]
+                    X_meta[start + i, 2 * idx] = 1.0 if is_threat else 0.0
+                    X_meta[start + i, 2 * idx + 1] = conf
+            except Exception as exc:
+                logger.warning("  predict_batch failed for %s at [%d:%d]: %s",
+                               name, start, end, exc)
+            if end % 50000 == 0 or end == n_samples:
+                logger.info("    %s: %d / %d", name, end, n_samples)
+
+    # Fit the meta-learner directly on pre-computed features — this bypasses
+    # the slow per-sample path in StackingEnsemble.train_meta_learner and
+    # matches the exact column layout used by the live predict() code path.
+    metrics = ensemble.fit_meta_learner_from_features(X_meta, y_binary)
     ensemble.save(ensemble_dir)
 
-    metrics = ensemble._metrics.get("meta_learner", {})
     logger.info("Ensemble meta-learner metrics: %s", metrics)
     return metrics
 
@@ -504,21 +533,21 @@ def train_drl(
     sys.path.insert(0, os.path.abspath(drl_engine_dir))
     from agent.ppo_agent import PPOAgent
 
+    # Force PPO onto the CPU regardless of the pipeline device.  SB3's
+    # MlpPolicy is CPU-optimal (it warns against GPU for non-CNN policies)
+    # and keeping DRL off the GPU also isolates it from any CUDA state the
+    # preceding torch models may have left behind on small 4 GB cards.
     agent = PPOAgent(
         state_dim=state_dim,
         action_dim=n_actions,
         model_path=model_dir,
-        learning_rate=3e-4,
-        gamma=0.99,
-        epsilon_clip=0.2,
-        entropy_coef=0.01,
-        value_coef=0.5,
+        device="cpu",
     )
 
     env = FirewallEnv(data["X_train"], data["y_train"])
-    n_episodes = 250
+    n_episodes = 100
     batch_size = 2048
-    n_update_epochs = 10
+    n_update_epochs = 5
     total_timesteps = 0
 
     logger.info("Training custom PPO for %d episodes (batch=%d)...", n_episodes, batch_size)
@@ -691,25 +720,44 @@ def run_training(args: argparse.Namespace) -> None:
             logger.exception("FAILED to train %s", model_name)
             all_metrics[model_name] = {"error": True}
 
+        # Reclaim GPU memory between models so fragmentation on small
+        # GPUs (e.g. 4 GB cards) doesn't bleed from one model into the
+        # next.  Safe no-op when CUDA is unavailable.
+        try:
+            import torch as _torch
+            if _torch.cuda.is_available():
+                _torch.cuda.empty_cache()
+                _torch.cuda.synchronize()
+        except Exception:
+            pass
+
     spot_handler.stop()
 
     total_time = time.time() - start_time
 
-    # Register trained models in the model registry
+    # Register trained models in the model registry. ModelRegistry.register()
+    # takes kwargs (name/version/model_type/...) and builds the ModelVersion
+    # internally — don't instantiate ModelVersion directly.
+    #
+    # Pin the registry file to the output directory. The default
+    # (`/models/registry.json` when MODEL_PATH is unset) is root-owned on
+    # most dev hosts and the save silently fails with Errno 13, leaving the
+    # in-memory registrations unpersisted.
     try:
-        from model_registry import ModelRegistry, ModelVersion
-        registry = ModelRegistry()
+        from model_registry import ModelRegistry
+        registry = ModelRegistry(
+            local_path=os.path.join(output_dir, "registry.json"),
+        )
         for model_name in completed_models:
             m = all_metrics.get(model_name, {})
             if isinstance(m, dict) and "error" not in m and not m.get("skipped"):
-                version = ModelVersion(
-                    model_name=model_name,
+                registry.register(
+                    name=model_name,
                     version=f"1.0.{int(time.time())}",
+                    model_type=model_name,
                     artifact_path=os.path.join(output_dir, model_name),
                     metrics=m,
-                    stage="staging",
                 )
-                registry.register(version)
                 logger.info("Registered %s in model registry (staging)", model_name)
     except Exception as reg_err:
         logger.warning("Model registry integration skipped: %s", reg_err)

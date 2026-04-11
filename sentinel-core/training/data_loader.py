@@ -366,6 +366,14 @@ DATASET_LOADERS = {
 }
 
 
+def _cache_path(dataset: str, max_rows: Optional[int]) -> Path:
+    """Path to the cached preprocessed dataset (npz + feature_names.txt)."""
+    cache_dir = Path(__file__).resolve().parent / "datasets" / "cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    tag = f"{dataset}_{max_rows or 'full'}"
+    return cache_dir / f"{tag}.npz"
+
+
 def load_dataset(
     data_dir: str,
     dataset: str,
@@ -378,12 +386,30 @@ def load_dataset(
 
     Returns dict with keys:
         X_train, X_test, y_train, y_test, feature_names
+
+    Uses a preprocessed cache (training/datasets/cache/<dataset>_<N>.npz) so
+    that repeated runs skip the CSV parse step entirely.
     """
     loader = DATASET_LOADERS.get(dataset)
     if loader is None:
         raise ValueError(f"Unknown dataset '{dataset}'. Choose from: {list(DATASET_LOADERS)}")
 
-    X, y, feature_names = loader(data_dir, max_rows=max_rows)
+    cache_file = _cache_path(dataset, max_rows)
+    if cache_file.exists():
+        logger.info("Loading cached preprocessed dataset from %s", cache_file)
+        npz = np.load(cache_file, allow_pickle=True)
+        X = npz["X"]
+        y = npz["y"]
+        feature_names = list(npz["feature_names"])
+        logger.info("Cache hit: X=%s  y=%s", X.shape, y.shape)
+    else:
+        X, y, feature_names = loader(data_dir, max_rows=max_rows)
+        logger.info("Saving preprocessed cache to %s", cache_file)
+        np.savez_compressed(
+            cache_file,
+            X=X, y=y,
+            feature_names=np.array(feature_names, dtype=object),
+        )
 
     unique = np.unique(y)
     if len(unique) > 0 and (unique != np.arange(len(unique))).any():

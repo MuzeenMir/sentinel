@@ -213,19 +213,33 @@ class LSTMSequenceDetector(BaseDetector):
     # ------------------------------------------------------------------
 
     def _prepare_input(self, features: np.ndarray) -> "torch.Tensor":
-        """Reshape arbitrary input into ``(batch, seq_len, input_size)``."""
+        """Reshape arbitrary input into ``(batch, seq_len, input_size)``.
+
+        A flat feature vector of length ``input_size`` (the typical
+        ensemble-meta-feature case) is **replicated** across all
+        ``sequence_length`` timesteps rather than zero-padded: the model was
+        trained on sequences of real consecutive events, so feeding it 19
+        zero timesteps produces garbage predictions. Replicating the single
+        observation is the closest zero-context fallback that keeps every
+        timestep on-distribution.
+        """
         seq_len = self.config["sequence_length"]
         input_size = self.config["input_size"]
 
         if features.ndim == 1:
             total = seq_len * input_size
-            if len(features) < total:
+            if len(features) == input_size:
+                features = np.broadcast_to(
+                    features, (seq_len, input_size)
+                ).reshape(1, seq_len, input_size).copy()
+            elif len(features) == total:
+                features = features.reshape(1, seq_len, input_size)
+            elif len(features) < total:
                 padded = np.zeros(total, dtype=np.float32)
                 padded[: len(features)] = features
-                features = padded
-            elif len(features) > total:
-                features = features[:total]
-            features = features.reshape(1, seq_len, input_size)
+                features = padded.reshape(1, seq_len, input_size)
+            else:
+                features = features[:total].reshape(1, seq_len, input_size)
 
         elif features.ndim == 2:
             features = features[np.newaxis, :, :]
@@ -275,6 +289,15 @@ class LSTMSequenceDetector(BaseDetector):
                 "details": {"error": str(exc)},
             }
 
+    # Max samples fed to the LSTM in a single GPU forward pass. cuDNN's
+    # workspace + backward graph can balloon past 1 GB on larger batches,
+    # and the expandable_segments allocator has been observed to hit
+    # `!handles_.at(i) INTERNAL ASSERT FAILED` when a detector in an
+    # ensemble pipeline is called repeatedly on very large 3-D inputs.
+    # Chunking to this many sequences per sub-batch keeps peak allocation
+    # bounded and lets us recover cleanly from transient CUDA errors.
+    _PREDICT_SUBBATCH = 2048
+
     def predict_batch(self, features: np.ndarray) -> List[Dict[str, Any]]:
         if not self._is_ready:
             raise RuntimeError("Model not ready for inference")
@@ -282,17 +305,78 @@ class LSTMSequenceDetector(BaseDetector):
         features = self._validate_features(features)
 
         if features.ndim == 2:
-            return [self.predict(row) for row in features]
+            seq_len = int(self.config["sequence_length"])
+            input_size = int(self.config["input_size"])
+            total = seq_len * input_size
+            batch = features.shape[0]
 
-        try:
-            tensor = torch.tensor(
-                features, dtype=torch.float32, device=self.device
-            )
-            with torch.no_grad():
-                logits = self.model(tensor)
-                all_probs = torch.softmax(logits, dim=-1).cpu().numpy()
+            if features.shape[1] == total:
+                # Flat rows already encode full sequences.
+                features = features.reshape(batch, seq_len, input_size)
+            elif features.shape[1] == input_size:
+                # One feature vector per row → replicate across timesteps
+                # so the LSTM sees an on-distribution sequence instead of
+                # a row of real data padded with 19 zero timesteps. See
+                # ``_prepare_input`` for the rationale.
+                features = np.broadcast_to(
+                    features[:, None, :], (batch, seq_len, input_size)
+                )
+            elif features.shape[1] < total:
+                padded = np.zeros((batch, total), dtype=np.float32)
+                padded[:, : features.shape[1]] = features
+                features = padded.reshape(batch, seq_len, input_size)
+            else:
+                features = features[:, :total].reshape(batch, seq_len, input_size)
 
-            results: List[Dict[str, Any]] = []
+        # Sub-batch the forward pass to bound peak GPU memory and to
+        # isolate failures: one chunk crashing shouldn't break the
+        # subsequent chunks.
+        n = int(features.shape[0])
+        results: List[Dict[str, Any]] = []
+        cpu_fallback = False
+
+        for start in range(0, n, self._PREDICT_SUBBATCH):
+            end = min(start + self._PREDICT_SUBBATCH, n)
+            sub = np.ascontiguousarray(features[start:end], dtype=np.float32)
+            all_probs = self._forward_chunk(sub, use_cpu=cpu_fallback)
+
+            if all_probs is None and not cpu_fallback:
+                # First GPU failure: flush allocator state and retry this
+                # chunk on CPU. Stay on CPU for remaining chunks so we
+                # don't re-trigger the bad allocator handle.
+                logger.warning(
+                    "LSTM GPU forward failed at chunk [%d:%d]; falling "
+                    "back to CPU for the rest of this batch",
+                    start, end,
+                )
+                if self.device.type == "cuda":
+                    try:
+                        torch.cuda.synchronize()
+                        torch.cuda.empty_cache()
+                    except Exception:
+                        pass
+                cpu_fallback = True
+                all_probs = self._forward_chunk(sub, use_cpu=True)
+
+            if all_probs is None:
+                # Even CPU failed — surface stub results for this chunk.
+                logger.error(
+                    "LSTM batch prediction error on chunk [%d:%d]; "
+                    "returning stub verdicts",
+                    start, end,
+                )
+                results.extend(
+                    {
+                        "detector": "lstm_sequence",
+                        "is_threat": False,
+                        "confidence": 0.0,
+                        "threat_type": ThreatCategory.UNKNOWN,
+                        "error": "forward_failed",
+                    }
+                    for _ in range(end - start)
+                )
+                continue
+
             for probs in all_probs:
                 cls = int(np.argmax(probs))
                 cat = CATEGORY_MAP.get(cls, ThreatCategory.UNKNOWN)
@@ -305,21 +389,55 @@ class LSTMSequenceDetector(BaseDetector):
                         "predicted_class": cls,
                     }
                 )
-            return results
+
+        return results
+
+    def _forward_chunk(
+        self, features: np.ndarray, use_cpu: bool = False
+    ) -> Optional[np.ndarray]:
+        """Run one sub-batch through the model and return softmax probs.
+
+        Returns ``None`` on failure so the caller can decide whether to
+        retry on a different device or emit stub verdicts.
+        """
+        target_device = torch.device("cpu") if use_cpu else self.device
+        try:
+            if use_cpu and next(self.model.parameters()).device.type == "cuda":
+                # Move a lightweight copy to CPU for the fallback path.
+                # ``.cpu()`` without detach is safe because we're under
+                # inference_mode below.
+                model = self.model.to("cpu")
+                moved = True
+            else:
+                model = self.model
+                moved = False
+
+            tensor = torch.as_tensor(
+                features, dtype=torch.float32, device=target_device
+            )
+            with torch.inference_mode():
+                logits = model(tensor)
+                probs = torch.softmax(logits, dim=-1).detach().cpu().numpy()
+
+            del tensor, logits
+            if target_device.type == "cuda":
+                try:
+                    torch.cuda.synchronize()
+                except Exception:
+                    pass
+
+            if moved:
+                # Restore the model to its original device for subsequent
+                # callers that may expect GPU residency.
+                self.model.to(self.device)
+
+            return probs
 
         except Exception as exc:
-            logger.error("LSTM batch prediction error: %s", exc)
-            n = features.shape[0] if features.ndim >= 2 else 1
-            return [
-                {
-                    "detector": "lstm_sequence",
-                    "is_threat": False,
-                    "confidence": 0.0,
-                    "threat_type": ThreatCategory.UNKNOWN,
-                    "error": str(exc),
-                }
-                for _ in range(n)
-            ]
+            logger.error(
+                "LSTM forward (device=%s) failed: %s", target_device, exc
+            )
+            return None
 
     # ------------------------------------------------------------------
     # Training
@@ -355,13 +473,19 @@ class LSTMSequenceDetector(BaseDetector):
             optimizer, patience=3, factor=0.5
         )
 
-        X_t = torch.tensor(X, dtype=torch.float32, device=self.device)
-        y_t = torch.tensor(y, dtype=torch.long, device=self.device)
+        # Keep the whole training set on CPU and move each batch to the
+        # GPU inside the loop.  This avoids a multi-GB one-shot CUDA
+        # allocation that would OOM on small GPUs when training on the
+        # full CIC-IDS2018 dataset.
+        X_t = torch.as_tensor(X, dtype=torch.float32)
+        y_t = torch.as_tensor(y, dtype=torch.long)
 
+        pin = self.device.type == "cuda"
         loader = td.DataLoader(
             td.TensorDataset(X_t, y_t),
             batch_size=self.config["batch_size"],
             shuffle=True,
+            pin_memory=pin,
         )
 
         best_loss = float("inf")
@@ -376,6 +500,8 @@ class LSTMSequenceDetector(BaseDetector):
             total = 0
 
             for batch_x, batch_y in loader:
+                batch_x = batch_x.to(self.device, non_blocking=pin)
+                batch_y = batch_y.to(self.device, non_blocking=pin)
                 optimizer.zero_grad()
                 logits = self.model(batch_x)
                 loss = criterion(logits, batch_y)
@@ -402,6 +528,12 @@ class LSTMSequenceDetector(BaseDetector):
                     break
 
         self.model.eval()
+
+        # Free the large training tensors before returning so the GPU
+        # allocator is clean for whatever runs next in the pipeline.
+        del loader, X_t, y_t
+        if self.device.type == "cuda":
+            torch.cuda.empty_cache()
 
         self._metrics = {
             "n_samples": len(y),

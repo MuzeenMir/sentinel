@@ -90,6 +90,7 @@ class PPOAgent:
         state_dim: int,
         action_dim: int,
         model_path: str = "/tmp/ppo_sentinel",
+        device: str = "auto",
     ):
         if torch is None:  # type: ignore[comparison-overlap]
             raise ImportError("PyTorch is required for PPOAgent")
@@ -99,6 +100,7 @@ class PPOAgent:
         self._state_dim = state_dim
         self._action_dim = action_dim
         self._model_path = model_path
+        self._device = device
         self._model: Optional[PPO] = None
         self._version: str = "0.0.0"
         self._training_steps: int = 0
@@ -321,7 +323,7 @@ class PPOAgent:
                 ent_coef=0.01,
                 max_grad_norm=0.5,
                 verbose=0,
-                device="auto",
+                device=self._device,
             )
             logger.info(
                 "Initialised fresh PPO model (state_dim=%d, action_dim=%d)",

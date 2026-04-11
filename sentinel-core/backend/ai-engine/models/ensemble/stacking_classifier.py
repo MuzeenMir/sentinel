@@ -193,8 +193,14 @@ class StackingEnsemble:
 
         *X*: feature matrix fed to base detectors (n_samples, n_features).
         *y*: integer labels (0 = benign, 1+ = threat classes).
+
+        This is the slow-but-convenient path: each row in X is fed one at a
+        time through every base detector. For large training sets (>10k rows)
+        prefer :meth:`fit_meta_learner_from_features`, which accepts a
+        pre-computed meta-feature matrix produced in batched mode by the
+        caller.
         """
-        logger.info("Training ensemble meta-learner …")
+        logger.info("Training ensemble meta-learner (per-sample path) …")
 
         meta_rows: List[np.ndarray] = []
         for i in range(len(X)):
@@ -202,10 +208,26 @@ class StackingEnsemble:
             meta_rows.append(self._verdicts_to_meta_features(verdicts).ravel())
 
         meta_X = np.array(meta_rows, dtype=np.float32)
+        return self.fit_meta_learner_from_features(meta_X, y)
+
+    def fit_meta_learner_from_features(
+        self, meta_X: np.ndarray, y: np.ndarray
+    ) -> Dict[str, float]:
+        """
+        Fit the logistic-regression meta-learner on pre-computed meta features.
+
+        *meta_X* must already contain one row per training sample with the
+        base-detector outputs stacked column-wise (shape: n_samples × n_meta).
+        Use this when the caller has generated meta features in batched mode
+        (the fast path used by ``train_all.py``).
+        """
+        logger.info(
+            "Fitting meta-learner on pre-computed meta features (shape=%s)",
+            meta_X.shape,
+        )
 
         self.meta_learner = LogisticRegression(
             max_iter=1000,
-            multi_class="multinomial",
             solver="lbfgs",
             C=1.0,
         )
@@ -215,7 +237,7 @@ class StackingEnsemble:
         accuracy = float(np.mean(preds == y))
 
         logger.info("Meta-learner training complete. Accuracy: %.4f", accuracy)
-        return {"accuracy": accuracy, "n_samples": len(y)}
+        return {"accuracy": accuracy, "n_samples": int(len(y))}
 
     # ------------------------------------------------------------------
     # Internal
