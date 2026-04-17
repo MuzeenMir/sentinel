@@ -187,6 +187,14 @@ for key in list(sys.modules):
 
 import app as orch_app  # noqa: E402
 
+# Restore auth_middleware immediately so test modules collected/run after us
+# don't see the MagicMock stub we installed at line 134. orch_app has already
+# captured the passthrough decorators at import time above.
+if _old_auth_middleware is None:
+    sys.modules.pop("auth_middleware", None)
+else:
+    sys.modules["auth_middleware"] = _old_auth_middleware
+
 # Wire the orchestrator's module-level instances to our mocks.
 orch_app.rule_generator = _mock_rule_generator
 orch_app.vendor_factory = _mock_vendor_factory
@@ -199,16 +207,6 @@ orch_app.redis_client = _fake_redis
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
-
-@pytest.fixture(autouse=True, scope="module")
-def _restore_auth_middleware_after_module():
-    """Restore sys.modules['auth_middleware'] after this module's tests finish."""
-    yield
-    if _old_auth_middleware is None:
-        sys.modules.pop("auth_middleware", None)
-    else:
-        sys.modules["auth_middleware"] = _old_auth_middleware
-
 
 @pytest.fixture(autouse=True)
 def _reset():

@@ -14,7 +14,7 @@ import threading
 import time
 from typing import Any, Callable, Optional
 
-from ..schemas.events import EVENT_STRUCT_MAP, PYTHON_EVENT_MAP, decode_event
+from ..schemas.events import decode_event
 
 logger = logging.getLogger("sentinel.ebpf.ringbuf")
 

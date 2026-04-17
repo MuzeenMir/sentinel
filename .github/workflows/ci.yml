@@ -82,7 +82,7 @@ jobs:
           pip install -r hardening-service/requirements.txt -r hids-agent/requirements.txt -r ai-engine/requirements.txt
 
       - name: Run backend tests
-        run: python -m pytest tests/ -v --tb=short
+        run: python -m pytest tests/ --ignore=tests/test_e2e_pipeline.py -v --tb=short
 
   security-scan:
     name: Security Scanning

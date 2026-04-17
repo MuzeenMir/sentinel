@@ -154,7 +154,7 @@ class TestDRLEnvironment:
     def test_env_reset_returns_valid_obs(self):
         sys.path.insert(0, str(_backend_root / "drl-engine"))
         from environment.network_env import NetworkSecurityEnv
-        env = NetworkSecurityEnv(state_dim=12, action_dim=8)
+        env = NetworkSecurityEnv()
         obs, info = env.reset()
         assert obs.shape == (12,)
         assert obs.dtype == np.float32
@@ -162,7 +162,7 @@ class TestDRLEnvironment:
     def test_env_step_returns_5_tuple(self):
         sys.path.insert(0, str(_backend_root / "drl-engine"))
         from environment.network_env import NetworkSecurityEnv
-        env = NetworkSecurityEnv(state_dim=12, action_dim=8)
+        env = NetworkSecurityEnv()
         env.reset()
         obs, reward, terminated, truncated, info = env.step(0)
         assert obs.shape == (12,)
@@ -174,7 +174,7 @@ class TestDRLEnvironment:
     def test_env_episode_terminates(self):
         sys.path.insert(0, str(_backend_root / "drl-engine"))
         from environment.network_env import NetworkSecurityEnv
-        env = NetworkSecurityEnv(state_dim=12, action_dim=8)
+        env = NetworkSecurityEnv()
         env._max_steps = 10
         env.reset()
         done = False

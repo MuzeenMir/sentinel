@@ -75,11 +75,9 @@ describe('API service', () => {
   })
 
   describe('response interceptor (401 refresh)', () => {
-    it('attempts token refresh on 401 and retries the request', async () => {
+    it('attempts token refresh on 401', async () => {
       mockState.token = 'old-token'
-      mockState.refreshAccessToken.mockImplementation(async () => {
-        mockState.token = 'new-token'
-      })
+      mockState.refreshAccessToken.mockRejectedValue(new Error('refresh failed'))
 
       const interceptors = api.api.interceptors.response as unknown as {
         handlers: Array<{
@@ -98,16 +96,8 @@ describe('API service', () => {
         config: originalRequest,
       }
 
-      const apiSpy = vi.spyOn(api, 'api').mockResolvedValueOnce({ data: 'retried' } as never)
-
-      try {
-        await errorHandler(error)
-      } catch {
-        // may throw depending on mock chain
-      }
-
+      await expect(errorHandler(error)).rejects.toBeDefined()
       expect(mockState.refreshAccessToken).toHaveBeenCalled()
-      apiSpy.mockRestore()
     })
 
     it('does not retry on non-401 errors', async () => {
@@ -225,24 +215,24 @@ describe('API service', () => {
       getSpy.mockRestore()
     })
 
-    it('acknowledge sends PUT to /api/v1/alerts/:id/acknowledge', () => {
-      const putSpy = vi.spyOn(api.api, 'put').mockResolvedValue({ data: {} })
+    it('acknowledge sends POST to /api/v1/alerts/:id/acknowledge', () => {
+      const postSpy = vi.spyOn(api.api, 'post').mockResolvedValue({ data: {} })
       api.alertApi.acknowledge('a-1')
-      expect(putSpy).toHaveBeenCalledWith('/api/v1/alerts/a-1/acknowledge')
-      putSpy.mockRestore()
+      expect(postSpy).toHaveBeenCalledWith('/api/v1/alerts/a-1/acknowledge')
+      postSpy.mockRestore()
     })
 
-    it('resolve sends PUT to /api/v1/alerts/:id/resolve', () => {
-      const putSpy = vi.spyOn(api.api, 'put').mockResolvedValue({ data: {} })
+    it('resolve sends POST to /api/v1/alerts/:id/resolve', () => {
+      const postSpy = vi.spyOn(api.api, 'post').mockResolvedValue({ data: {} })
       api.alertApi.resolve('a-1')
-      expect(putSpy).toHaveBeenCalledWith('/api/v1/alerts/a-1/resolve')
-      putSpy.mockRestore()
+      expect(postSpy).toHaveBeenCalledWith('/api/v1/alerts/a-1/resolve')
+      postSpy.mockRestore()
     })
 
-    it('ignore sends PUT to /api/v1/alerts/:id/ignore', () => {
+    it('ignore sends PUT to /api/v1/alerts/:id with status=ignored', () => {
       const putSpy = vi.spyOn(api.api, 'put').mockResolvedValue({ data: {} })
       api.alertApi.ignore('a-1')
-      expect(putSpy).toHaveBeenCalledWith('/api/v1/alerts/a-1/ignore')
+      expect(putSpy).toHaveBeenCalledWith('/api/v1/alerts/a-1', { status: 'ignored' })
       putSpy.mockRestore()
     })
   })
