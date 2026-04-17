@@ -41,6 +41,11 @@ app.config['MODEL_PATH'] = os.environ.get('MODEL_PATH', '/models/drl')
 app.config['POLICY_SERVICE_URL'] = os.environ.get('POLICY_SERVICE_URL', 'http://policy-orchestrator:5004')
 app.config['AI_ENGINE_URL'] = os.environ.get('AI_ENGINE_URL', 'http://ai-engine:5003')
 
+# Shadow mode: when true, decisions are logged + returned with shadow=True flag,
+# but downstream consumers (policy-orchestrator) are expected to skip enforcement.
+# Default false here for backward compat, but docker-compose / Helm now set true.
+app.config['DRL_SHADOW_MODE'] = os.environ.get('DRL_SHADOW_MODE', 'false').lower() == 'true'
+
 # Initialize Redis
 redis_client = redis.from_url(app.config['REDIS_URL'])
 
@@ -160,12 +165,15 @@ def get_policy_decision():
         # Generate decision ID
         decision_id = f"drl_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{data.get('detection_id', 'unknown')[-6:]}"
         
+        shadow = app.config['DRL_SHADOW_MODE']
         # Build response
         decision = {
             'decision_id': decision_id,
             'action': decoded_action['action'],
             'action_code': int(action),
             'confidence': confidence,
+            'shadow': shadow,
+            'enforce': not shadow,
             'parameters': {
                 'target': {
                     'source_ip': data.get('source_ip'),
@@ -181,6 +189,11 @@ def get_policy_decision():
             },
             'timestamp': datetime.utcnow().isoformat()
         }
+        if shadow:
+            logger.info(
+                "DRL shadow decision %s action=%s conf=%.3f (NOT enforced)",
+                decision_id, decoded_action['action'], confidence,
+            )
         
         # Store decision for learning
         store_decision(decision, data)
@@ -204,22 +217,26 @@ def get_batch_decisions():
         if not data or 'detections' not in data:
             return jsonify({'error': 'detections array is required'}), 400
         
+        shadow = app.config['DRL_SHADOW_MODE']
         decisions = []
         for detection in data['detections']:
             state = state_builder.build_state(detection)
             action, action_probs = ppo_agent.select_action(state)
             decoded = action_space.decode_action(action)
-            
+
             decisions.append({
                 'detection_id': detection.get('detection_id'),
                 'action': decoded['action'],
                 'confidence': float(action_probs[action]),
-                'parameters': decoded.get('parameters', {})
+                'parameters': decoded.get('parameters', {}),
+                'shadow': shadow,
+                'enforce': not shadow,
             })
-        
+
         return jsonify({
             'decisions': decisions,
-            'total': len(decisions)
+            'total': len(decisions),
+            'shadow_mode': shadow,
         }), 200
     
     except Exception as e:

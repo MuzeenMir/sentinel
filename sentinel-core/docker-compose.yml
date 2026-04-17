@@ -305,6 +305,9 @@ services:
       - POLICY_SERVICE_URL=http://policy-orchestrator:5004
       - MODEL_PATH=/models/drl
       - AUTH_SERVICE_URL=http://auth-service:5000
+      # Shadow mode: decisions logged + tagged shadow=true, NOT enforced.
+      # Promotion ladder: shadow → canary → enforce. See docs/RISK-TIERS.md.
+      - DRL_SHADOW_MODE=${DRL_SHADOW_MODE:-true}
     volumes:
       - ai_models:/models
     depends_on:

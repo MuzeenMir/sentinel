@@ -290,7 +290,21 @@ def apply_drl_decision():
         
         if not data or 'action' not in data or 'target' not in data:
             return jsonify({'error': 'action and target are required'}), 400
-        
+
+        # Shadow-mode guard: refuse to enforce decisions explicitly tagged shadow=true
+        # by the DRL engine. Caller must promote out of shadow before enforcement.
+        if data.get('shadow') is True or data.get('enforce') is False:
+            logger.info(
+                "Refusing to enforce shadow DRL decision %s (action=%s)",
+                data.get('decision_id'), data['action'],
+            )
+            return jsonify({
+                'message': 'shadow decision logged, not enforced',
+                'shadow': True,
+                'decision_id': data.get('decision_id'),
+                'action': data['action'],
+            }), 202
+
         # Convert DRL decision to policy
         policy_data = {
             'name': f"DRL Decision {data.get('decision_id', 'unknown')}",
