@@ -155,6 +155,10 @@ class IptablesAdapter(FirewallAdapter):
         except Exception as e:
             return {'success': False, 'error': str(e)}
     
+    def translate_rules(self, rules: List[FirewallRule]) -> List[List[str]]:
+        """Translate a list of FirewallRule into iptables command argvs."""
+        return [self._build_add_command(r) for r in rules]
+
     def _build_add_command(self, rule: FirewallRule) -> List[str]:
         """Build iptables add command from rule."""
         cmd = ['iptables', '-A', self.CHAIN_NAME]

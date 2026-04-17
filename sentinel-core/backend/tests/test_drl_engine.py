@@ -127,53 +127,9 @@ def _install_torch_stub():
 
 _install_torch_stub()
 
-def _make_enforcing_auth_mod():
-    """Return a proper auth_middleware module that enforces JWT auth via _verify_token."""
-    import types as _t
-    from functools import wraps as _w
-    _mod = _t.ModuleType("auth_middleware")
-
-    def _verify_token(token):
-        return None
-
-    _mod._verify_token = _verify_token
-
-    def require_auth(fn):
-        @_w(fn)
-        def decorated(*args, **kwargs):
-            from flask import g, jsonify, request
-            auth = request.headers.get("Authorization", "")
-            if not auth.startswith("Bearer "):
-                return jsonify({"error": "Unauthorized"}), 401
-            tok = auth[7:]
-            _m = sys.modules.get("auth_middleware")
-            user = _m._verify_token(tok)
-            if not user:
-                return jsonify({"error": "Unauthorized"}), 401
-            g.current_user = user
-            return fn(*args, **kwargs)
-        return decorated
-
-    def require_role(*roles):
-        def decorator(fn):
-            @_w(fn)
-            def inner(*args, **kwargs):
-                from flask import g, jsonify
-                user = getattr(g, "current_user", None)
-                if not user:
-                    return jsonify({"error": "Unauthorized"}), 401
-                if roles and user.get("role") not in roles:
-                    return jsonify({"error": "Forbidden"}), 403
-                return fn(*args, **kwargs)
-            return inner
-        return decorator
-
-    _mod.require_auth = require_auth
-    _mod.require_role = require_role
-    return _mod
-
-
-sys.modules["auth_middleware"] = _make_enforcing_auth_mod()
+# Uses the real auth_middleware; _bypass_auth fixture patches per-test.
+# Global sys.modules replacement removed to prevent leakage into other
+# test modules.
 
 _mock_redis_client = MagicMock()
 _redis_patcher = patch("redis.from_url", return_value=_mock_redis_client)
@@ -189,6 +145,9 @@ _spec = _ilu.spec_from_file_location(
 drl_app = _ilu.module_from_spec(_spec)
 sys.modules["sentinel_drl_engine_app"] = drl_app
 _spec.loader.exec_module(drl_app)
+
+# Stop patcher so it doesn't leak into other test modules' sessions.
+_redis_patcher.stop()
 
 from agent.state_builder import StateBuilder  # noqa: E402
 from agent.action_space import ActionSpace, ActionType  # noqa: E402

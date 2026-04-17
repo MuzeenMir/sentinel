@@ -38,7 +38,10 @@ _MULTI_TENANT = os.environ.get("MULTI_TENANT_MODE", "false").lower() == "true"
 
 def get_tenant_id() -> int | None:
     """Return the current request's tenant ID, or *None* in single-tenant mode."""
-    return getattr(g, "tenant_id", _DEFAULT_TENANT_ID)
+    try:
+        return getattr(g, "tenant_id", _DEFAULT_TENANT_ID)
+    except RuntimeError:
+        return _DEFAULT_TENANT_ID
 
 
 def require_tenant(f):

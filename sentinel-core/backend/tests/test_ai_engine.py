@@ -124,53 +124,11 @@ def _install_torch_stub():
 
 _install_torch_stub()
 
-def _make_enforcing_auth_mod():
-    """Return a proper auth_middleware module that enforces JWT auth via _verify_token."""
-    import types as _t
-    from functools import wraps as _w
-    _mod = _t.ModuleType("auth_middleware")
-
-    def _verify_token(token):
-        return None
-
-    _mod._verify_token = _verify_token
-
-    def require_auth(fn):
-        @_w(fn)
-        def decorated(*args, **kwargs):
-            from flask import g, jsonify, request
-            auth = request.headers.get("Authorization", "")
-            if not auth.startswith("Bearer "):
-                return jsonify({"error": "Unauthorized"}), 401
-            tok = auth[7:]
-            _m = sys.modules.get("auth_middleware")
-            user = _m._verify_token(tok)
-            if not user:
-                return jsonify({"error": "Unauthorized"}), 401
-            g.current_user = user
-            return fn(*args, **kwargs)
-        return decorated
-
-    def require_role(*roles):
-        def decorator(fn):
-            @_w(fn)
-            def inner(*args, **kwargs):
-                from flask import g, jsonify
-                user = getattr(g, "current_user", None)
-                if not user:
-                    return jsonify({"error": "Unauthorized"}), 401
-                if roles and user.get("role") not in roles:
-                    return jsonify({"error": "Forbidden"}), 403
-                return fn(*args, **kwargs)
-            return inner
-        return decorator
-
-    _mod.require_auth = require_auth
-    _mod.require_role = require_role
-    return _mod
-
-
-sys.modules["auth_middleware"] = _make_enforcing_auth_mod()
+# Use the real auth_middleware; the _bypass_auth autouse fixture below
+# patches _verify_token per-test to return a fake admin user. Previously
+# this module replaced sys.modules["auth_middleware"] with a stub, which
+# leaked into other test modules (hardening-service, hids-agent) that
+# capture require_auth at import time → spurious 401 responses.
 
 _mock_redis_client = MagicMock()
 _redis_patcher = patch("redis.from_url", return_value=_mock_redis_client)
@@ -186,6 +144,11 @@ _spec = _ilu.spec_from_file_location(
 ai_app = _ilu.module_from_spec(_spec)
 sys.modules["sentinel_ai_engine_app"] = ai_app
 _spec.loader.exec_module(ai_app)
+
+# Stop the patcher now that the app has captured its redis_client;
+# leaving it active across the full pytest session overrides other
+# test modules' redis patches and causes cross-file pollution.
+_redis_patcher.stop()
 
 import redis as _redis_mod  # noqa: E402
 
@@ -336,6 +299,8 @@ def mock_feature_extractors():
 def client(mock_redis, mock_detectors, mock_ensemble, mock_prediction_service):
     """Flask test client with all external deps mocked."""
     ai_app.app.config["TESTING"] = True
+    # Prevent before_request hook from re-initializing models and clobbering mocks.
+    ai_app._models_initialized = True
     with ai_app.app.test_client() as c:
         yield c
 
@@ -344,6 +309,7 @@ def client(mock_redis, mock_detectors, mock_ensemble, mock_prediction_service):
 def bare_client(mock_redis):
     """Test client with only Redis mocked (no model stubs)."""
     ai_app.app.config["TESTING"] = True
+    ai_app._models_initialized = True
     with ai_app.app.test_client() as c:
         yield c
 

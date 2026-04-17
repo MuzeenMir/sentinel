@@ -83,51 +83,9 @@ import types as _types
 from functools import wraps as _wraps
 
 
-def _make_enforcing_auth_mod():
-    """Return a proper auth_middleware module that enforces JWT auth via _verify_token."""
-    _mod = _types.ModuleType("auth_middleware")
-
-    def _verify_token(token):  # default: reject
-        return None
-
-    _mod._verify_token = _verify_token
-
-    def require_auth(fn):
-        @_wraps(fn)
-        def decorated(*args, **kwargs):
-            from flask import g, jsonify, request
-            auth = request.headers.get("Authorization", "")
-            if not auth.startswith("Bearer "):
-                return jsonify({"error": "Unauthorized"}), 401
-            tok = auth[7:]
-            _m = sys.modules.get("auth_middleware")
-            user = _m._verify_token(tok)
-            if not user:
-                return jsonify({"error": "Unauthorized"}), 401
-            g.current_user = user
-            return fn(*args, **kwargs)
-        return decorated
-
-    def require_role(*roles):
-        def decorator(fn):
-            @_wraps(fn)
-            def inner(*args, **kwargs):
-                from flask import g, jsonify
-                user = getattr(g, "current_user", None)
-                if not user:
-                    return jsonify({"error": "Unauthorized"}), 401
-                if roles and user.get("role") not in roles:
-                    return jsonify({"error": "Forbidden"}), 403
-                return fn(*args, **kwargs)
-            return inner
-        return decorator
-
-    _mod.require_auth = require_auth
-    _mod.require_role = require_role
-    return _mod
-
-
-sys.modules["auth_middleware"] = _make_enforcing_auth_mod()
+# Uses the real auth_middleware; _bypass_auth autouse fixture below
+# patches _verify_token per-test. Global sys.modules replacement removed
+# to avoid leaking stubs into later test modules.
 
 _mock_redis_client = MagicMock()
 _mock_redis_client.ping.return_value = True
@@ -147,6 +105,9 @@ xdp_app = importlib.util.module_from_spec(_spec)
 sys.modules["sentinel_xdp_app"] = xdp_app
 
 _spec.loader.exec_module(xdp_app)
+
+# Stop patcher so it doesn't leak into other test modules' sessions.
+_redis_patcher.stop()
 
 
 # ===================================================================
@@ -248,7 +209,7 @@ class TestMetrics:
         collector.stats.flows_exported = 42
         collector.stats.events_published = 40
         collector.stats.events_dropped = 2
-        resp = client.get("/metrics", headers=auth_headers)
+        resp = client.get("/stats", headers=auth_headers)
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["flows_exported"] == 42
@@ -256,26 +217,26 @@ class TestMetrics:
         assert data["events_dropped"] == 2
 
     def test_includes_uptime(self, client, auth_headers, collector):
-        data = client.get("/metrics", headers=auth_headers).get_json()
+        data = client.get("/stats", headers=auth_headers).get_json()
         assert "uptime_seconds" in data
         assert data["uptime_seconds"] >= 0
 
     def test_events_per_second_calculated(self, client, auth_headers, collector):
         collector.stats.events_published = 100
-        data = client.get("/metrics", headers=auth_headers).get_json()
+        data = client.get("/stats", headers=auth_headers).get_json()
         assert data["events_per_second"] >= 0
 
     def test_last_error_reported(self, client, auth_headers, collector):
         collector.stats.last_error = "test error"
-        data = client.get("/metrics", headers=auth_headers).get_json()
+        data = client.get("/stats", headers=auth_headers).get_json()
         assert data["last_error"] == "test error"
 
     def test_last_error_null_when_clean(self, client, auth_headers, collector):
-        data = client.get("/metrics", headers=auth_headers).get_json()
+        data = client.get("/stats", headers=auth_headers).get_json()
         assert data["last_error"] is None
 
     def test_requires_auth(self, bare_client):
-        resp = bare_client.get("/metrics")
+        resp = bare_client.get("/stats")
         assert resp.status_code == 401
 
 

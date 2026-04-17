@@ -273,7 +273,6 @@ def health():
 
 
 @app.route("/stats", methods=["GET"])
-@app.route("/metrics", methods=["GET"])
 @require_auth
 @require_tenant
 def stats():

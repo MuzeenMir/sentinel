@@ -24,6 +24,9 @@ sentinel-core/backend/ebpf-lib/programs/**/*.o
 sentinel-core/backend/ebpf-lib/vmlinux.h
 sentinel-core/backend/ebpf_lib
 
+# Runtime hyphen→underscore symlink created by backend/conftest.py
+sentinel-core/backend/firewall_adapters
+
 # IDE
 .vscode/
 .idea/

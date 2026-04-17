@@ -336,3 +336,13 @@ def event_to_json(event: Any) -> str:
     IntEnum fields are serialized by name for readability.
     """
     return json.dumps(asdict(event), cls=_EventEncoder, separators=(",", ":"))
+
+
+PYTHON_EVENT_MAP = {
+    EventType.NETWORK_FLOW: NetworkFlowEvent,
+    EventType.PROCESS_EXEC: ProcessExecEvent,
+    EventType.FILE_ACCESS: FileAccessEvent,
+    EventType.NETWORK_CONNECT: NetworkConnectEvent,
+    EventType.PRIVILEGE_ESCALATION: PrivEscalationEvent,
+    EventType.MODULE_LOAD: ModuleLoadEvent,
+}
