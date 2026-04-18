@@ -69,10 +69,14 @@ def upgrade():
             sa.CheckConstraint("plan IN ('basic', 'professional', 'enterprise')", name="ck_tenants_plan"),
         )
 
-    # Default tenant row (safe with init.sql schema — name is UNIQUE there too)
+    # Default tenant row (safe with init.sql schema — name is UNIQUE there too).
+    # init.sql declares tenant_id as NOT NULL with no server default, so we
+    # must populate it explicitly; gen_random_uuid() is built into Postgres
+    # 13+ and its UUID return value casts cleanly into init.sql's VARCHAR(36)
+    # column as well as the migration-created UUID column.
     op.execute("""
-        INSERT INTO tenants (name, display_name, plan)
-        VALUES ('default', 'Default Organization', 'enterprise')
+        INSERT INTO tenants (tenant_id, name, display_name, plan)
+        VALUES (gen_random_uuid(), 'default', 'Default Organization', 'enterprise')
         ON CONFLICT (name) DO NOTHING
     """)
 
