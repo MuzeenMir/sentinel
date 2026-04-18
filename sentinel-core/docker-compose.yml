@@ -39,7 +39,15 @@ services:
       dockerfile: auth-service/Dockerfile
     container_name: sentinel-db-migrate
     environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-sentinel}:${POSTGRES_PASSWORD:-sentinel_password}@postgres:5432/${POSTGRES_DB:-sentinel_db}
+      # Point at the Postgres service via its Docker network hostname
+      # (container_name). Must not be `localhost` — that would resolve
+      # to the db-migrate container itself inside the Compose network.
+      - POSTGRES_HOST=sentinel-postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER:-sentinel}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-sentinel_password}
+      - POSTGRES_DB=${POSTGRES_DB:-sentinel_db}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-sentinel}:${POSTGRES_PASSWORD:-sentinel_password}@sentinel-postgres:5432/${POSTGRES_DB:-sentinel_db}
     depends_on:
       postgres:
         condition: service_healthy

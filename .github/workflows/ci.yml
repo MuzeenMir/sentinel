@@ -6,6 +6,12 @@ on:
   pull_request:
     branches: [main, develop]
 
+# Opt every action on this workflow into Node.js 24 ahead of the
+# forced cutover (Sep 2026). Silences the Node 20 deprecation warning
+# emitted by actions/checkout@v4, actions/setup-node@v4, etc.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   frontend:
     name: Frontend
@@ -319,6 +325,19 @@ jobs:
           docker compose up -d --build \
             postgres redis db-migrate auth-service api-gateway \
             ai-engine drl-engine policy-orchestrator alert-service
+
+      - name: Dump db-migrate logs on failure
+        if: failure()
+        run: |
+          echo "::group::sentinel-db-migrate logs"
+          docker compose logs db-migrate || true
+          echo "::endgroup::"
+          echo "::group::sentinel-postgres logs"
+          docker compose logs postgres || true
+          echo "::endgroup::"
+          echo "::group::docker compose ps"
+          docker compose ps || true
+          echo "::endgroup::"
 
       - name: Wait for api-gateway healthy (max 120s)
         run: |
