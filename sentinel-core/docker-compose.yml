@@ -4,7 +4,7 @@ services:
     image: postgres:13
     container_name: sentinel-postgres
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-sentinel_db}
+      POSTGRES_DB: sentinel
       POSTGRES_USER: ${POSTGRES_USER:-sentinel}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sentinel_password}
     ports:
@@ -46,8 +46,8 @@ services:
       - POSTGRES_PORT=5432
       - POSTGRES_USER=${POSTGRES_USER:-sentinel}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-sentinel_password}
-      - POSTGRES_DB=${POSTGRES_DB:-sentinel_db}
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-sentinel}:${POSTGRES_PASSWORD:-sentinel_password}@sentinel-postgres:5432/${POSTGRES_DB:-sentinel_db}
+      - POSTGRES_DB=${POSTGRES_DB:-sentinel}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-sentinel}:${POSTGRES_PASSWORD:-sentinel_password}@sentinel-postgres:5432/${POSTGRES_DB:-sentinel}
     depends_on:
       postgres:
         condition: service_healthy
@@ -66,7 +66,7 @@ services:
     ports:
       - "5000:5000"
     environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-sentinel}:${POSTGRES_PASSWORD:-sentinel_password}@postgres:5432/${POSTGRES_DB:-sentinel_db}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-sentinel}:${POSTGRES_PASSWORD:-sentinel_password}@postgres:5432/${POSTGRES_DB:-sentinel}
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-change-this-in-production}
       - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}

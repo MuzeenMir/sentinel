@@ -14,7 +14,7 @@ RUN groupadd -r sentinel && useradd -r -g sentinel -d /app -s /sbin/nologin sent
 
 WORKDIR /app
 
-COPY auth_middleware.py observability.py metrics.py resilience.py tenant_middleware.py ./
+COPY auth_middleware.py observability.py metrics.py resilience.py tenant_middleware.py audit_logger.py ./
 COPY integrations/ integrations/
 
 COPY auth-service/requirements.txt .
@@ -30,6 +30,7 @@ USER sentinel
 WORKDIR /app/auth-service
 
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
 EXPOSE 5000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
