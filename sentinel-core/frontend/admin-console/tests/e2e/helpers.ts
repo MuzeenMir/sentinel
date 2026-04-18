@@ -115,7 +115,10 @@ const ALERT_SEED = [
 const ALERT_STATS = { new: 2, acknowledged: 1, resolved: 0, ignored: 0 }
 
 export const mockAlertRoutes = async (page: Page) => {
-  await page.route(/\/api\/v1\/alerts(?:\/|$)/, async (route) => {
+  // Match /api/v1/alerts, /api/v1/alerts?x=y, /api/v1/alerts/stats,
+  // /api/v1/alerts/ALR-1/acknowledge, etc. The `?` alternative is the fix
+  // for list requests carrying query params (e.g. ?severity=critical).
+  await page.route(/\/api\/v1\/alerts(?:$|[/?])/, async (route) => {
     const url = route.request().url()
     const method = route.request().method()
 
