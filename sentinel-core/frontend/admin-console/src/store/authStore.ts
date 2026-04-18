@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 import { authApi } from '../services/api'
 import type { User } from '../types'
 
@@ -18,7 +19,8 @@ interface AuthState {
 }
 
 export const useAuthStore = create<AuthState>()(
-  (set, get) => ({
+  persist(
+    (set, get) => ({
     isAuthenticated: false,
     user: null,
     token: null,
@@ -109,5 +111,16 @@ export const useAuthStore = create<AuthState>()(
         return false
       }
     },
-  })
+    }),
+    {
+      name: 'sentinel-auth',
+      version: 0,
+      partialize: (state) => ({
+        isAuthenticated: state.isAuthenticated,
+        user: state.user,
+        token: state.token,
+        refreshToken: state.refreshToken,
+      }),
+    },
+  ),
 )
