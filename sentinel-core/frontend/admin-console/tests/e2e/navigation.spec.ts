@@ -4,11 +4,13 @@ import {
   mockAllApiRoutes,
   mockAuthRoutes,
   mockDashboardRoutes,
+  mockFallback,
 } from './helpers'
 
 test.describe('Navigation — sidebar & auth guards', () => {
   test.describe('authenticated navigation', () => {
     test.beforeEach(async ({ page }) => {
+      await mockFallback(page)
       await mockAllApiRoutes(page)
       await seedAuthState(page)
     })
@@ -41,7 +43,7 @@ test.describe('Navigation — sidebar & auth guards', () => {
       await page.goto('/alerts')
 
       const alertsLink = page.locator('aside a', { hasText: 'Alerts' }).first()
-      await expect(alertsLink).toHaveClass(/bg-blue-600/)
+      await expect(alertsLink).toHaveAttribute('aria-current', 'page')
     })
 
     test('header shows the active workspace name', async ({ page }) => {
@@ -54,6 +56,7 @@ test.describe('Navigation — sidebar & auth guards', () => {
 
   test.describe('unauthenticated access', () => {
     test.beforeEach(async ({ page }) => {
+      await mockFallback(page)
       await mockAuthRoutes(page)
     })
 
@@ -81,6 +84,7 @@ test.describe('Navigation — sidebar & auth guards', () => {
 
   test.describe('post-login redirect', () => {
     test('after login, user lands on dashboard', async ({ page }) => {
+      await mockFallback(page)
       await mockAuthRoutes(page)
       await mockDashboardRoutes(page)
 
@@ -102,6 +106,7 @@ test.describe('Navigation — sidebar & auth guards', () => {
 
   test.describe('user profile menu', () => {
     test.beforeEach(async ({ page }) => {
+      await mockFallback(page)
       await mockAllApiRoutes(page)
       await seedAuthState(page)
     })

@@ -20,6 +20,7 @@ export default defineConfig({
       VITE_APP_ENV: 'test',
       VITE_DEMO_AUTH: 'false',
       VITE_API_URL: '',
+      VITE_E2E: '1',
     },
   },
 })

@@ -1,8 +1,9 @@
 import { test, expect } from '@playwright/test'
-import { mockAlertRoutes, mockAuthRoutes, seedAuthState } from './helpers'
+import { mockAlertRoutes, mockAuthRoutes, mockFallback, seedAuthState } from './helpers'
 
 test.describe('Alerts — triage workflow', () => {
   test.beforeEach(async ({ page }) => {
+    await mockFallback(page)
     await mockAuthRoutes(page)
     await mockAlertRoutes(page)
     await seedAuthState(page)
@@ -16,9 +17,10 @@ test.describe('Alerts — triage workflow', () => {
     const rows = page.locator('table tbody tr')
     await expect(rows).toHaveCount(3)
 
-    await expect(page.getByText('Brute Force')).toBeVisible()
-    await expect(page.getByText('Port Scan')).toBeVisible()
-    await expect(page.getByText('Malware Beacon')).toBeVisible()
+    const tbody = page.locator('table tbody')
+    await expect(tbody.getByText('Brute Force').first()).toBeVisible()
+    await expect(tbody.getByText('Port Scan').first()).toBeVisible()
+    await expect(tbody.getByText('Malware Beacon').first()).toBeVisible()
 
     const criticalBadge = rows.nth(0).locator('.badge-critical', { hasText: 'critical' })
     await expect(criticalBadge).toBeVisible()
@@ -30,9 +32,9 @@ test.describe('Alerts — triage workflow', () => {
   test('displays alert stats cards', async ({ page }) => {
     await page.goto('/alerts')
 
-    await expect(page.getByText('New')).toBeVisible()
-    await expect(page.getByText('Acknowledged')).toBeVisible()
-    await expect(page.getByText('Resolved')).toBeVisible()
+    await expect(page.getByText('New', { exact: true }).first()).toBeVisible()
+    await expect(page.getByText('Acknowledged', { exact: true }).first()).toBeVisible()
+    await expect(page.getByText('Resolved', { exact: true }).first()).toBeVisible()
   })
 
   test('filters alerts by severity', async ({ page }) => {
@@ -42,8 +44,9 @@ test.describe('Alerts — triage workflow', () => {
     const severitySelect = page.locator('select').nth(0)
     await severitySelect.selectOption('critical')
 
-    await expect(page.getByText('Brute Force')).toBeVisible()
-    await expect(page.getByText('Port Scan')).not.toBeVisible()
+    const tbody = page.locator('table tbody')
+    await expect(tbody.getByText('Brute Force').first()).toBeVisible()
+    await expect(tbody.getByText('Port Scan')).toHaveCount(0)
   })
 
   test('filters alerts by status', async ({ page }) => {
@@ -53,8 +56,9 @@ test.describe('Alerts — triage workflow', () => {
     const statusSelect = page.locator('select').nth(1)
     await statusSelect.selectOption('acknowledged')
 
-    await expect(page.getByText('Malware Beacon')).toBeVisible()
-    await expect(page.getByText('Brute Force')).not.toBeVisible()
+    const tbody = page.locator('table tbody')
+    await expect(tbody.getByText('Malware Beacon').first()).toBeVisible()
+    await expect(tbody.getByText('Brute Force')).toHaveCount(0)
   })
 
   test('acknowledges an alert', async ({ page }) => {

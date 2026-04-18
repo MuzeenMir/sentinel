@@ -1,8 +1,9 @@
 import { test, expect } from '@playwright/test'
-import { mockPolicyRoutes, mockAuthRoutes, seedAuthState } from './helpers'
+import { mockPolicyRoutes, mockAuthRoutes, mockFallback, seedAuthState } from './helpers'
 
 test.describe('Policies — management workflow', () => {
   test.beforeEach(async ({ page }) => {
+    await mockFallback(page)
     await mockAuthRoutes(page)
     await mockPolicyRoutes(page)
     await seedAuthState(page)
@@ -40,7 +41,7 @@ test.describe('Policies — management workflow', () => {
       (req) => req.url().includes('/api/v1/policies') && req.method() === 'POST',
     )
 
-    await page.getByRole('button', { name: 'Create Policy' }).click()
+    await page.locator('.fixed').getByRole('button', { name: 'Create Policy', exact: true }).click()
     const req = await createReq
     const body = req.postDataJSON()
     expect(body.name).toBe('Block Telnet')
@@ -60,7 +61,7 @@ test.describe('Policies — management workflow', () => {
       (resp) => resp.url().includes('/api/v1/policies') && resp.request().method() === 'POST' && resp.status() === 201,
     )
 
-    await page.getByRole('button', { name: 'Create Policy' }).click()
+    await page.locator('.fixed').getByRole('button', { name: 'Create Policy', exact: true }).click()
     await createReq
 
     await expect(page.getByText('Policy created successfully.')).toBeVisible()

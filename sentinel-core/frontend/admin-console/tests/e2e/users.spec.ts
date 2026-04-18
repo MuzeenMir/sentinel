@@ -1,8 +1,9 @@
 import { test, expect } from '@playwright/test'
-import { mockUserRoutes, mockAuthRoutes, seedAuthState } from './helpers'
+import { mockUserRoutes, mockAuthRoutes, mockFallback, seedAuthState } from './helpers'
 
 test.describe('Users — management workflow', () => {
   test.beforeEach(async ({ page }) => {
+    await mockFallback(page)
     await mockAuthRoutes(page)
     await mockUserRoutes(page)
     await seedAuthState(page)
@@ -19,12 +20,13 @@ test.describe('Users — management workflow', () => {
   test('displays all seeded users in the table', async ({ page }) => {
     await page.goto('/users')
 
-    await expect(page.getByText('demo')).toBeVisible()
-    await expect(page.getByText('analyst')).toBeVisible()
-    await expect(page.getByText('viewer1')).toBeVisible()
+    const tbody = page.locator('table tbody')
+    await expect(tbody.getByText('demo', { exact: true }).first()).toBeVisible()
+    await expect(tbody.getByText('analyst', { exact: true }).first()).toBeVisible()
+    await expect(tbody.getByText('viewer1', { exact: true })).toBeVisible()
 
-    await expect(page.getByText('demo@sentinel.local')).toBeVisible()
-    await expect(page.getByText('analyst@sentinel.local')).toBeVisible()
+    await expect(tbody.getByText('demo@sentinel.local')).toBeVisible()
+    await expect(tbody.getByText('analyst@sentinel.local')).toBeVisible()
   })
 
   test('marks current user with (you) indicator', async ({ page }) => {

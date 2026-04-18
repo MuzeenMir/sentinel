@@ -1,8 +1,9 @@
 import { test, expect } from '@playwright/test'
-import { mockSettingsRoutes, mockAuthRoutes, seedAuthState } from './helpers'
+import { mockSettingsRoutes, mockAuthRoutes, mockFallback, seedAuthState } from './helpers'
 
 test.describe('Settings — persistence workflow', () => {
   test.beforeEach(async ({ page }) => {
+    await mockFallback(page)
     await mockAuthRoutes(page)
     await mockSettingsRoutes(page)
     await seedAuthState(page)

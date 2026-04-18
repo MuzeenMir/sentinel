@@ -329,6 +329,23 @@ export const mockAllApiRoutes = async (page: Page) => {
   await mockAuditRoutes(page)
 }
 
+/**
+ * Catch-all fallback that stubs every /api/** request not already handled by a
+ * more specific mock. Register BEFORE specific mocks — Playwright runs the
+ * most-recently-registered matching route first, so earlier registration
+ * means "tried last". Prevents the Vite dev proxy from reaching a
+ * non-existent backend and logging ECONNREFUSED.
+ */
+export const mockFallback = async (page: Page) => {
+  await page.route('**/api/**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({}),
+    })
+  })
+}
+
 /** Heading text that appears on the dashboard when loaded (used as post-login assertion). */
 const DASHBOARD_HEADING = 'Security Overview'
 

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { NavLink, useNavigate } from 'react-router-dom'
+import { NavLink, useNavigate, useLocation, Link } from 'react-router-dom'
 import {
   LayoutDashboard,
   Shield,
@@ -43,6 +43,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const { user, logout } = useAuthStore()
   const navigate = useNavigate()
+  const location = useLocation()
+  const activeNav = navigation.find((n) =>
+    n.to === '/' ? location.pathname === '/' : location.pathname.startsWith(n.to),
+  )
 
   const handleLogout = async () => {
     await logout()
@@ -111,6 +115,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </button>
 
           <div className="flex flex-1 items-center gap-3">
+            {activeNav && (
+              <span className="text-sm font-semibold text-slate-200">{activeNav.name}</span>
+            )}
             <div className="relative max-w-md flex-1">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
               <input
@@ -130,6 +137,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
           <div className="relative">
             <button
+              aria-label="User menu"
+              aria-haspopup="menu"
+              aria-expanded={userMenuOpen}
               className="flex items-center gap-2 text-sm text-slate-300 hover:text-white"
               onClick={() => setUserMenuOpen(!userMenuOpen)}
             >
@@ -146,17 +156,30 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   className="fixed inset-0 z-40"
                   onClick={() => setUserMenuOpen(false)}
                 />
-                <div className="absolute right-0 z-50 mt-2 w-48 rounded-lg border border-slate-700 bg-slate-800 py-1 shadow-xl">
+                <div
+                  role="menu"
+                  className="absolute right-0 z-50 mt-2 w-48 rounded-lg border border-slate-700 bg-slate-800 py-1 shadow-xl"
+                >
                   <div className="px-4 py-2 border-b border-slate-700">
                     <p className="text-sm font-medium text-white">{user?.username}</p>
                     <p className="text-xs text-slate-400">{user?.role}</p>
                   </div>
+                  <Link
+                    to="/settings"
+                    role="menuitem"
+                    onClick={() => setUserMenuOpen(false)}
+                    className="flex w-full items-center gap-2 px-4 py-2 text-sm text-slate-200 hover:bg-slate-700"
+                  >
+                    <Settings className="h-4 w-4" />
+                    Settings
+                  </Link>
                   <button
                     onClick={handleLogout}
+                    role="menuitem"
                     className="flex w-full items-center gap-2 px-4 py-2 text-sm text-red-400 hover:bg-slate-700"
                   >
                     <LogOut className="h-4 w-4" />
-                    Sign out
+                    Log out
                   </button>
                 </div>
               </>

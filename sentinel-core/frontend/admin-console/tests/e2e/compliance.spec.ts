@@ -1,8 +1,9 @@
 import { test, expect } from '@playwright/test'
-import { mockComplianceRoutes, mockAuthRoutes, seedAuthState } from './helpers'
+import { mockComplianceRoutes, mockAuthRoutes, mockFallback, seedAuthState } from './helpers'
 
 test.describe('Compliance — assessment workflow', () => {
   test.beforeEach(async ({ page }) => {
+    await mockFallback(page)
     await mockAuthRoutes(page)
     await mockComplianceRoutes(page)
     await seedAuthState(page)

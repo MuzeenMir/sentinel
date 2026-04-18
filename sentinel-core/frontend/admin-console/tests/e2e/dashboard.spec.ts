@@ -1,7 +1,8 @@
 import { test, expect } from '@playwright/test'
-import { mockDashboardRoutes, seedAuthState, gotoDashboard } from './helpers'
+import { mockDashboardRoutes, mockFallback, seedAuthState, gotoDashboard } from './helpers'
 
 test('dashboard renders key stats', async ({ page }) => {
+  await mockFallback(page)
   await mockDashboardRoutes(page)
   await seedAuthState(page)
   await gotoDashboard(page)

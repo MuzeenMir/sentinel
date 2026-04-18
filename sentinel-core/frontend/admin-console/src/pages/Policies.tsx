@@ -41,7 +41,7 @@ export function Policies() {
       setShowCreate(false)
       setForm({ ...EMPTY_FORM })
       setValidationError('')
-      setSuccessMsg('Policy created successfully')
+      setSuccessMsg('Policy created successfully.')
       setTimeout(() => setSuccessMsg(''), 5000)
     },
   })
