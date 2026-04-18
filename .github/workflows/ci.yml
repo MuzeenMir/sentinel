@@ -320,13 +320,64 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Bring up minimal smoke stack
+      # .env is gitignored, so Compose variable substitution falls back to
+      # defaults that do not match what the CI job expects. Materialize a
+      # CI-scoped .env that mirrors this job's env block so every service
+      # (db-migrate included) sees identical credentials and hostnames.
+      - name: Write CI .env for docker compose
         run: |
-          docker compose up -d --build \
+          cat > .env <<EOF
+          POSTGRES_USER=sentinel
+          POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+          POSTGRES_DB=sentinel_db
+          POSTGRES_HOST=sentinel-postgres
+          POSTGRES_PORT=5432
+          DATABASE_URL=postgresql://sentinel:${POSTGRES_PASSWORD}@sentinel-postgres:5432/sentinel_db
+          JWT_SECRET_KEY=${JWT_SECRET_KEY}
+          ADMIN_USERNAME=${ADMIN_USERNAME}
+          ADMIN_PASSWORD=${ADMIN_PASSWORD}
+          ADMIN_EMAIL=${ADMIN_EMAIL}
+          DRL_SHADOW_MODE=${DRL_SHADOW_MODE}
+          EOF
+          echo "::group::.env contents (password redacted)"
+          sed 's/\(PASSWORD=\).*/\1***/' .env
+          echo "::endgroup::"
+
+      - name: Build images used by the smoke stack
+        run: |
+          docker compose build \
             postgres redis db-migrate auth-service api-gateway \
             ai-engine drl-engine policy-orchestrator alert-service
 
-      - name: Dump db-migrate logs on failure
+      - name: Start Postgres + Redis only
+        run: docker compose up -d postgres redis
+
+      - name: Wait for Postgres to accept connections (pg_isready + drain)
+        run: |
+          # Postgres' healthcheck can flip to "healthy" while init scripts
+          # (init.sql) are still running in the background. Poll with
+          # pg_isready against the target database, then sleep to cover
+          # any residual init.sql writes before migrations fire.
+          for i in $(seq 1 30); do
+            if docker compose exec -T postgres pg_isready -U sentinel -d sentinel_db >/dev/null 2>&1; then
+              echo "postgres ready after ${i} attempts"
+              break
+            fi
+            sleep 2
+          done
+          sleep 5
+
+      - name: Run database migrations (foreground, propagate exit code)
+        run: |
+          # Foreground up with --exit-code-from makes the step fail with
+          # db-migrate's actual exit code (not a silent background crash)
+          # and streams alembic stdout directly into the workflow log.
+          docker compose up \
+            --exit-code-from db-migrate \
+            --abort-on-container-exit \
+            db-migrate
+
+      - name: Dump db-migrate + postgres logs on failure
         if: failure()
         run: |
           echo "::group::sentinel-db-migrate logs"
@@ -338,6 +389,12 @@ jobs:
           echo "::group::docker compose ps"
           docker compose ps || true
           echo "::endgroup::"
+
+      - name: Bring up remaining services
+        run: |
+          docker compose up -d \
+            auth-service api-gateway \
+            ai-engine drl-engine policy-orchestrator alert-service
 
       - name: Wait for api-gateway healthy (max 120s)
         run: |
