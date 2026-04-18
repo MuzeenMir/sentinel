@@ -77,9 +77,15 @@ jobs:
       - name: Install test dependencies
         run: pip install -r requirements-test.txt
 
-      - name: Install service deps (for tests that import hardening-service / hids-agent / ai-engine)
+      - name: Install service deps (for tests that import service modules)
         run: |
-          pip install -r hardening-service/requirements.txt -r hids-agent/requirements.txt -r ai-engine/requirements.txt
+          pip install \
+            -r hardening-service/requirements.txt \
+            -r hids-agent/requirements.txt \
+            -r ai-engine/requirements.txt \
+            -r auth-service/requirements.txt \
+            -r api-gateway/requirements.txt \
+            -r drl-engine/requirements.txt
 
       - name: Run backend tests
         run: python -m pytest tests/ --ignore=tests/test_e2e_pipeline.py -v --tb=short

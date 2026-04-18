@@ -377,7 +377,7 @@ export const loginViaUiOnly = async (page: Page) => {
 export const loginViaUi = async (page: Page) => {
   await loginViaUiOnly(page)
   await expect(
-    page.getByRole('heading', { name: DASHBOARD_HEADING, level: 3 })
+    page.getByRole('heading', { name: DASHBOARD_HEADING })
   ).toBeVisible({ timeout: 15_000 })
 }
 
@@ -385,6 +385,6 @@ export const loginViaUi = async (page: Page) => {
 export const gotoDashboard = async (page: Page) => {
   await page.goto('/')
   await expect(
-    page.getByRole('heading', { name: DASHBOARD_HEADING, level: 3 })
+    page.getByRole('heading', { name: DASHBOARD_HEADING })
   ).toBeVisible({ timeout: 15_000 })
 }

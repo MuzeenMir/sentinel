@@ -20,10 +20,10 @@ test.describe('Alerts — triage workflow', () => {
     await expect(page.getByText('Port Scan')).toBeVisible()
     await expect(page.getByText('Malware Beacon')).toBeVisible()
 
-    const criticalBadge = rows.nth(0).locator('.status-badge', { hasText: 'critical' })
+    const criticalBadge = rows.nth(0).locator('.badge-critical', { hasText: 'critical' })
     await expect(criticalBadge).toBeVisible()
 
-    const mediumBadge = rows.nth(1).locator('.status-badge', { hasText: 'medium' })
+    const mediumBadge = rows.nth(1).locator('.badge-medium', { hasText: 'medium' })
     await expect(mediumBadge).toBeVisible()
   })
 
@@ -39,7 +39,7 @@ test.describe('Alerts — triage workflow', () => {
     await page.goto('/alerts')
     await expect(page.locator('table tbody tr')).toHaveCount(3)
 
-    const severitySelect = page.locator('select').nth(1)
+    const severitySelect = page.locator('select').nth(0)
     await severitySelect.selectOption('critical')
 
     await expect(page.getByText('Brute Force')).toBeVisible()
@@ -50,7 +50,7 @@ test.describe('Alerts — triage workflow', () => {
     await page.goto('/alerts')
     await expect(page.locator('table tbody tr')).toHaveCount(3)
 
-    const statusSelect = page.locator('select').nth(0)
+    const statusSelect = page.locator('select').nth(1)
     await statusSelect.selectOption('acknowledged')
 
     await expect(page.getByText('Malware Beacon')).toBeVisible()

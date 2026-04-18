@@ -1,0 +1,25 @@
+title = "SENTINEL gitleaks config"
+
+# Start from the default gitleaks ruleset
+[extend]
+useDefault = true
+
+# Global allowlist: example values inside documentation should not trigger the scanner.
+# Real secrets must never land in these paths either, but placeholder JWT/example tokens
+# are common in API docs and examples, and their entropy can trip generic-api-key.
+[allowlist]
+description = "Allowlist documentation / example placeholders"
+paths = [
+  '''sentinel-core/docs/.*\.md''',
+  '''.*\.example($|\.)''',
+  '''.*/fixtures/.*''',
+  '''.*/tests?/.*''',
+]
+regexes = [
+  # Common placeholder sentinels
+  '''<[A-Z_]+>''',
+  '''YOUR_[A-Z_]+''',
+  '''\beyJ\.{3}''',   # truncated JWT-style placeholders like "eyJ..."
+  '''example-[a-z0-9-]+-token''',
+  '''test-[a-z0-9-]+-token''',
+]

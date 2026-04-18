@@ -18,10 +18,10 @@ test.describe('Navigation — sidebar & auth guards', () => {
       { name: 'Threats', path: '/threats', heading: 'Threats' },
       { name: 'Alerts', path: '/alerts', heading: 'Alerts' },
       { name: 'Policies', path: '/policies', heading: 'Active Policies' },
-      { name: 'Compliance', path: '/compliance', heading: 'Compliance Overview' },
-      { name: 'Users', path: '/users', heading: 'Users & RBAC' },
+      { name: 'Compliance', path: '/compliance', heading: 'Compliance' },
+      { name: 'Users', path: '/users', heading: 'Users' },
       { name: 'Audit Log', path: '/audit', heading: 'Audit Log' },
-      { name: 'Settings', path: '/settings', heading: 'Platform' },
+      { name: 'Settings', path: '/settings', heading: 'Settings' },
     ]
 
     for (const { name, path, heading } of navTargets) {

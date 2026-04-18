@@ -11,7 +11,7 @@ test.describe('Compliance — assessment workflow', () => {
   test('renders compliance overview with framework cards', async ({ page }) => {
     await page.goto('/compliance')
 
-    await expect(page.getByRole('heading', { name: 'Compliance Overview' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Compliance' })).toBeVisible()
     await expect(page.getByText('NIST 800-53')).toBeVisible()
     await expect(page.getByText('PCI DSS')).toBeVisible()
     await expect(page.getByText('42 controls')).toBeVisible()

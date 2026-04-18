@@ -1,16 +1,26 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Users as UsersIcon, X } from 'lucide-react'
+import { Users as UsersIcon } from 'lucide-react'
 import { usersApi } from '../services/api'
+import { useAuthStore } from '../store/authStore'
 import type { User } from '../types'
 
-const ROLES = ['admin', 'analyst', 'viewer']
+const ROLES = ['admin', 'security_analyst', 'analyst', 'auditor', 'viewer']
 const STATUSES = ['active', 'inactive', 'suspended']
+
+const ROLE_PERMISSIONS: Record<string, string> = {
+  admin: 'Full access — manage users, policies, settings, and all data.',
+  security_analyst: 'Investigate threats, triage alerts, and manage policies.',
+  analyst: 'Investigate threats and triage alerts.',
+  auditor: 'Read-only access to audit logs, compliance, and reports.',
+  viewer: 'Read-only access to dashboards and reports.',
+}
 
 export function Users() {
   const queryClient = useQueryClient()
+  const currentUser = useAuthStore((s) => s.user)
   const [roleFilter, setRoleFilter] = useState('')
-  const [editUser, setEditUser] = useState<User | null>(null)
+  const [editingId, setEditingId] = useState<number | null>(null)
   const [editRole, setEditRole] = useState('')
   const [editStatus, setEditStatus] = useState('')
 
@@ -25,24 +35,33 @@ export function Users() {
       usersApi.updateUser(id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] })
-      setEditUser(null)
+      setEditingId(null)
     },
   })
 
   const users: User[] = data?.users ?? data ?? []
 
   const openEdit = (user: User) => {
-    setEditUser(user)
+    setEditingId(user.id)
     setEditRole(user.role)
     setEditStatus(user.status)
   }
 
-  const handleUpdate = () => {
-    if (!editUser) return
-    const updates: { role?: string; status?: string } = {}
-    if (editRole !== editUser.role) updates.role = editRole
-    if (editStatus !== editUser.status) updates.status = editStatus
-    updateMutation.mutate({ id: editUser.id, payload: updates })
+  const cancelEdit = () => {
+    setEditingId(null)
+    setEditRole('')
+    setEditStatus('')
+  }
+
+  const saveEdit = (user: User) => {
+    const payload: { role?: string; status?: string } = {}
+    if (editRole !== user.role) payload.role = editRole
+    if (editStatus !== user.status) payload.status = editStatus
+    if (!payload.role && !payload.status) {
+      setEditingId(null)
+      return
+    }
+    updateMutation.mutate({ id: user.id, payload })
   }
 
   return (
@@ -50,8 +69,22 @@ export function Users() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <UsersIcon className="h-6 w-6 text-cyan-400" />
-          <h1 className="text-2xl font-bold text-white">Users</h1>
+          <h1 className="text-2xl font-bold text-white">Users &amp; RBAC</h1>
         </div>
+      </div>
+
+      <div className="card p-6">
+        <h2 className="text-lg font-semibold text-white mb-3">Role Permissions</h2>
+        <ul className="space-y-2 text-sm">
+          {Object.entries(ROLE_PERMISSIONS).map(([role, desc]) => (
+            <li key={role} className="flex gap-3">
+              <span className="badge bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 min-w-[7rem] justify-center">
+                {role}
+              </span>
+              <span className="text-slate-300">{desc}</span>
+            </li>
+          ))}
+        </ul>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -97,104 +130,98 @@ export function Users() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-700/50">
-                {users.map((user) => (
-                  <tr key={user.id} className="hover:bg-slate-800/30">
-                    <td className="table-cell font-medium text-white">{user.username}</td>
-                    <td className="table-cell text-slate-300">{user.email}</td>
-                    <td className="table-cell">
-                      <span className="badge bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
-                        {user.role}
-                      </span>
-                    </td>
-                    <td className="table-cell">
-                      <span
-                        className={`badge border ${
-                          user.status === 'active'
-                            ? 'bg-green-500/20 text-green-400 border-green-500/30'
-                            : 'bg-slate-500/20 text-slate-400 border-slate-500/30'
-                        }`}
-                      >
-                        {user.status}
-                      </span>
-                    </td>
-                    <td className="table-cell text-xs text-slate-400">
-                      {new Date(user.created_at).toLocaleDateString()}
-                    </td>
-                    <td className="table-cell text-xs text-slate-400">
-                      {user.last_login ? new Date(user.last_login).toLocaleString() : 'Never'}
-                    </td>
-                    <td className="table-cell">
-                      <button
-                        onClick={() => openEdit(user)}
-                        className="text-xs text-cyan-400 hover:text-cyan-300"
-                      >
-                        Edit
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {users.map((user) => {
+                  const isSelf = currentUser?.id === user.id
+                  const isEditing = editingId === user.id
+                  return (
+                    <tr key={user.id} className="hover:bg-slate-800/30">
+                      <td className="table-cell font-medium text-white">
+                        {user.username}
+                        {isSelf && <span className="ml-2 text-xs text-cyan-400">(you)</span>}
+                      </td>
+                      <td className="table-cell text-slate-300">{user.email}</td>
+                      <td className="table-cell">
+                        {isEditing ? (
+                          <select
+                            value={editRole}
+                            onChange={(e) => setEditRole(e.target.value)}
+                            className="select-field"
+                          >
+                            {ROLES.map((r) => (
+                              <option key={r} value={r}>
+                                {r}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span className="badge bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
+                            {user.role}
+                          </span>
+                        )}
+                      </td>
+                      <td className="table-cell">
+                        {isEditing ? (
+                          <select
+                            value={editStatus}
+                            onChange={(e) => setEditStatus(e.target.value)}
+                            className="select-field"
+                          >
+                            {STATUSES.map((s) => (
+                              <option key={s} value={s}>
+                                {s}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span
+                            className={`badge border ${
+                              user.status === 'active'
+                                ? 'bg-green-500/20 text-green-400 border-green-500/30'
+                                : 'bg-slate-500/20 text-slate-400 border-slate-500/30'
+                            }`}
+                          >
+                            {user.status}
+                          </span>
+                        )}
+                      </td>
+                      <td className="table-cell text-xs text-slate-400">
+                        {new Date(user.created_at).toLocaleDateString()}
+                      </td>
+                      <td className="table-cell text-xs text-slate-400">
+                        {user.last_login ? new Date(user.last_login).toLocaleString() : 'Never'}
+                      </td>
+                      <td className="table-cell">
+                        {isSelf ? (
+                          <span className="text-slate-500">—</span>
+                        ) : isEditing ? (
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => saveEdit(user)}
+                              className="text-xs text-green-400 hover:text-green-300"
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={cancelEdit}
+                              className="text-xs text-slate-400 hover:text-slate-300"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => openEdit(user)}
+                            className="text-xs text-cyan-400 hover:text-cyan-300"
+                          >
+                            Edit
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
-          </div>
-        </div>
-      )}
-
-      {editUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="card w-full max-w-md p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-white">Edit User</h3>
-              <button
-                onClick={() => setEditUser(null)}
-                className="text-slate-400 hover:text-white"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm text-slate-400 mb-1">Username</label>
-                <p className="text-sm font-medium text-white">{editUser.username}</p>
-              </div>
-              <div>
-                <label className="block text-sm text-slate-400 mb-1">Role</label>
-                <select
-                  value={editRole}
-                  onChange={(e) => setEditRole(e.target.value)}
-                  className="select-field w-full"
-                >
-                  {ROLES.map((r) => (
-                    <option key={r} value={r}>
-                      {r}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm text-slate-400 mb-1">Status</label>
-                <select
-                  value={editStatus}
-                  onChange={(e) => setEditStatus(e.target.value)}
-                  className="select-field w-full"
-                >
-                  {STATUSES.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="mt-6 flex justify-end gap-3">
-              <button onClick={() => setEditUser(null)} className="btn-secondary">
-                Cancel
-              </button>
-              <button onClick={handleUpdate} className="btn-primary">
-                Update User
-              </button>
-            </div>
           </div>
         </div>
       )}

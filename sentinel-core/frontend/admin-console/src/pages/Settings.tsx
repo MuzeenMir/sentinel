@@ -25,13 +25,19 @@ export function Settings() {
 
   const handleSave = () => {
     updateMutation.mutate({
-      organizationName: settings.organizationName,
+      organization: {
+        name: settings.organizationName,
+      },
       timezone: settings.timezone,
-      autoBlockHighThreats: settings.autoBlockHighThreats,
-      drlAutoDecisions: settings.drlAutoDecisions,
-      confidenceThreshold: settings.confidenceThreshold,
-      emailAlerts: settings.emailAlerts,
-      slackIntegration: settings.slackIntegration,
+      detection: {
+        autoBlockHighThreats: settings.autoBlockHighThreats,
+        drlAutoDecisions: settings.drlAutoDecisions,
+        confidenceThreshold: settings.confidenceThreshold,
+      },
+      notifications: {
+        emailAlerts: settings.emailAlerts,
+        slackIntegration: settings.slackIntegration,
+      },
     })
   }
 
@@ -47,19 +53,26 @@ export function Settings() {
           disabled={updateMutation.isPending}
           className="btn-primary gap-2"
         >
-          <Save className="h-4 w-4" /> Save Changes
+          <Save className="h-4 w-4" /> Save Settings
         </button>
       </div>
 
       {saved && (
         <div className="rounded-lg border border-green-500/30 bg-green-500/10 px-4 py-3 text-sm text-green-400">
-          Settings saved successfully.
+          Settings saved to backend successfully.
         </div>
       )}
 
+      <div className="card p-6">
+        <h2 className="text-lg font-semibold text-white mb-2">Platform</h2>
+        <p className="text-sm text-slate-400">
+          Configure platform-wide defaults for organization, detection, and notifications.
+        </p>
+      </div>
+
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="card p-6">
-          <h2 className="text-lg font-semibold text-white mb-4">General</h2>
+          <h2 className="text-lg font-semibold text-white mb-4">General Settings</h2>
           <div className="space-y-4">
             <div>
               <label className="block text-sm text-slate-400 mb-1">Organization Name</label>
@@ -71,7 +84,7 @@ export function Settings() {
               />
             </div>
             <div>
-              <label className="block text-sm text-slate-400 mb-1">Timezone</label>
+              <label className="block text-sm text-slate-400 mb-1">Default Timezone</label>
               <select
                 value={settings.timezone}
                 onChange={(e) => settings.setTimezone(e.target.value)}
@@ -91,7 +104,7 @@ export function Settings() {
         </div>
 
         <div className="card p-6">
-          <h2 className="text-lg font-semibold text-white mb-4">AI Engine</h2>
+          <h2 className="text-lg font-semibold text-white mb-4">Detection Settings</h2>
           <div className="space-y-4">
             <ToggleRow
               label="Auto-block High Threats"
@@ -186,19 +199,25 @@ function ToggleRow({
         <p className="text-sm font-medium text-white">{label}</p>
         <p className="text-xs text-slate-400">{description}</p>
       </div>
-      <button
-        type="button"
-        onClick={() => onChange(!value)}
-        className={`relative h-6 w-11 rounded-full transition-colors ${
-          value ? 'bg-cyan-600' : 'bg-slate-600'
-        }`}
-      >
+      <label className="relative inline-block h-6 w-11 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={value}
+          onChange={(e) => onChange(e.target.checked)}
+          className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+        />
         <span
+          aria-hidden="true"
+          className={`absolute inset-0 rounded-full transition-colors ${
+            value ? 'bg-cyan-600' : 'bg-slate-600'
+          }`}
+        />
+        <span
+          aria-hidden="true"
           className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
             value ? 'translate-x-5' : ''
           }`}
-        />
-      </button>
+        /></label>
     </div>
   )
 }

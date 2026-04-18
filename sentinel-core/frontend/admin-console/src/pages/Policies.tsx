@@ -220,7 +220,8 @@ export function Policies() {
           <h1 className="text-2xl font-bold text-white">Active Policies</h1>
         </div>
         <button onClick={openCreate} className="btn-primary gap-2">
-          <Plus className="h-4 w-4" /> Create Policy
+          <Plus className="h-4 w-4" aria-hidden="true" />
+          <span>+ Create Policy</span>
         </button>
       </div>
 
