@@ -14,7 +14,7 @@ test.describe('Policies — management workflow', () => {
 
     await expect(page.getByRole('heading', { name: 'Active Policies' })).toBeVisible()
     await expect(page.getByText('Block SSH brute-force')).toBeVisible()
-    await expect(page.getByText('DENY')).toBeVisible()
+    await expect(page.getByText('DENY', { exact: true })).toBeVisible()
   })
 
   test('displays policy stats', async ({ page }) => {

@@ -85,6 +85,28 @@ export interface Framework {
   status?: string
   total_controls?: number
   passing_controls?: number
+  controls_count?: number
+  categories?: string[]
+}
+
+export interface AssessmentDetail {
+  control_id: string
+  control_name: string
+  category: string
+  status: 'compliant' | 'non_compliant' | 'not_applicable' | string
+  findings: string[]
+}
+
+export interface AssessmentResult {
+  framework: string
+  overall_score: number
+  status: string
+  timestamp: string
+  controls_assessed: number
+  controls_compliant: number
+  controls_non_compliant: number
+  controls_not_applicable: number
+  details: AssessmentDetail[]
 }
 
 export interface ComplianceAssessment {

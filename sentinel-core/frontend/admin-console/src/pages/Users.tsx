@@ -136,7 +136,7 @@ export function Users() {
                   return (
                     <tr key={user.id} className="hover:bg-slate-800/30">
                       <td className="table-cell font-medium text-white">
-                        {user.username}
+                        <span>{user.username}</span>
                         {isSelf && <span className="ml-2 text-xs text-cyan-400">(you)</span>}
                       </td>
                       <td className="table-cell text-slate-300">{user.email}</td>

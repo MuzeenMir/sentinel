@@ -1,67 +1,30 @@
 import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { CheckCircle, Play, FileWarning } from 'lucide-react'
+import { useQuery, useMutation } from '@tanstack/react-query'
+import { CheckCircle, Play, X } from 'lucide-react'
 import { complianceApi, type ComplianceFrameworkId } from '../services/api'
-import type { Framework, ComplianceGap } from '../types'
-
-const FRAMEWORK_IDS: ComplianceFrameworkId[] = ['GDPR', 'HIPAA', 'PCI-DSS', 'NIST', 'SOC2']
-
-function scoreColor(score: number) {
-  if (score >= 90) return 'text-green-400'
-  if (score >= 70) return 'text-yellow-400'
-  return 'text-red-400'
-}
-
-function scoreBg(score: number) {
-  if (score >= 90) return 'bg-green-500'
-  if (score >= 70) return 'bg-yellow-500'
-  return 'bg-red-500'
-}
+import type { Framework, AssessmentResult } from '../types'
 
 export function Compliance() {
-  const queryClient = useQueryClient()
-  const [selectedFramework, setSelectedFramework] = useState<ComplianceFrameworkId | null>(null)
+  const [assessment, setAssessment] = useState<AssessmentResult | null>(null)
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['frameworks'],
     queryFn: () => complianceApi.getFrameworks().then((r) => r.data),
   })
 
-  const gapQuery = useQuery({
-    queryKey: ['gap-analysis', selectedFramework],
-    queryFn: () => complianceApi.getGapAnalysis(selectedFramework!).then((r) => r.data),
-    enabled: !!selectedFramework,
-  })
-
   const assessMutation = useMutation({
-    mutationFn: (framework: ComplianceFrameworkId) => complianceApi.runAssessment(framework),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['frameworks'] })
-      queryClient.invalidateQueries({ queryKey: ['gap-analysis'] })
-    },
+    mutationFn: (framework: ComplianceFrameworkId) =>
+      complianceApi.runAssessment(framework).then((r) => r.data as AssessmentResult),
+    onSuccess: (result) => setAssessment(result),
   })
 
   const frameworks: Framework[] = data?.frameworks ?? data ?? []
-  const gaps: ComplianceGap[] = gapQuery.data?.gaps ?? gapQuery.data ?? []
-
-  const frameworkCards: Framework[] =
-    frameworks.length > 0
-      ? frameworks
-      : FRAMEWORK_IDS.map((id): Framework => ({
-          id,
-          name: id,
-          description: '',
-          version: '',
-          score: 0,
-        }))
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <CheckCircle className="h-6 w-6 text-cyan-400" />
-          <h1 className="text-2xl font-bold text-white">Compliance</h1>
-        </div>
+      <div className="flex items-center gap-3">
+        <CheckCircle className="h-6 w-6 text-cyan-400" />
+        <h1 className="text-2xl font-bold text-white">Compliance</h1>
       </div>
 
       {isLoading ? (
@@ -73,114 +36,114 @@ export function Compliance() {
           <p className="text-red-400">Failed to load compliance data.</p>
         </div>
       ) : (
-        <>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-            {frameworkCards.map((fw) => {
-              const score = fw.score ?? 0
-              return (
-                <div
-                  key={fw.id}
-                  className={`card p-5 cursor-pointer transition-all hover:border-cyan-500/30 ${
-                    selectedFramework === fw.id
-                      ? 'border-cyan-500/50 ring-1 ring-cyan-500/20'
-                      : ''
-                  }`}
-                  onClick={() => setSelectedFramework(fw.id as ComplianceFrameworkId)}
-                >
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-sm font-bold text-white">{fw.name || fw.id}</h3>
-                  </div>
-                  <div className="relative h-2 rounded-full bg-slate-700 mb-2">
-                    <div
-                      className={`absolute inset-y-0 left-0 rounded-full ${scoreBg(score)}`}
-                      style={{ width: `${score}%` }}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className={`text-2xl font-bold ${scoreColor(score)}`}>{score}%</span>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        assessMutation.mutate(fw.id as ComplianceFrameworkId)
-                      }}
-                      disabled={assessMutation.isPending}
-                      className="rounded-lg bg-slate-700 p-1.5 text-slate-400 hover:bg-slate-600 hover:text-white disabled:opacity-50"
-                      title="Run assessment"
-                    >
-                      <Play className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                  {fw.last_assessed && (
-                    <p className="mt-2 text-xs text-slate-500">
-                      Last: {new Date(fw.last_assessed).toLocaleDateString()}
-                    </p>
-                  )}
-                </div>
-              )
-            })}
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {frameworks.map((fw) => (
+            <div key={fw.id} className="card p-5 space-y-3">
+              <div>
+                <h3 className="text-base font-semibold text-white">{fw.name || fw.id}</h3>
+                {fw.description && (
+                  <p className="mt-1 text-sm text-slate-400">{fw.description}</p>
+                )}
+              </div>
+              <div className="flex items-center gap-3 text-xs text-slate-500">
+                {fw.version && <span>v{fw.version}</span>}
+                {typeof fw.controls_count === 'number' && (
+                  <span>{fw.controls_count} controls</span>
+                )}
+              </div>
+              <button
+                onClick={() => assessMutation.mutate(fw.id as ComplianceFrameworkId)}
+                disabled={assessMutation.isPending}
+                className="btn-primary w-full gap-2 text-sm"
+              >
+                <Play className="h-4 w-4" />
+                Run Assessment
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {assessment && (
+        <div className="card p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-white">Assessment Results</h2>
+            <button
+              onClick={() => setAssessment(null)}
+              className="btn-secondary gap-2 text-sm"
+              aria-label="Close assessment results"
+            >
+              <X className="h-4 w-4" />
+              Close
+            </button>
           </div>
 
-          {selectedFramework && (
-            <div className="card p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <FileWarning className="h-5 w-5 text-yellow-400" />
-                  <h2 className="text-lg font-semibold text-white">
-                    Gap Analysis — {selectedFramework}
-                  </h2>
-                </div>
-                <button
-                  onClick={() => assessMutation.mutate(selectedFramework)}
-                  disabled={assessMutation.isPending}
-                  className="btn-primary text-sm gap-2"
-                >
-                  <Play className="h-4 w-4" /> Run Assessment
-                </button>
-              </div>
+          <div className="flex items-baseline gap-3">
+            <span className="text-4xl font-bold text-cyan-400">
+              {assessment.overall_score}%
+            </span>
+            <span className="text-sm text-slate-400">{assessment.framework}</span>
+          </div>
 
-              {gapQuery.isLoading ? (
-                <p className="text-sm text-slate-400">Loading gap analysis…</p>
-              ) : gapQuery.isError ? (
-                <p className="text-sm text-red-400">Failed to load gap analysis.</p>
-              ) : gaps.length === 0 ? (
-                <p className="text-sm text-green-400">
-                  No compliance gaps found. All controls are passing.
-                </p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-slate-700">
-                        <th className="table-header">Control</th>
-                        <th className="table-header">Title</th>
-                        <th className="table-header">Severity</th>
-                        <th className="table-header">Status</th>
-                        <th className="table-header">Recommendation</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-700/50">
-                      {gaps.map((gap) => (
-                        <tr key={gap.control_id} className="hover:bg-slate-800/30">
-                          <td className="table-cell font-mono text-xs text-cyan-400">
-                            {gap.control_id}
-                          </td>
-                          <td className="table-cell font-medium text-white">{gap.title}</td>
-                          <td className="table-cell">
-                            <span className={`badge-${gap.severity}`}>{gap.severity}</span>
-                          </td>
-                          <td className="table-cell">{gap.status}</td>
-                          <td className="table-cell text-sm text-slate-400">
-                            {gap.recommendation}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="rounded-lg border border-green-500/30 bg-green-500/10 px-4 py-3">
+              <p className="text-sm text-green-400">
+                {assessment.controls_compliant} Compliant
+              </p>
             </div>
-          )}
-        </>
+            <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3">
+              <p className="text-sm text-red-400">
+                {assessment.controls_non_compliant} Non-compliant
+              </p>
+            </div>
+            <div className="rounded-lg border border-slate-600 bg-slate-700/30 px-4 py-3">
+              <p className="text-sm text-slate-300">
+                {assessment.controls_not_applicable} N/A
+              </p>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-slate-700">
+                  <th className="table-header">Control</th>
+                  <th className="table-header">Name</th>
+                  <th className="table-header">Category</th>
+                  <th className="table-header">Status</th>
+                  <th className="table-header">Findings</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-700/50">
+                {assessment.details.map((d) => (
+                  <tr key={d.control_id} className="hover:bg-slate-800/30">
+                    <td className="table-cell font-mono text-xs text-cyan-400">
+                      {d.control_id}
+                    </td>
+                    <td className="table-cell font-medium text-white">{d.control_name}</td>
+                    <td className="table-cell text-slate-400">{d.category}</td>
+                    <td className="table-cell">
+                      <span
+                        className={
+                          d.status === 'compliant'
+                            ? 'text-green-400'
+                            : d.status === 'non_compliant'
+                            ? 'text-red-400'
+                            : 'text-slate-400'
+                        }
+                      >
+                        {d.status}
+                      </span>
+                    </td>
+                    <td className="table-cell text-sm text-slate-400">
+                      {d.findings.join('; ')}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
     </div>
   )
