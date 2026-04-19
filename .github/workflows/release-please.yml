@@ -1,0 +1,40 @@
+name: release-please
+
+# Auto-generated changelog + release PR from Conventional Commits.
+# Not a required status check — it only runs on push to main and opens a PR.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    name: release-please
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: googleapis/release-please-action@v4
+        with:
+          # Single-package release flow. When the monorepo flatten (Phase 0
+          # slice 6) lands, swap to a release-please-config.json with
+          # component paths under backend/* and frontend/*.
+          release-type: simple
+          token: ${{ secrets.GITHUB_TOKEN }}
+          include-component-in-tag: false
+          changelog-types: >-
+            [
+              {"type":"feat","section":"Features","hidden":false},
+              {"type":"fix","section":"Bug Fixes","hidden":false},
+              {"type":"perf","section":"Performance","hidden":false},
+              {"type":"revert","section":"Reverts","hidden":false},
+              {"type":"docs","section":"Documentation","hidden":false},
+              {"type":"refactor","section":"Refactor","hidden":false},
+              {"type":"test","section":"Tests","hidden":true},
+              {"type":"build","section":"Build","hidden":true},
+              {"type":"ci","section":"CI","hidden":true},
+              {"type":"chore","section":"Chore","hidden":true}
+            ]

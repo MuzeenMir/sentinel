@@ -1,0 +1,170 @@
+name: unit
+
+# Backend pytest + frontend vitest. Coverage gate: 75% per SDP-002 §7.
+# Training + performance jobs are informational (not part of the `unit`
+# aggregator) — they run on push but do not gate PRs.
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+concurrency:
+  group: unit-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  unit-backend:
+    name: unit-backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: sentinel-core/backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install test + service deps
+        run: |
+          pip install -r requirements-test.txt
+          pip install pytest-cov==5.0.0
+          pip install \
+            -r hardening-service/requirements.txt \
+            -r hids-agent/requirements.txt \
+            -r ai-engine/requirements.txt \
+            -r auth-service/requirements.txt \
+            -r api-gateway/requirements.txt \
+            -r drl-engine/requirements.txt
+      - name: pytest (unit only, e2e excluded)
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python -m pytest tests/ \
+            --ignore=tests/test_e2e_pipeline.py \
+            --cov=. \
+            --cov-branch \
+            --cov-report=xml:coverage.xml \
+            --cov-report=term \
+            -v --tb=short
+      - name: Coverage gate (>=75% per SDP-002 §7)
+        run: |
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          import sys
+          root = ET.parse("coverage.xml").getroot()
+          rate = float(root.attrib.get("line-rate", "0")) * 100
+          print(f"line coverage: {rate:.2f}%")
+          if rate < 75.0:
+              print("::error::coverage below 75% gate", file=sys.stderr)
+              sys.exit(1)
+          PY
+      - name: Upload coverage XML
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: sentinel-core/backend/coverage.xml
+          if-no-files-found: warn
+
+  unit-frontend:
+    name: unit-frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: sentinel-core/frontend/admin-console
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: sentinel-core/frontend/admin-console/package-lock.json
+      - run: npm ci
+      - name: vitest
+        run: npm run test -- --run
+
+  unit-training:
+    # Informational — not in the `unit` aggregator. Runs only when CICIDS-2018
+    # dataset is present (training data is out-of-band).
+    name: unit-training
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: sentinel-core
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for training requirements and data
+        id: check-training
+        run: |
+          if [ ! -f training/requirements.txt ]; then echo "run=false" >> $GITHUB_OUTPUT; exit 0; fi
+          if [ -d training/datasets/data/cicids2018 ] && [ -n "$(ls -A training/datasets/data/cicids2018 2>/dev/null)" ]; then
+            echo "run=true" >> $GITHUB_OUTPUT
+          else
+            echo "run=false" >> $GITHUB_OUTPUT
+            echo "Training data not present; skipping."
+          fi
+      - uses: actions/setup-python@v5
+        if: steps.check-training.outputs.run == 'true'
+        with:
+          python-version: '3.12'
+      - name: Install training deps
+        if: steps.check-training.outputs.run == 'true'
+        run: pip install -r training/requirements.txt
+      - name: Train (xgboost + isolation_forest, capped 5k rows)
+        if: steps.check-training.outputs.run == 'true'
+        run: |
+          python -m training.train_all \
+            --data-path training/datasets/data \
+            --dataset cicids2018 \
+            --models xgboost isolation_forest \
+            --max-rows 5000 \
+            --device cpu
+      - name: Validate trained models
+        if: steps.check-training.outputs.run == 'true'
+        run: |
+          test -f backend/ai-engine/trained_models/xgboost/xgboost_model.json
+          test -f backend/ai-engine/trained_models/isolation_forest/isolation_forest.joblib
+          python training/validate_models.py \
+            --model-path backend/ai-engine/trained_models
+      - name: SageMaker inference.py present
+        run: test -f training/inference.py
+
+  unit-perf:
+    # Informational — ML inference + hot-path micro-benchmarks.
+    name: unit-perf
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: sentinel-core/backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install deps
+        run: |
+          pip install -r requirements-test.txt
+          pip install scikit-learn numpy
+      - name: Micro-benchmarks
+        run: python -m pytest tests/performance/test_microbench.py -v --tb=short
+
+  unit:
+    name: unit
+    needs: [unit-backend, unit-frontend]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "unit green"

@@ -1,0 +1,160 @@
+name: e2e-smoke
+
+# End-to-end smoke: compose stack up, login, authenticated API calls, Playwright UI.
+# Hard 15-minute job timeout per SDP-002 §7 ("Playwright smoke under 15 min").
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+concurrency:
+  group: e2e-smoke-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  e2e-smoke-api:
+    name: e2e-smoke-api
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: sentinel-core
+    env:
+      JWT_SECRET_KEY: ci-smoke-not-a-real-secret-do-not-reuse
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: Admin@123!SmokeTest
+      ADMIN_EMAIL: admin@example.com
+      POSTGRES_PASSWORD: smoke_pg_password
+      DRL_SHADOW_MODE: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Write CI .env
+        run: |
+          cat > .env <<EOF
+          POSTGRES_USER=sentinel
+          POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+          POSTGRES_DB=sentinel_db
+          POSTGRES_HOST=sentinel-postgres
+          POSTGRES_PORT=5432
+          DATABASE_URL=postgresql://sentinel:${POSTGRES_PASSWORD}@sentinel-postgres:5432/sentinel_db
+          JWT_SECRET_KEY=${JWT_SECRET_KEY}
+          ADMIN_USERNAME=${ADMIN_USERNAME}
+          ADMIN_PASSWORD=${ADMIN_PASSWORD}
+          ADMIN_EMAIL=${ADMIN_EMAIL}
+          DRL_SHADOW_MODE=${DRL_SHADOW_MODE}
+          EOF
+      - name: Build smoke stack images
+        run: |
+          docker compose build \
+            postgres redis db-migrate auth-service api-gateway \
+            ai-engine drl-engine policy-orchestrator alert-service
+      - name: Postgres + Redis up
+        run: docker compose up -d postgres redis
+      - name: Wait for Postgres
+        run: |
+          for i in $(seq 1 30); do
+            if docker compose exec -T postgres pg_isready -U sentinel -d sentinel_db >/dev/null 2>&1; then
+              echo "postgres ready after ${i} attempts"; break
+            fi
+            sleep 2
+          done
+          sleep 5
+      - name: Run migrations
+        run: |
+          docker compose up \
+            --exit-code-from db-migrate \
+            --abort-on-container-exit \
+            db-migrate
+      - name: Dump logs on migration failure
+        if: failure()
+        run: |
+          docker compose logs db-migrate || true
+          docker compose logs postgres || true
+      - name: Bring up remaining services
+        run: |
+          docker compose up -d \
+            auth-service api-gateway \
+            ai-engine drl-engine policy-orchestrator alert-service
+      - name: Wait for api-gateway healthy (<=120s)
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:8080/health >/dev/null; then
+              echo "gateway healthy after ${i} attempts"; exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::api-gateway never became healthy"
+          docker compose logs api-gateway auth-service postgres
+          exit 1
+      - name: Login + capture token
+        id: login
+        run: |
+          set -e
+          RESP=$(curl -sf -X POST http://localhost:8080/api/v1/auth/login \
+            -H "Content-Type: application/json" \
+            -d "{\"username\":\"${ADMIN_USERNAME}\",\"password\":\"${ADMIN_PASSWORD}\"}")
+          TOKEN=$(echo "$RESP" | python -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
+          if [ -z "$TOKEN" ]; then echo "::error::no token in login response: $RESP"; exit 1; fi
+          echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
+      - name: Authenticated GET /api/v1/threats
+        run: |
+          curl -sf -H "Authorization: Bearer ${{ steps.login.outputs.token }}" \
+            http://localhost:8080/api/v1/threats | head -c 500
+      - name: Authenticated GET /api/v1/statistics
+        run: |
+          curl -sf -H "Authorization: Bearer ${{ steps.login.outputs.token }}" \
+            http://localhost:8080/api/v1/statistics
+      - name: DRL shadow-mode sanity (not enforced)
+        # Hard rule (SAF-1): no LLM/DRL output reaches enforcement adapters.
+        run: |
+          DEC=$(curl -sf -H "Authorization: Bearer ${{ steps.login.outputs.token }}" \
+            -H "Content-Type: application/json" \
+            -X POST http://localhost:8080/api/v1/drl/decide \
+            -d '{"detection_id":"smoke","threat_score":0.95,"threat_type":"brute_force","source_ip":"1.2.3.4","dest_port":22,"protocol":"TCP","asset_criticality":3}' || true)
+          echo "$DEC"
+          echo "$DEC" | python -c "import sys,json;d=json.load(sys.stdin);assert d.get('shadow') is True, d"
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
+
+  e2e-smoke-ui:
+    name: e2e-smoke-ui
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: sentinel-core/frontend/admin-console
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: sentinel-core/frontend/admin-console/package-lock.json
+      - run: npm ci
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+      - name: Playwright smoke
+        run: npm run test:e2e
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: sentinel-core/frontend/admin-console/playwright-report
+          if-no-files-found: ignore
+
+  e2e-smoke:
+    name: e2e-smoke
+    needs: [e2e-smoke-api, e2e-smoke-ui]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "e2e-smoke green"

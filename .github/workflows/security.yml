@@ -1,0 +1,243 @@
+name: security
+
+# Supply chain + static + dynamic security gates. Aggregator `security` gates
+# branch protection; DAST (ZAP) runs only on PR to keep push cycles short.
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Daily CodeQL refresh. Picks up new rules without waiting for a commit.
+    - cron: '17 5 * * *'
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  security-events: write    # CodeQL + Trivy SARIF upload
+  actions: read
+  pull-requests: read
+
+jobs:
+  security-gitleaks:
+    name: security-gitleaks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Respect root .gitleaks.toml allowlist.
+          GITLEAKS_CONFIG: .gitleaks.toml
+
+  security-pip-audit:
+    name: security-pip-audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: pip install pip-audit==2.7.3
+      - name: Audit every service requirements.txt
+        run: |
+          set -e
+          for req in sentinel-core/backend/*/requirements.txt; do
+            echo "::group::pip-audit $req"
+            pip-audit -r "$req" --disable-pip || EXIT=$?
+            echo "::endgroup::"
+          done
+          exit "${EXIT:-0}"
+
+  security-bandit:
+    name: security-bandit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: pip install bandit==1.7.9
+      - name: Bandit (HIGH severity fails)
+        run: |
+          bandit -r sentinel-core/backend \
+            --exclude sentinel-core/backend/.venv-backend \
+            -ll -ii \
+            --format json \
+            --output bandit-report.json || true
+          python - <<'PY'
+          import json, sys
+          try:
+              with open('bandit-report.json') as f:
+                  data = json.load(f)
+          except FileNotFoundError:
+              data = {'results': []}
+          results = data.get('results', [])
+          high = [r for r in results if r.get('issue_severity') == 'HIGH']
+          if high:
+              print(f"::error::Bandit: {len(high)} HIGH severity issue(s)", file=sys.stderr)
+              for h in high[:10]:
+                  print(f"  {h['filename']}:{h['line_number']} - {h['issue_text']}", file=sys.stderr)
+              sys.exit(1)
+          print("no HIGH severity issues")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bandit-report
+          path: bandit-report.json
+          if-no-files-found: ignore
+
+  security-npm-audit:
+    name: security-npm-audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: sentinel-core/frontend/admin-console
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: sentinel-core/frontend/admin-console/package-lock.json
+      - run: npm ci
+      - run: npm audit --audit-level=high
+
+  security-semgrep:
+    name: security-semgrep
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: returntocorp/semgrep:1.82.0
+    steps:
+      - uses: actions/checkout@v4
+      - name: Semgrep CI (p/ci + security-audit)
+        run: |
+          semgrep ci \
+            --config=p/ci \
+            --config=p/security-audit \
+            --config=p/python \
+            --config=p/typescript \
+            --error \
+            --metrics=off
+
+  security-trivy:
+    name: security-trivy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          format: sarif
+          output: trivy-fs.sarif
+          exit-code: '1'
+          ignore-unfixed: true
+      - name: Upload Trivy SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-fs.sarif
+          category: trivy-fs
+
+  security-codeql:
+    name: security-codeql
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [python, javascript-typescript]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-and-quality
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:${{ matrix.language }}
+
+  security-auth-tests:
+    name: security-auth-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: sentinel-core/backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install deps
+        run: |
+          pip install -r requirements-test.txt
+          pip install -r auth-service/requirements.txt
+      - name: Auth security tests
+        run: python -m pytest tests/test_auth_security.py -v --tb=short
+
+  security-dast:
+    # OWASP ZAP baseline against the compose stack. PR-only to control runtime.
+    # Not part of the `security` aggregator required check (too long); runs on
+    # every PR and is visible in the PR check list.
+    name: security-dast
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: []
+    defaults:
+      run:
+        working-directory: sentinel-core
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stack up
+        run: |
+          docker compose up -d --build api-gateway auth-service redis postgres
+          sleep 30
+      - name: ZAP baseline
+        uses: zaproxy/action-baseline@v0.14.0
+        with:
+          target: 'http://localhost:8080'
+          rules_file_name: '.github/zap-rules.tsv'
+          cmd_options: '-a -j'
+          allow_issue_writing: false
+      - name: Stack down
+        if: always()
+        run: docker compose down -v
+
+  security:
+    name: security
+    needs:
+      - security-gitleaks
+      - security-pip-audit
+      - security-bandit
+      - security-npm-audit
+      - security-semgrep
+      - security-trivy
+      - security-codeql
+      - security-auth-tests
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "security green"

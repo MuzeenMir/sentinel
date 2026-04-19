@@ -1,0 +1,131 @@
+name: build
+
+# Multi-service container builds. PR: build-only, amd64, no push. Push to main:
+# amd64 + push to ghcr.io with commit SHA + short-SHA + branch tags.
+# Phase 0 scope: amd64 only. arm64 lands in Phase 1 after Helm chart stabilizes.
+
+on:
+  push:
+    branches: [main, develop]
+    tags: ['v*']
+  pull_request:
+    branches: [main, develop]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  REGISTRY: ghcr.io
+  IMAGE_OWNER: ${{ github.repository_owner }}
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write       # ghcr push on main
+  id-token: write       # prep for cosign keyless in sbom.yml
+
+jobs:
+  build-images:
+    name: build-images
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: ai-engine
+            context: sentinel-core/backend/ai-engine
+            dockerfile: sentinel-core/backend/ai-engine/Dockerfile
+          - service: alert-service
+            context: sentinel-core/backend/alert-service
+            dockerfile: sentinel-core/backend/alert-service/Dockerfile
+          - service: api-gateway
+            context: sentinel-core/backend/api-gateway
+            dockerfile: sentinel-core/backend/api-gateway/Dockerfile
+          - service: auth-service
+            context: sentinel-core/backend/auth-service
+            dockerfile: sentinel-core/backend/auth-service/Dockerfile
+          - service: compliance-engine
+            context: sentinel-core/backend/compliance-engine
+            dockerfile: sentinel-core/backend/compliance-engine/Dockerfile
+          - service: data-collector
+            context: sentinel-core/backend/data-collector
+            dockerfile: sentinel-core/backend/data-collector/Dockerfile
+          - service: drl-engine
+            context: sentinel-core/backend/drl-engine
+            dockerfile: sentinel-core/backend/drl-engine/Dockerfile
+          - service: hardening-service
+            context: sentinel-core/backend/hardening-service
+            dockerfile: sentinel-core/backend/hardening-service/Dockerfile
+          - service: hids-agent
+            context: sentinel-core/backend/hids-agent
+            dockerfile: sentinel-core/backend/hids-agent/Dockerfile
+          - service: policy-orchestrator
+            context: sentinel-core/backend/policy-orchestrator
+            dockerfile: sentinel-core/backend/policy-orchestrator/Dockerfile
+          - service: xai-service
+            context: sentinel-core/backend/xai-service
+            dockerfile: sentinel-core/backend/xai-service/Dockerfile
+          - service: xdp-collector
+            context: sentinel-core/backend/xdp-collector
+            dockerfile: sentinel-core/backend/xdp-collector/Dockerfile
+          - service: admin-console
+            context: sentinel-core/frontend/admin-console
+            dockerfile: sentinel-core/frontend/admin-console/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Log in to GHCR (push only)
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/sentinel-${{ matrix.service }}
+          tags: |
+            type=sha,prefix=,format=long
+            type=sha,prefix=,format=short
+            type=ref,event=branch
+            type=ref,event=tag
+            type=semver,pattern={{version}}
+      - name: Build (and push on main/tag)
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          load: ${{ github.event_name == 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,scope=${{ matrix.service }},mode=max
+          provenance: mode=max
+          sbom: false    # SBOM is produced in sbom.yml from the pushed image
+      - name: Record digest
+        if: github.event_name != 'pull_request'
+        run: |
+          mkdir -p /tmp/digests
+          echo "${{ steps.build.outputs.digest }}" > /tmp/digests/${{ matrix.service }}.digest
+      - name: Upload digest
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ matrix.service }}
+          path: /tmp/digests/${{ matrix.service }}.digest
+          retention-days: 7
+          if-no-files-found: error
+
+  build:
+    name: build
+    needs: [build-images]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "build green"
