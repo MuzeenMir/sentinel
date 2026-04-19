@@ -1,71 +1,78 @@
-import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { FileText, Plus, X } from 'lucide-react'
-import { policyApi } from '../services/api'
-import type { Policy, PolicyCreateRequest } from '../types'
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { FileText, Plus, X } from "lucide-react";
+import { policyApi } from "../services/api";
+import type { Policy, PolicyCreateRequest } from "../types";
 
 const EMPTY_FORM: PolicyCreateRequest = {
-  name: '',
-  description: '',
-  action: 'deny',
+  name: "",
+  description: "",
+  action: "deny",
   priority: 100,
-  source_cidr: '',
-  destination_cidr: '',
-  protocol: 'tcp',
-  port_range: '',
-}
+  source_cidr: "",
+  destination_cidr: "",
+  protocol: "tcp",
+  port_range: "",
+};
 
 export function Policies() {
-  const queryClient = useQueryClient()
-  const [showCreate, setShowCreate] = useState(false)
-  const [editPolicy, setEditPolicy] = useState<Policy | null>(null)
-  const [form, setForm] = useState<PolicyCreateRequest>({ ...EMPTY_FORM })
-  const [validationError, setValidationError] = useState('')
-  const [successMsg, setSuccessMsg] = useState('')
+  const queryClient = useQueryClient();
+  const [showCreate, setShowCreate] = useState(false);
+  const [editPolicy, setEditPolicy] = useState<Policy | null>(null);
+  const [form, setForm] = useState<PolicyCreateRequest>({ ...EMPTY_FORM });
+  const [validationError, setValidationError] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['policies'],
+    queryKey: ["policies"],
     queryFn: () => policyApi.getPolicies().then((r) => r.data),
-  })
+  });
 
-  const policies: Policy[] = data?.policies ?? []
-  const denyCount = policies.filter((p) => p.action === 'deny').length
-  const allowCount = policies.filter((p) => p.action === 'allow').length
+  const policies: Policy[] = data?.policies ?? [];
+  const denyCount = policies.filter((p) => p.action === "deny").length;
+  const allowCount = policies.filter((p) => p.action === "allow").length;
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['policies'] })
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ["policies"] });
 
   const createMutation = useMutation({
-    mutationFn: (payload: PolicyCreateRequest) => policyApi.createPolicy(payload),
+    mutationFn: (payload: PolicyCreateRequest) =>
+      policyApi.createPolicy(payload),
     onSuccess: () => {
-      invalidate()
-      setShowCreate(false)
-      setForm({ ...EMPTY_FORM })
-      setValidationError('')
-      setSuccessMsg('Policy created successfully.')
-      setTimeout(() => setSuccessMsg(''), 5000)
+      invalidate();
+      setShowCreate(false);
+      setForm({ ...EMPTY_FORM });
+      setValidationError("");
+      setSuccessMsg("Policy created successfully.");
+      setTimeout(() => setSuccessMsg(""), 5000);
     },
-  })
+  });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: Record<string, unknown> }) =>
-      policyApi.updatePolicy(id, payload),
+    mutationFn: ({
+      id,
+      payload,
+    }: {
+      id: string;
+      payload: Record<string, unknown>;
+    }) => policyApi.updatePolicy(id, payload),
     onSuccess: () => {
-      invalidate()
-      setEditPolicy(null)
+      invalidate();
+      setEditPolicy(null);
     },
-  })
+  });
 
   const openCreate = () => {
-    setForm({ ...EMPTY_FORM })
-    setValidationError('')
-    setShowCreate(true)
-  }
+    setForm({ ...EMPTY_FORM });
+    setValidationError("");
+    setShowCreate(true);
+  };
 
   const closeModal = () => {
-    setShowCreate(false)
-    setEditPolicy(null)
-    setValidationError('')
-  }
+    setShowCreate(false);
+    setEditPolicy(null);
+    setValidationError("");
+  };
 
   const openEdit = (policy: Policy) => {
     setForm({
@@ -77,39 +84,48 @@ export function Policies() {
       destination_cidr: policy.destination_cidr,
       protocol: policy.protocol,
       port_range: policy.port_range,
-    })
-    setValidationError('')
-    setEditPolicy(policy)
-  }
+    });
+    setValidationError("");
+    setEditPolicy(policy);
+  };
 
   const handleCreate = () => {
     if (!form.name.trim()) {
-      setValidationError('Policy name is required')
-      return
+      setValidationError("Policy name is required");
+      return;
     }
-    createMutation.mutate(form)
-  }
+    createMutation.mutate(form);
+  };
 
   const handleUpdate = () => {
-    if (!editPolicy) return
-    updateMutation.mutate({ id: editPolicy.id, payload: { ...form } })
-  }
+    if (!editPolicy) return;
+    updateMutation.mutate({ id: editPolicy.id, payload: { ...form } });
+  };
 
   const handleDisable = (id: string) => {
-    updateMutation.mutate({ id, payload: { is_active: false } })
-  }
+    updateMutation.mutate({ id, payload: { is_active: false } });
+  };
 
-  const renderModal = (title: string, onSubmit: () => void, submitLabel: string) => (
+  const renderModal = (
+    title: string,
+    onSubmit: () => void,
+    submitLabel: string,
+  ) => (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="card w-full max-w-lg p-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-white">{title}</h3>
-          <button onClick={closeModal} className="text-slate-400 hover:text-white">
+          <button
+            onClick={closeModal}
+            className="text-slate-400 hover:text-white"
+          >
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        {validationError && <p className="text-sm text-red-400 mb-3">{validationError}</p>}
+        {validationError && (
+          <p className="text-sm text-red-400 mb-3">{validationError}</p>
+        )}
 
         <div className="space-y-4">
           <div>
@@ -122,21 +138,30 @@ export function Policies() {
             />
           </div>
           <div>
-            <label className="block text-sm text-slate-400 mb-1">Description</label>
+            <label className="block text-sm text-slate-400 mb-1">
+              Description
+            </label>
             <input
               type="text"
               value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              onChange={(e) =>
+                setForm({ ...form, description: e.target.value })
+              }
               className="input-field"
             />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm text-slate-400 mb-1">Action</label>
+              <label className="block text-sm text-slate-400 mb-1">
+                Action
+              </label>
               <select
                 value={form.action}
                 onChange={(e) =>
-                  setForm({ ...form, action: e.target.value as 'allow' | 'deny' })
+                  setForm({
+                    ...form,
+                    action: e.target.value as "allow" | "deny",
+                  })
                 }
                 className="select-field w-full"
               >
@@ -145,40 +170,54 @@ export function Policies() {
               </select>
             </div>
             <div>
-              <label className="block text-sm text-slate-400 mb-1">Priority</label>
+              <label className="block text-sm text-slate-400 mb-1">
+                Priority
+              </label>
               <input
                 type="number"
                 value={form.priority}
-                onChange={(e) => setForm({ ...form, priority: Number(e.target.value) })}
+                onChange={(e) =>
+                  setForm({ ...form, priority: Number(e.target.value) })
+                }
                 className="input-field"
               />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm text-slate-400 mb-1">Source CIDR</label>
+              <label className="block text-sm text-slate-400 mb-1">
+                Source CIDR
+              </label>
               <input
                 type="text"
-                value={form.source_cidr ?? ''}
-                onChange={(e) => setForm({ ...form, source_cidr: e.target.value })}
+                value={form.source_cidr ?? ""}
+                onChange={(e) =>
+                  setForm({ ...form, source_cidr: e.target.value })
+                }
                 className="input-field"
               />
             </div>
             <div>
-              <label className="block text-sm text-slate-400 mb-1">Destination CIDR</label>
+              <label className="block text-sm text-slate-400 mb-1">
+                Destination CIDR
+              </label>
               <input
                 type="text"
-                value={form.destination_cidr ?? ''}
-                onChange={(e) => setForm({ ...form, destination_cidr: e.target.value })}
+                value={form.destination_cidr ?? ""}
+                onChange={(e) =>
+                  setForm({ ...form, destination_cidr: e.target.value })
+                }
                 className="input-field"
               />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm text-slate-400 mb-1">Protocol</label>
+              <label className="block text-sm text-slate-400 mb-1">
+                Protocol
+              </label>
               <select
-                value={form.protocol ?? 'tcp'}
+                value={form.protocol ?? "tcp"}
                 onChange={(e) => setForm({ ...form, protocol: e.target.value })}
                 className="select-field w-full"
               >
@@ -189,11 +228,15 @@ export function Policies() {
               </select>
             </div>
             <div>
-              <label className="block text-sm text-slate-400 mb-1">Port Range</label>
+              <label className="block text-sm text-slate-400 mb-1">
+                Port Range
+              </label>
               <input
                 type="text"
-                value={form.port_range ?? ''}
-                onChange={(e) => setForm({ ...form, port_range: e.target.value })}
+                value={form.port_range ?? ""}
+                onChange={(e) =>
+                  setForm({ ...form, port_range: e.target.value })
+                }
                 className="input-field"
               />
             </div>
@@ -210,7 +253,7 @@ export function Policies() {
         </div>
       </div>
     </div>
-  )
+  );
 
   return (
     <div className="space-y-6">
@@ -234,7 +277,9 @@ export function Policies() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="card p-4">
           <p className="text-sm text-slate-400">Total Policies</p>
-          <p className="mt-1 text-2xl font-bold text-white">{policies.length}</p>
+          <p className="mt-1 text-2xl font-bold text-white">
+            {policies.length}
+          </p>
         </div>
         <div className="card p-4">
           <p className="text-sm text-slate-400">DENY Rules</p>
@@ -252,11 +297,15 @@ export function Policies() {
         </div>
       ) : isError ? (
         <div className="card p-12 text-center">
-          <p className="text-red-400">Failed to load policies. Please try again.</p>
+          <p className="text-red-400">
+            Failed to load policies. Please try again.
+          </p>
         </div>
       ) : policies.length === 0 ? (
         <div className="card p-12 text-center">
-          <p className="text-slate-400">No policies available. Create one to get started.</p>
+          <p className="text-slate-400">
+            No policies available. Create one to get started.
+          </p>
         </div>
       ) : (
         <div className="card overflow-hidden">
@@ -277,31 +326,39 @@ export function Policies() {
               <tbody className="divide-y divide-slate-700/50">
                 {policies.map((policy) => (
                   <tr key={policy.id} className="hover:bg-slate-800/30">
-                    <td className="table-cell font-medium text-white">{policy.name}</td>
+                    <td className="table-cell font-medium text-white">
+                      {policy.name}
+                    </td>
                     <td className="table-cell">
                       <span
                         className={`badge border ${
-                          policy.action === 'deny'
-                            ? 'bg-red-500/20 text-red-400 border-red-500/30'
-                            : 'bg-green-500/20 text-green-400 border-green-500/30'
+                          policy.action === "deny"
+                            ? "bg-red-500/20 text-red-400 border-red-500/30"
+                            : "bg-green-500/20 text-green-400 border-green-500/30"
                         }`}
                       >
                         {policy.action.toUpperCase()}
                       </span>
                     </td>
-                    <td className="table-cell font-mono text-xs">{policy.source_cidr}</td>
-                    <td className="table-cell font-mono text-xs">{policy.destination_cidr}</td>
-                    <td className="table-cell font-mono text-xs">{policy.port_range}</td>
+                    <td className="table-cell font-mono text-xs">
+                      {policy.source_cidr}
+                    </td>
+                    <td className="table-cell font-mono text-xs">
+                      {policy.destination_cidr}
+                    </td>
+                    <td className="table-cell font-mono text-xs">
+                      {policy.port_range}
+                    </td>
                     <td className="table-cell">{policy.priority}</td>
                     <td className="table-cell">
                       <span
                         className={`badge border ${
                           policy.is_active
-                            ? 'bg-green-500/20 text-green-400 border-green-500/30'
-                            : 'bg-slate-500/20 text-slate-400 border-slate-500/30'
+                            ? "bg-green-500/20 text-green-400 border-green-500/30"
+                            : "bg-slate-500/20 text-slate-400 border-slate-500/30"
                         }`}
                       >
-                        {policy.is_active ? 'Active' : 'Disabled'}
+                        {policy.is_active ? "Active" : "Disabled"}
                       </span>
                     </td>
                     <td className="table-cell">
@@ -330,8 +387,9 @@ export function Policies() {
         </div>
       )}
 
-      {showCreate && renderModal('Create Policy', handleCreate, 'Create Policy')}
-      {editPolicy && renderModal('Edit Policy', handleUpdate, 'Update Policy')}
+      {showCreate &&
+        renderModal("Create Policy", handleCreate, "Create Policy")}
+      {editPolicy && renderModal("Edit Policy", handleUpdate, "Update Policy")}
     </div>
-  )
+  );
 }

@@ -16,19 +16,14 @@ Usage:
   python download_datasets.py --datasets unsw_nb15 nsl_kdd
   python download_datasets.py --list
 """
+
 from __future__ import annotations
 
 import argparse
-import hashlib
 import logging
-import os
 import shutil
-import sys
-import time
-import zipfile
 from pathlib import Path
-from typing import Dict, List, Optional
-from urllib.request import urlretrieve
+from typing import Dict, List
 
 import requests
 from tqdm import tqdm
@@ -47,7 +42,6 @@ DATA_DIR = SCRIPT_DIR / "datasets" / "data"
 # ── Download registry ──────────────────────────────────────────────────────────
 
 DATASETS: Dict[str, dict] = {
-
     # ── UNSW-NB15 ─────────────────────────────────────────────────────────────
     # Reference: Moustafa & Slay, 2015
     # 257,673 rows, 49 features, 9 attack categories + normal
@@ -81,7 +75,6 @@ DATASETS: Dict[str, dict] = {
             },
         ],
     },
-
     # ── NSL-KDD ───────────────────────────────────────────────────────────────
     # Reference: Tavallaee et al., 2009
     # Improved version of KDD Cup 99 — removes redundant records
@@ -107,7 +100,6 @@ DATASETS: Dict[str, dict] = {
         ],
         "post_process": "convert_arff_to_csv",
     },
-
     # ── CIC-IDS-2017 (verify only — already present) ──────────────────────────
     "cicids2017": {
         "description": "CIC-IDS-2017 — 15 attack types (UNB, 2017) — VERIFY ONLY",
@@ -115,7 +107,6 @@ DATASETS: Dict[str, dict] = {
         "files": [],  # already downloaded, just verify
         "verify_only": True,
     },
-
     # ── CIC-IDS-2018 (verify only — already present) ──────────────────────────
     "cicids2018": {
         "description": "CSE-CIC-IDS-2018 — 14 attack types (AWS Open Data, 2018) — VERIFY ONLY",
@@ -123,7 +114,6 @@ DATASETS: Dict[str, dict] = {
         "files": [],  # already downloaded, just verify
         "verify_only": True,
     },
-
     # ── NF-UQ-NIDS v2 (via Kaggle) ────────────────────────────────────────────
     # Reference: Sarhan et al., 2021
     # NetFlow-based dataset combining CIC-IDS-2018, UNSW-NB15, BoT-IoT, ToN-IoT
@@ -136,7 +126,6 @@ DATASETS: Dict[str, dict] = {
         },
         "files": [],
     },
-
     # ── TON_IoT Network ───────────────────────────────────────────────────────
     # Reference: Alsaedi et al., 2020 — IoT and network telemetry
     "ton_iot": {
@@ -153,8 +142,10 @@ DATASETS: Dict[str, dict] = {
 
 # ── Download helpers ───────────────────────────────────────────────────────────
 
+
 class TqdmUpTo(tqdm):
     """tqdm subclass for urlretrieve progress."""
+
     def update_to(self, b=1, bsize=1, tsize=None):
         if tsize is not None:
             self.total = tsize
@@ -183,8 +174,11 @@ def _download_file(url: str, dest: Path, size_mb: int = 0) -> bool:
             total = int(resp.headers.get("content-length", 0))
             with open(tmp, "wb") as fh:
                 with tqdm(
-                    total=total, unit="B", unit_scale=True,
-                    desc=f"    {desc}", leave=False,
+                    total=total,
+                    unit="B",
+                    unit_scale=True,
+                    desc=f"    {desc}",
+                    leave=False,
                 ) as pbar:
                     for chunk in resp.iter_content(chunk_size=65536):
                         fh.write(chunk)
@@ -205,12 +199,11 @@ def _kaggle_download(dataset_spec: dict, dest_dir: Path) -> bool:
     """Download via Kaggle API. Requires ~/.kaggle/kaggle.json."""
     try:
         import kaggle  # noqa
+
         dest_dir.mkdir(parents=True, exist_ok=True)
         dataset = dataset_spec["dataset"]
         logger.info("  Kaggle: downloading %s", dataset)
-        kaggle.api.dataset_download_files(
-            dataset, path=str(dest_dir), unzip=True
-        )
+        kaggle.api.dataset_download_files(dataset, path=str(dest_dir), unzip=True)
         logger.info("  ✓ Kaggle download complete")
         return True
     except ImportError:
@@ -227,8 +220,6 @@ def _kaggle_download(dataset_spec: dict, dest_dir: Path) -> bool:
 
 def _convert_arff_to_csv(dest_dir: Path) -> None:
     """Convert NSL-KDD ARFF files to CSV format."""
-    import io
-    import re
 
     for arff_path in dest_dir.glob("*.arff"):
         csv_path = arff_path.with_suffix(".csv")
@@ -264,6 +255,7 @@ def _convert_arff_to_csv(dest_dir: Path) -> None:
 
 # ── NSL-KDD loader shim (add to data_loader.py if needed) ─────────────────────
 
+
 def _build_nsl_kdd_loader_hint() -> str:
     return """
 # To add NSL-KDD to data_loader.py, add this mapping and loader:
@@ -289,6 +281,7 @@ _NSLKDD_MAP = {
 
 
 # ── Main download logic ────────────────────────────────────────────────────────
+
 
 def verify_dataset(name: str, spec: dict) -> dict:
     """Verify an existing dataset and return status."""
@@ -326,14 +319,19 @@ def download_dataset(name: str, spec: dict, force: bool = False) -> bool:
     if spec.get("verify_only"):
         status = verify_dataset(name, spec)
         if status["status"] == "complete":
-            logger.info("  ✓ Already present: %d files (%.2f GB)",
-                        status["files"], status["size_gb"])
+            logger.info(
+                "  ✓ Already present: %d files (%.2f GB)",
+                status["files"],
+                status["size_gb"],
+            )
             return True
         else:
             logger.warning(
                 "  ⚠ %s is marked verify-only but status=%s. "
                 "Locate and place CSV files in: %s",
-                name, status["status"], dest_dir,
+                name,
+                status["status"],
+                dest_dir,
             )
             return False
 
@@ -355,14 +353,19 @@ def download_dataset(name: str, spec: dict, force: bool = False) -> bool:
         dest_file = dest_dir / fname
 
         if dest_file.exists() and not force:
-            logger.info("  ✓ Already downloaded: %s (%.1f MB)",
-                        fname, dest_file.stat().st_size / 1e6)
+            logger.info(
+                "  ✓ Already downloaded: %s (%.1f MB)",
+                fname,
+                dest_file.stat().st_size / 1e6,
+            )
             continue
 
         ok = _download_file(file_spec["url"], dest_file, file_spec.get("size_mb", 0))
         if not ok and "fallback_url" in file_spec:
             logger.warning("  Trying fallback URL...")
-            ok = _download_file(file_spec["fallback_url"], dest_file, file_spec.get("size_mb", 0))
+            ok = _download_file(
+                file_spec["fallback_url"], dest_file, file_spec.get("size_mb", 0)
+            )
 
         if not ok:
             all_ok = False
@@ -380,6 +383,7 @@ def update_manifest(results: Dict[str, dict]) -> None:
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
 
     from datetime import datetime, timezone
+
     lines = [
         "SENTINEL Training Datasets",
         f"Updated: {datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}",
@@ -397,7 +401,9 @@ def update_manifest(results: Dict[str, dict]) -> None:
             f"Dataset: {name}",
             f"  Status: {status}",
             f"  Files:  {files} CSV",
-            f"  Size:   {size:.1f} GB" if size >= 0.1 else f"  Size:   {int(size * 1000)} MB",
+            f"  Size:   {size:.1f} GB"
+            if size >= 0.1
+            else f"  Size:   {int(size * 1000)} MB",
             "",
         ]
 
@@ -413,6 +419,7 @@ def update_manifest(results: Dict[str, dict]) -> None:
 
 # ── CLI ────────────────────────────────────────────────────────────────────────
 
+
 def main():
     parser = argparse.ArgumentParser(
         description="SENTINEL Dataset Downloader",
@@ -420,24 +427,29 @@ def main():
         epilog=__doc__,
     )
     parser.add_argument(
-        "--datasets", nargs="+",
+        "--datasets",
+        nargs="+",
         choices=list(DATASETS.keys()),
         help="Specific datasets to download",
     )
     parser.add_argument(
-        "--all", action="store_true",
+        "--all",
+        action="store_true",
         help="Download all available datasets",
     )
     parser.add_argument(
-        "--force", action="store_true",
+        "--force",
+        action="store_true",
         help="Re-download even if files already exist",
     )
     parser.add_argument(
-        "--list", action="store_true",
+        "--list",
+        action="store_true",
         help="List available datasets and their status",
     )
     parser.add_argument(
-        "--data-dir", default=str(DATA_DIR),
+        "--data-dir",
+        default=str(DATA_DIR),
         help=f"Base data directory (default: {DATA_DIR})",
     )
     args = parser.parse_args()
@@ -453,13 +465,19 @@ def main():
         for name, spec in DATASETS.items():
             status = verify_dataset(name, spec)
             mark = "✓" if status["status"] == "complete" else "✗"
-            size_str = f"{status['size_gb']:.1f} GB" if status["size_gb"] > 0 else "not downloaded"
+            size_str = (
+                f"{status['size_gb']:.1f} GB"
+                if status["size_gb"] > 0
+                else "not downloaded"
+            )
             print(f"  {mark}  {name:<20}  {size_str:<12}  {spec['description']}")
         print()
         print("Tip: CIC-IDS-2017 and CIC-IDS-2018 require manual download from:")
         print("  CIC-IDS-2017: https://www.unb.ca/cic/datasets/ids-2017.html")
         print("  CIC-IDS-2018: https://www.unb.ca/cic/datasets/ids-2018.html")
-        print("               (or: aws s3 cp --no-sign-request s3://cse-cic-ids2018/ ...)")
+        print(
+            "               (or: aws s3 cp --no-sign-request s3://cse-cic-ids2018/ ...)"
+        )
         return
 
     targets = list(DATASETS.keys()) if args.all else (args.datasets or [])
@@ -483,9 +501,11 @@ def main():
     print("=" * 60)
     for name, result in results.items():
         mark = "✓" if result.get("ok") and result["status"] == "complete" else "✗"
-        print(f"  {mark}  {name:<25}  {result['status']:<12}  "
-              f"{result.get('files', 0)} files  "
-              f"{result.get('size_gb', 0):.1f} GB")
+        print(
+            f"  {mark}  {name:<25}  {result['status']:<12}  "
+            f"{result.get('files', 0)} files  "
+            f"{result.get('size_gb', 0):.1f} GB"
+        )
     print()
 
     # Print NSL-KDD loader hint if downloaded

@@ -6,11 +6,12 @@ Each experience is a single-step (state, action, reward) tuple — essentially
 a contextual-bandit sample.  The trainer runs a clipped-surrogate PPO update
 using the current policy as the reference distribution.
 """
+
 from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import numpy as np
 import redis as _redis_mod
@@ -114,7 +115,9 @@ class DRLTrainer:
 
                 ratio = torch.exp(new_log_probs - mb_old_lp)
                 surr1 = ratio * mb_adv
-                surr2 = torch.clamp(ratio, 1.0 - _CLIP_RANGE, 1.0 + _CLIP_RANGE) * mb_adv
+                surr2 = (
+                    torch.clamp(ratio, 1.0 - _CLIP_RANGE, 1.0 + _CLIP_RANGE) * mb_adv
+                )
                 policy_loss = -torch.min(surr1, surr2).mean()
 
                 value_loss = F.mse_loss(values, mb_returns)
@@ -148,7 +151,10 @@ class DRLTrainer:
         self._publish_metrics(metrics)
         logger.info(
             "Training complete: %d experiences, %d epochs, loss=%.4f in %.1fs",
-            n_samples, epochs, metrics["policy_loss"], elapsed,
+            n_samples,
+            epochs,
+            metrics["policy_loss"],
+            elapsed,
         )
         return metrics
 
@@ -176,8 +182,8 @@ class DRLTrainer:
 
     def _publish_metrics(self, metrics: Dict[str, Any]) -> None:
         try:
-            self.redis.hset("drl:training:latest", mapping={
-                k: str(v) for k, v in metrics.items()
-            })
+            self.redis.hset(
+                "drl:training:latest", mapping={k: str(v) for k, v in metrics.items()}
+            )
         except _redis_mod.RedisError:
             logger.debug("Could not publish training metrics to Redis")

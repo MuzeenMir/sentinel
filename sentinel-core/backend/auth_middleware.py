@@ -44,7 +44,10 @@ AUTH_VERIFY_TIMEOUT = int(os.environ.get("AUTH_VERIFY_TIMEOUT", "5"))
 @retry_with_backoff(
     max_retries=1,
     base_delay=0.3,
-    retryable_exceptions=(requests.exceptions.ConnectionError, requests.exceptions.Timeout),
+    retryable_exceptions=(
+        requests.exceptions.ConnectionError,
+        requests.exceptions.Timeout,
+    ),
 )
 def _verify_token(token: str) -> Optional[dict]:
     """Call auth-service to verify a JWT and return the user dict, or *None*."""
@@ -84,7 +87,9 @@ def require_auth(f):
             user = _verify_token(token)
         except CircuitBreakerOpen:
             logger.warning("Auth-service circuit breaker open; rejecting request")
-            return jsonify({"error": "Authentication service temporarily unavailable"}), 503
+            return jsonify(
+                {"error": "Authentication service temporarily unavailable"}
+            ), 503
         except requests.exceptions.RequestException as exc:
             logger.error("Auth-service communication error: %s", exc)
             return jsonify({"error": "Authentication service unavailable"}), 503

@@ -6,7 +6,6 @@ import sys
 import tempfile
 import time
 from unittest.mock import patch, MagicMock
-import pytest
 
 _backend = os.path.join(os.path.dirname(__file__), "..")
 _hids_agent_dir = os.path.join(_backend, "hids-agent")
@@ -17,7 +16,9 @@ os.environ.setdefault("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
 os.environ.setdefault("FIM_PATHS", "")
 
 # Load hids-agent app in isolation so we don't get hardening-service's cached 'app'
-_spec = importlib.util.spec_from_file_location("hids_agent_app", os.path.join(_hids_agent_dir, "app.py"))
+_spec = importlib.util.spec_from_file_location(
+    "hids_agent_app", os.path.join(_hids_agent_dir, "app.py")
+)
 _hids_module = importlib.util.module_from_spec(_spec)
 sys.modules["hids_agent_app"] = _hids_module
 _spec.loader.exec_module(_hids_module)
@@ -38,15 +39,23 @@ class TestBaselineRuleEngine:
 
     def test_known_exec_not_alerted(self):
         event = _ProcessExecEvent(
-            timestamp=time.time(), pid=1, ppid=0, uid=0,
-            comm="sshd", filename="/usr/sbin/sshd",
+            timestamp=time.time(),
+            pid=1,
+            ppid=0,
+            uid=0,
+            comm="sshd",
+            filename="/usr/sbin/sshd",
         )
         assert self.rules.should_alert_exec(event) is False
 
     def test_unknown_exec_alerted(self):
         event = _ProcessExecEvent(
-            timestamp=time.time(), pid=100, ppid=1, uid=1000,
-            comm="malware", filename="/tmp/malware",
+            timestamp=time.time(),
+            pid=100,
+            ppid=1,
+            uid=1000,
+            comm="malware",
+            filename="/tmp/malware",
         )
         assert self.rules.should_alert_exec(event) is True
 

@@ -16,7 +16,8 @@ os.environ.setdefault("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
 
 # Load hardening-service app in isolation to avoid module cache collisions
 _spec = importlib.util.spec_from_file_location(
-    "hardening_app", os.path.join(_hardening_dir, "app.py"),
+    "hardening_app",
+    os.path.join(_hardening_dir, "app.py"),
     submodule_search_locations=[_hardening_dir],
 )
 _mod = importlib.util.module_from_spec(_spec)
@@ -56,8 +57,12 @@ class TestCISBenchmarkEngine:
 
     def test_ssh_checks_have_cis_references(self):
         ssh_checks = [
-            "ssh_root_login", "ssh_protocol", "ssh_max_auth_tries",
-            "ssh_permit_empty_passwords", "ssh_idle_timeout", "ssh_password_auth",
+            "ssh_root_login",
+            "ssh_protocol",
+            "ssh_max_auth_tries",
+            "ssh_permit_empty_passwords",
+            "ssh_idle_timeout",
+            "ssh_password_auth",
         ]
         for check_id in ssh_checks:
             result = self.engine.run_check(check_id)
@@ -69,6 +74,7 @@ class TestCISBenchmarkEngine:
 class TestCheckResult:
     def test_dataclass_fields(self):
         from dataclasses import asdict
+
         result = hardening_app.CheckResult(
             check_id="test",
             title="Test Check",
@@ -162,9 +168,7 @@ class TestFlaskApp:
     def setup_method(self):
         hardening_app.app.config["TESTING"] = True
         self.client = hardening_app.app.test_client()
-        self._auth_patch = patch(
-            "requests.post", side_effect=_fake_auth_post
-        )
+        self._auth_patch = patch("requests.post", side_effect=_fake_auth_post)
         self._auth_patch.start()
 
     def teardown_method(self):

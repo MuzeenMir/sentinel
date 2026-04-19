@@ -1,4 +1,5 @@
 """Pytest fixtures for AI Engine tests. Sets MODEL_PATH and mocks Redis before app import."""
+
 import os
 import sys
 from pathlib import Path
@@ -89,6 +90,7 @@ except ModuleNotFoundError:
 
     redis = _RedisModule()  # type: ignore[assignment]
 else:
+
     def _fake_from_url(cls, url, **kwargs):
         return FakeRedis()
 

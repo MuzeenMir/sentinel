@@ -1,39 +1,39 @@
-import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
-import { Shield, Filter } from 'lucide-react'
-import { threatApi } from '../services/api'
-import type { Threat } from '../types'
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
+import { Shield, Filter } from "lucide-react";
+import { threatApi } from "../services/api";
+import type { Threat } from "../types";
 
 function severityBadge(severity: string) {
   const map: Record<string, string> = {
-    critical: 'badge-critical',
-    high: 'badge-high',
-    medium: 'badge-medium',
-    low: 'badge-low',
-  }
-  return map[severity] ?? 'badge-info'
+    critical: "badge-critical",
+    high: "badge-high",
+    medium: "badge-medium",
+    low: "badge-low",
+  };
+  return map[severity] ?? "badge-info";
 }
 
 export function Threats() {
-  const navigate = useNavigate()
-  const [severityFilter, setSeverityFilter] = useState('')
-  const [typeFilter, setTypeFilter] = useState('')
+  const navigate = useNavigate();
+  const [severityFilter, setSeverityFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['threats'],
+    queryKey: ["threats"],
     queryFn: () => threatApi.getThreats().then((r) => r.data),
-  })
+  });
 
-  const threats: Threat[] = data?.threats ?? data ?? []
+  const threats: Threat[] = data?.threats ?? data ?? [];
 
   const filtered = threats.filter((t) => {
-    if (severityFilter && t.severity !== severityFilter) return false
-    if (typeFilter && t.type !== typeFilter) return false
-    return true
-  })
+    if (severityFilter && t.severity !== severityFilter) return false;
+    if (typeFilter && t.type !== typeFilter) return false;
+    return true;
+  });
 
-  const types = [...new Set(threats.map((t) => t.type))]
+  const types = [...new Set(threats.map((t) => t.type))];
 
   return (
     <div className="space-y-6">
@@ -77,11 +77,15 @@ export function Threats() {
         </div>
       ) : isError ? (
         <div className="card p-12 text-center">
-          <p className="text-red-400">Failed to load threats. Please try again.</p>
+          <p className="text-red-400">
+            Failed to load threats. Please try again.
+          </p>
         </div>
       ) : filtered.length === 0 ? (
         <div className="card p-12 text-center">
-          <p className="text-slate-400">No threats match the current filters.</p>
+          <p className="text-slate-400">
+            No threats match the current filters.
+          </p>
         </div>
       ) : (
         <div className="card overflow-hidden">
@@ -105,14 +109,24 @@ export function Threats() {
                     onClick={() => navigate(`/threats/${threat.id}`)}
                     className="cursor-pointer hover:bg-slate-800/30 transition-colors"
                   >
-                    <td className="table-cell font-mono text-xs text-cyan-400">{threat.id}</td>
-                    <td className="table-cell font-medium text-white">{threat.type}</td>
-                    <td className="table-cell">
-                      <span className={severityBadge(threat.severity)}>{threat.severity}</span>
+                    <td className="table-cell font-mono text-xs text-cyan-400">
+                      {threat.id}
                     </td>
-                    <td className="table-cell font-mono text-xs">{threat.source_ip ?? '—'}</td>
+                    <td className="table-cell font-medium text-white">
+                      {threat.type}
+                    </td>
                     <td className="table-cell">
-                      {threat.confidence != null ? `${threat.confidence}%` : '—'}
+                      <span className={severityBadge(threat.severity)}>
+                        {threat.severity}
+                      </span>
+                    </td>
+                    <td className="table-cell font-mono text-xs">
+                      {threat.source_ip ?? "—"}
+                    </td>
+                    <td className="table-cell">
+                      {threat.confidence != null
+                        ? `${threat.confidence}%`
+                        : "—"}
                     </td>
                     <td className="table-cell">
                       <span className="badge bg-slate-600/30 text-slate-300 border border-slate-600/50">
@@ -130,5 +144,5 @@ export function Threats() {
         </div>
       )}
     </div>
-  )
+  );
 }

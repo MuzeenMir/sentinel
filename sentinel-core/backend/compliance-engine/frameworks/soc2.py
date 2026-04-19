@@ -1,4 +1,5 @@
 """AICPA SOC 2 Trust Services Criteria compliance framework."""
+
 import logging
 from typing import Any, Dict, List
 
@@ -274,7 +275,6 @@ _SOC2_CONTROLS: List[Dict[str, Any]] = [
 
 
 class SOC2Framework(BaseFramework):
-
     @property
     def full_name(self) -> str:
         return "AICPA SOC 2 — Trust Services Criteria"
@@ -310,9 +310,7 @@ class SOC2Framework(BaseFramework):
             logger.exception("SOC 2 assessment failed")
             raise
 
-    def detailed_gap_analysis(
-        self, current_controls: Dict
-    ) -> List[Dict[str, Any]]:
+    def detailed_gap_analysis(self, current_controls: Dict) -> List[Dict[str, Any]]:
         try:
             return self._default_gap_analysis(current_controls)
         except Exception:

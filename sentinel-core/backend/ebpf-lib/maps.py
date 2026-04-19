@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from typing import Dict, Iterator, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from ebpf_lib import EBPF_AVAILABLE
 from ebpf_lib.loader import MapReader
@@ -41,7 +41,8 @@ class BPFHashMap:
         if not self._use_kernel:
             logger.debug(
                 "BPFHashMap using in-memory fallback (fd=%d, ebpf=%s)",
-                map_fd, EBPF_AVAILABLE,
+                map_fd,
+                EBPF_AVAILABLE,
             )
 
     def _pad(self, data: bytes, size: int) -> bytes:
@@ -54,7 +55,7 @@ class BPFHashMap:
         if self._use_kernel and self._reader:
             val = self._reader.lookup(key)
             if val is not None:
-                return val[:self._value_size]
+                return val[: self._value_size]
             return None
         with self._lock:
             return self._fallback.get(key)
@@ -81,7 +82,7 @@ class BPFHashMap:
             for k in self._reader.keys():
                 v = self._reader.lookup(k)
                 if v is not None:
-                    result.append((k[:self._key_size], v[:self._value_size]))
+                    result.append((k[: self._key_size], v[: self._value_size]))
             return result
         with self._lock:
             return list(self._fallback.items())
@@ -120,7 +121,8 @@ class BPFArrayMap:
         if not self._use_kernel:
             logger.debug(
                 "BPFArrayMap using in-memory fallback (fd=%d, entries=%d)",
-                map_fd, max_entries,
+                map_fd,
+                max_entries,
             )
 
     def _key_to_bytes(self, index: int) -> bytes:
@@ -128,7 +130,7 @@ class BPFArrayMap:
 
     def _pad_value(self, value: bytes) -> bytes:
         if len(value) >= self._value_size:
-            return value[:self._value_size]
+            return value[: self._value_size]
         return value + b"\x00" * (self._value_size - len(value))
 
     def get(self, index: int) -> Optional[bytes]:
@@ -137,7 +139,7 @@ class BPFArrayMap:
         if self._use_kernel and self._reader:
             val = self._reader.lookup(self._key_to_bytes(index))
             if val is not None:
-                return val[:self._value_size]
+                return val[: self._value_size]
             return None
         with self._lock:
             return self._fallback.get(index)

@@ -1,4 +1,5 @@
 """Unit tests for compliance framework base."""
+
 import sys
 from pathlib import Path
 
@@ -77,7 +78,12 @@ def test_base_framework_controls_summary():
     f = ConcreteFramework()
     f.controls = [
         {"id": "ctrl-1", "name": "Control 1", "category": "Access", "description": "A"},
-        {"id": "ctrl-2", "name": "Control 2", "category": "Encryption", "description": "B"},
+        {
+            "id": "ctrl-2",
+            "name": "Control 2",
+            "category": "Encryption",
+            "description": "B",
+        },
     ]
     summary = f.get_controls_summary()
     assert len(summary) == 2
@@ -102,8 +108,13 @@ def test_base_framework_assess():
     """assess returns compliance assessments."""
     f = ConcreteFramework()
     f.controls = [
-        {"id": "c1", "name": "Req 1", "category": "general",
-         "description": "Test", "requirements": ["r1", "r2"]},
+        {
+            "id": "c1",
+            "name": "Req 1",
+            "category": "general",
+            "description": "Test",
+            "requirements": ["r1", "r2"],
+        },
     ]
     policies = []
     configs = {"r1": "enabled", "r2": "enabled"}

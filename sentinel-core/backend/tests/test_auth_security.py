@@ -4,13 +4,12 @@ Auth-specific security test cases (SEC-01 through SEC-10 from STP).
 Validates authentication, authorization, and security mechanisms
 against common attack vectors.
 """
+
 import os
 import sys
 import json
-import time
 import pytest
 from unittest.mock import patch, MagicMock
-from datetime import datetime, timedelta
 
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-security-tests")
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
@@ -24,10 +23,16 @@ sys.path.insert(0, os.path.join(_backend_root, "auth-service"))
 
 _mock_redis = MagicMock()
 
-with patch("redis.ConnectionPool.from_url", return_value=MagicMock()), \
-     patch("redis.Redis", return_value=_mock_redis), \
-     patch.dict("sys.modules", {"enterprise_auth": MagicMock(register_enterprise_auth=MagicMock())}):
+with (
+    patch("redis.ConnectionPool.from_url", return_value=MagicMock()),
+    patch("redis.Redis", return_value=_mock_redis),
+    patch.dict(
+        "sys.modules",
+        {"enterprise_auth": MagicMock(register_enterprise_auth=MagicMock())},
+    ),
+):
     import importlib
+
     spec = importlib.util.spec_from_file_location(
         "auth_sec_app",
         os.path.join(_backend_root, "auth-service", "app.py"),
@@ -63,19 +68,25 @@ def client():
 
 
 def _create_user(client, username="secuser", role="viewer"):
-    return client.post("/api/v1/auth/register", json={
-        "username": username,
-        "email": f"{username}@test.local",
-        "password": VALID_PASSWORD,
-        "role": role,
-    })
+    return client.post(
+        "/api/v1/auth/register",
+        json={
+            "username": username,
+            "email": f"{username}@test.local",
+            "password": VALID_PASSWORD,
+            "role": role,
+        },
+    )
 
 
 def _login(client, username="secuser"):
-    return client.post("/api/v1/auth/login", json={
-        "username": username,
-        "password": VALID_PASSWORD,
-    })
+    return client.post(
+        "/api/v1/auth/login",
+        json={
+            "username": username,
+            "password": VALID_PASSWORD,
+        },
+    )
 
 
 def _auth(token):
@@ -85,21 +96,27 @@ def _auth(token):
 class TestSEC01_PasswordPolicy:
     """SEC-01: Password must meet complexity requirements."""
 
-    @pytest.mark.parametrize("weak", [
-        "short1!",           # too short
-        "alllowercase1!",    # no uppercase
-        "ALLUPPERCASE1!",    # no lowercase
-        "NoDigitHere!",      # no digit
-        "NoSpecial1234",     # no special char
-        "",                  # empty
-    ])
+    @pytest.mark.parametrize(
+        "weak",
+        [
+            "short1!",  # too short
+            "alllowercase1!",  # no uppercase
+            "ALLUPPERCASE1!",  # no lowercase
+            "NoDigitHere!",  # no digit
+            "NoSpecial1234",  # no special char
+            "",  # empty
+        ],
+    )
     def test_weak_passwords_rejected(self, client, weak):
-        resp = client.post("/api/v1/auth/register", json={
-            "username": "pwtest",
-            "email": "pw@test.local",
-            "password": weak,
-            "role": "viewer",
-        })
+        resp = client.post(
+            "/api/v1/auth/register",
+            json={
+                "username": "pwtest",
+                "email": "pw@test.local",
+                "password": weak,
+                "role": "viewer",
+            },
+        )
         assert resp.status_code == 400
 
     def test_strong_password_accepted(self, client):
@@ -113,10 +130,13 @@ class TestSEC02_BruteForceProtection:
     def test_lockout_after_5_failures(self, client):
         _create_user(client)
         for _ in range(5):
-            client.post("/api/v1/auth/login", json={
-                "username": "secuser",
-                "password": "WrongPassword1!",
-            })
+            client.post(
+                "/api/v1/auth/login",
+                json={
+                    "username": "secuser",
+                    "password": "WrongPassword1!",
+                },
+            )
 
         # 6th attempt with correct password should be blocked
         resp = _login(client)
@@ -132,8 +152,7 @@ class TestSEC03_TokenSecurity:
         assert resp.status_code == 401
 
     def test_forged_token_rejected(self, client):
-        resp = client.get("/api/v1/auth/profile",
-                          headers=_auth("forged.token.here"))
+        resp = client.get("/api/v1/auth/profile", headers=_auth("forged.token.here"))
         assert resp.status_code in (401, 422)
 
     def test_valid_token_accepted(self, client):
@@ -176,14 +195,29 @@ class TestSEC05_RBAC:
 class TestSEC06_InputValidation:
     """SEC-06: All inputs are validated against injection."""
 
-    @pytest.mark.parametrize("payload", [
-        {"username": "'; DROP TABLE users; --", "email": "x@x.com",
-         "password": VALID_PASSWORD, "role": "viewer"},
-        {"username": "<script>alert(1)</script>", "email": "x@x.com",
-         "password": VALID_PASSWORD, "role": "viewer"},
-        {"username": "test", "email": "not-an-email",
-         "password": VALID_PASSWORD, "role": "viewer"},
-    ])
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            {
+                "username": "'; DROP TABLE users; --",
+                "email": "x@x.com",
+                "password": VALID_PASSWORD,
+                "role": "viewer",
+            },
+            {
+                "username": "<script>alert(1)</script>",
+                "email": "x@x.com",
+                "password": VALID_PASSWORD,
+                "role": "viewer",
+            },
+            {
+                "username": "test",
+                "email": "not-an-email",
+                "password": VALID_PASSWORD,
+                "role": "viewer",
+            },
+        ],
+    )
     def test_malicious_input_rejected(self, client, payload):
         resp = client.post("/api/v1/auth/register", json=payload)
         assert resp.status_code == 400
@@ -248,16 +282,26 @@ class TestSEC09_DuplicateAccounts:
         assert resp.status_code == 409
 
     def test_duplicate_email(self, client):
-        resp1 = client.post("/api/v1/auth/register", json={
-            "username": "user1", "email": "same@test.local",
-            "password": VALID_PASSWORD, "role": "viewer",
-        })
+        resp1 = client.post(
+            "/api/v1/auth/register",
+            json={
+                "username": "user1",
+                "email": "same@test.local",
+                "password": VALID_PASSWORD,
+                "role": "viewer",
+            },
+        )
         assert resp1.status_code == 201
 
-        resp2 = client.post("/api/v1/auth/register", json={
-            "username": "user2", "email": "same@test.local",
-            "password": VALID_PASSWORD, "role": "viewer",
-        })
+        resp2 = client.post(
+            "/api/v1/auth/register",
+            json={
+                "username": "user2",
+                "email": "same@test.local",
+                "password": VALID_PASSWORD,
+                "role": "viewer",
+            },
+        )
         assert resp2.status_code == 409
 
 
@@ -267,17 +311,19 @@ class TestSEC10_PasswordChangeAuth:
     def test_wrong_current_password_rejected(self, client):
         _create_user(client)
         token = _login(client).json["access_token"]
-        resp = client.put("/api/v1/auth/change-password",
-                          headers=_auth(token),
-                          json={"current_password": "Wrong@Pass1",
-                                "new_password": "NewSecure@2"})
+        resp = client.put(
+            "/api/v1/auth/change-password",
+            headers=_auth(token),
+            json={"current_password": "Wrong@Pass1", "new_password": "NewSecure@2"},
+        )
         assert resp.status_code == 401
 
     def test_correct_current_password_accepted(self, client):
         _create_user(client)
         token = _login(client).json["access_token"]
-        resp = client.put("/api/v1/auth/change-password",
-                          headers=_auth(token),
-                          json={"current_password": VALID_PASSWORD,
-                                "new_password": "NewSecure@2"})
+        resp = client.put(
+            "/api/v1/auth/change-password",
+            headers=_auth(token),
+            json={"current_password": VALID_PASSWORD, "new_password": "NewSecure@2"},
+        )
         assert resp.status_code == 200

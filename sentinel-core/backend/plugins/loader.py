@@ -9,10 +9,9 @@ from __future__ import annotations
 import importlib
 import importlib.util
 import logging
-import os
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Type
+from typing import Any, List, Type
 
 from plugins.registry import Plugin
 
@@ -56,7 +55,11 @@ class PluginLoader:
                         if PluginLoader.validate_plugin(obj):
                             plugins.append(obj)
                         else:
-                            logger.warning("Plugin %s in %s failed validation", obj.__name__, py_file)
+                            logger.warning(
+                                "Plugin %s in %s failed validation",
+                                obj.__name__,
+                                py_file,
+                            )
             except Exception as exc:
                 logger.error("Failed to load plugin from %s: %s", py_file, exc)
 
@@ -75,16 +78,13 @@ class PluginLoader:
 
         for attr_name in dir(mod):
             obj = getattr(mod, attr_name)
-            if (
-                isinstance(obj, type)
-                and issubclass(obj, Plugin)
-                and obj is not Plugin
-            ):
+            if isinstance(obj, type) and issubclass(obj, Plugin) and obj is not Plugin:
                 if PluginLoader.validate_plugin(obj):
                     plugins.append(obj)
 
         if hasattr(mod, "__path__"):
             import pkgutil
+
             for _importer, sub_name, _is_pkg in pkgutil.walk_packages(
                 mod.__path__, prefix=f"{package_name}."
             ):
@@ -100,7 +100,9 @@ class PluginLoader:
                             if PluginLoader.validate_plugin(obj):
                                 plugins.append(obj)
                 except Exception as exc:
-                    logger.error("Failed to import plugin sub-module %s: %s", sub_name, exc)
+                    logger.error(
+                        "Failed to import plugin sub-module %s: %s", sub_name, exc
+                    )
 
         logger.info("Loaded %d plugin(s) from package %s", len(plugins), package_name)
         return plugins
@@ -123,13 +125,17 @@ class PluginLoader:
         for attr in required_attrs:
             prop = getattr(type(instance), attr, None)
             if prop is None:
-                logger.debug("Plugin %s missing property: %s", plugin_class.__name__, attr)
+                logger.debug(
+                    "Plugin %s missing property: %s", plugin_class.__name__, attr
+                )
                 return False
 
         for method in required_methods:
             fn = getattr(instance, method, None)
             if fn is None or not callable(fn):
-                logger.debug("Plugin %s missing method: %s", plugin_class.__name__, method)
+                logger.debug(
+                    "Plugin %s missing method: %s", plugin_class.__name__, method
+                )
                 return False
 
         return True

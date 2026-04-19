@@ -1,4 +1,5 @@
 """Unit tests for firewall adapter base classes."""
+
 import sys
 from pathlib import Path
 

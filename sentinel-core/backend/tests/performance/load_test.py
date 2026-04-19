@@ -10,6 +10,7 @@ Usage:
     python load_test.py --url http://localhost:8080 --concurrency 100 --duration 300 --ramp-up 30
     python load_test.py --url http://localhost:8080 --json --output results.json
 """
+
 import argparse
 import json
 import math
@@ -21,7 +22,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from threading import Event, Lock
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Tuple
 
 import requests
 
@@ -29,6 +30,7 @@ import requests
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class LoadTestConfig:
@@ -45,6 +47,7 @@ class LoadTestConfig:
 # ---------------------------------------------------------------------------
 # Metrics collection
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class EndpointMetrics:
@@ -122,7 +125,9 @@ class MetricsCollector:
                 "p99": round(_percentile(all_latencies, 99), 2),
                 "max": round(all_latencies[-1], 2),
                 "mean": round(statistics.mean(all_latencies), 2),
-                "stdev": round(statistics.stdev(all_latencies), 2) if len(all_latencies) > 1 else 0.0,
+                "stdev": round(statistics.stdev(all_latencies), 2)
+                if len(all_latencies) > 1
+                else 0.0,
             }
 
         global_report["endpoints"] = endpoint_reports
@@ -163,6 +168,7 @@ def _percentile_report(m: EndpointMetrics) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Scenario definitions
 # ---------------------------------------------------------------------------
+
 
 class LoadTestScenarios:
     """Generates randomised API calls against each endpoint category."""
@@ -264,9 +270,14 @@ class LoadTestScenarios:
 
     def create_alert(self) -> Tuple[str, float, int, int]:
         payload = {
-            "type": random.choice([
-                "network_anomaly", "brute_force", "malware_detected", "unauthorized_access",
-            ]),
+            "type": random.choice(
+                [
+                    "network_anomaly",
+                    "brute_force",
+                    "malware_detected",
+                    "unauthorized_access",
+                ]
+            ),
             "severity": random.choice(["low", "medium", "high", "critical"]),
             "description": f"Load test alert {random.randint(1, 99999)}",
             "source": "load_test",
@@ -342,6 +353,7 @@ class LoadTestScenarios:
 # Test runner
 # ---------------------------------------------------------------------------
 
+
 def _authenticate(cfg: LoadTestConfig) -> str:
     """Obtain a JWT token from the auth service."""
     auth_base = cfg.auth_url or cfg.target_url
@@ -379,10 +391,13 @@ def run_load_test(cfg: LoadTestConfig) -> Dict[str, Any]:
                 name, latency, status, size = scenario()
                 is_error = status >= 400
                 collector.record(name, latency, status, size, is_error)
-            except requests.RequestException as exc:
+            except requests.RequestException:
                 collector.record(
                     scenario.__name__ if hasattr(scenario, "__name__") else "unknown",
-                    0.0, 0, 0, True,
+                    0.0,
+                    0,
+                    0,
+                    True,
                 )
 
     collector.start()
@@ -441,7 +456,9 @@ def _print_report(report: Dict[str, Any]) -> None:
         print(f"  Latency p99:     {lat['p99']}ms")
         print(f"  Latency max:     {lat['max']}ms")
     print("-" * 70)
-    print(f"  {'Endpoint':<25} {'Reqs':>6} {'Err%':>7} {'p50':>8} {'p95':>8} {'p99':>8}")
+    print(
+        f"  {'Endpoint':<25} {'Reqs':>6} {'Err%':>7} {'p50':>8} {'p95':>8} {'p99':>8}"
+    )
     print("-" * 70)
     for name, ep in sorted(report.get("endpoints", {}).items()):
         ep_lat = ep.get("latency_ms", {})
@@ -459,21 +476,31 @@ def _print_report(report: Dict[str, Any]) -> None:
 # CLI
 # ---------------------------------------------------------------------------
 
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="SENTINEL HTTP Load Test",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--url", default=os.getenv("BASE_URL", "http://localhost:8080"),
-                        help="API Gateway base URL")
-    parser.add_argument("--auth-url", default=os.getenv("AUTH_URL", ""),
-                        help="Auth service URL (defaults to --url)")
-    parser.add_argument("--concurrency", type=int, default=50,
-                        help="Number of concurrent virtual users")
-    parser.add_argument("--duration", type=int, default=60,
-                        help="Test duration in seconds")
-    parser.add_argument("--ramp-up", type=int, default=10,
-                        help="Ramp-up period in seconds")
+    parser.add_argument(
+        "--url",
+        default=os.getenv("BASE_URL", "http://localhost:8080"),
+        help="API Gateway base URL",
+    )
+    parser.add_argument(
+        "--auth-url",
+        default=os.getenv("AUTH_URL", ""),
+        help="Auth service URL (defaults to --url)",
+    )
+    parser.add_argument(
+        "--concurrency", type=int, default=50, help="Number of concurrent virtual users"
+    )
+    parser.add_argument(
+        "--duration", type=int, default=60, help="Test duration in seconds"
+    )
+    parser.add_argument(
+        "--ramp-up", type=int, default=10, help="Ramp-up period in seconds"
+    )
     parser.add_argument("--user", default=os.getenv("ADMIN_USER", "admin"))
     parser.add_argument("--password", default=os.getenv("ADMIN_PASS", "ChangeMe!2026"))
     parser.add_argument("--json", action="store_true", help="Output raw JSON to stdout")

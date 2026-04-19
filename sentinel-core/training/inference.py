@@ -24,7 +24,7 @@ import json
 import logging
 import os
 import pickle
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import numpy as np
 
@@ -38,6 +38,7 @@ CONTENT_TYPE_JSON = "application/json"
 
 
 # ── Model container ───────────────────────────────────────────────────────────
+
 
 class ThreatDetectorEnsemble:
     """Lightweight inference wrapper loaded in model_fn."""
@@ -65,6 +66,7 @@ class ThreatDetectorEnsemble:
             if self.xgb_model is not None:
                 try:
                     import xgboost as xgb
+
                     dm = xgb.DMatrix(row_2d)
                     proba = self.xgb_model.predict(dm)[0]
                     if isinstance(proba, (list, np.ndarray)) and len(proba) > 1:
@@ -91,6 +93,7 @@ class ThreatDetectorEnsemble:
             if self.lstm_model is not None:
                 try:
                     import torch
+
                     tensor = torch.FloatTensor(row_2d).unsqueeze(0)
                     with torch.no_grad():
                         logits = self.lstm_model(tensor)
@@ -104,24 +107,26 @@ class ThreatDetectorEnsemble:
                 weights = {"xgboost": 0.5, "lstm": 0.3, "isolation_forest": 0.2}
                 total_weight = sum(weights.get(k, 0.1) for k in scores)
                 ensemble_score = sum(
-                    v * weights.get(k, 0.1) / total_weight
-                    for k, v in scores.items()
+                    v * weights.get(k, 0.1) / total_weight for k, v in scores.items()
                 )
             else:
                 ensemble_score = 0.0
 
             is_threat = ensemble_score >= CONFIDENCE_THRESHOLD
-            results.append({
-                "is_threat": is_threat,
-                "confidence": round(ensemble_score, 4),
-                "threat_type": predicted_label if is_threat else "benign",
-                "model_scores": scores,
-            })
+            results.append(
+                {
+                    "is_threat": is_threat,
+                    "confidence": round(ensemble_score, 4),
+                    "threat_type": predicted_label if is_threat else "benign",
+                    "model_scores": scores,
+                }
+            )
 
         return results
 
 
 # ── SageMaker handler functions ───────────────────────────────────────────────
+
 
 def model_fn(model_dir: str) -> ThreatDetectorEnsemble:
     """Load all model artefacts from *model_dir* and return the ensemble."""
@@ -148,6 +153,7 @@ def model_fn(model_dir: str) -> ThreatDetectorEnsemble:
     if os.path.exists(xgb_path):
         try:
             import xgboost as xgb
+
             booster = xgb.Booster()
             booster.load_model(xgb_path)
             ensemble.xgb_model = booster
@@ -167,6 +173,7 @@ def model_fn(model_dir: str) -> ThreatDetectorEnsemble:
     if os.path.exists(lstm_path):
         try:
             import torch
+
             ensemble.lstm_model = torch.load(lstm_path, map_location="cpu")
             ensemble.lstm_model.eval()
             logger.info("Loaded LSTM model")
@@ -196,21 +203,27 @@ def input_fn(request_body: bytes, content_type: str = CONTENT_TYPE_JSON) -> np.n
         return np.array(features, dtype=np.float32)
 
     if content_type in ("text/csv", "application/x-npy"):
-        buf = io.BytesIO(request_body if isinstance(request_body, bytes) else request_body.encode())
-        return np.load(buf) if content_type == "application/x-npy" else np.genfromtxt(buf, delimiter=",", dtype=np.float32)
+        buf = io.BytesIO(
+            request_body if isinstance(request_body, bytes) else request_body.encode()
+        )
+        return (
+            np.load(buf)
+            if content_type == "application/x-npy"
+            else np.genfromtxt(buf, delimiter=",", dtype=np.float32)
+        )
 
     raise ValueError(f"Unsupported content type: {content_type}")
 
 
-def predict_fn(
-    data: np.ndarray, model: ThreatDetectorEnsemble
-) -> List[Dict[str, Any]]:
+def predict_fn(data: np.ndarray, model: ThreatDetectorEnsemble) -> List[Dict[str, Any]]:
     """Run the ensemble model on *data* and return predictions."""
     if data.ndim == 1:
         data = data.reshape(1, -1)
     return model.predict(data)
 
 
-def output_fn(prediction: List[Dict[str, Any]], accept: str = CONTENT_TYPE_JSON) -> bytes:
+def output_fn(
+    prediction: List[Dict[str, Any]], accept: str = CONTENT_TYPE_JSON
+) -> bytes:
     """Serialise model output for the HTTP response."""
     return json.dumps({"predictions": prediction}).encode("utf-8")

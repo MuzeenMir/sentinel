@@ -28,7 +28,7 @@ import pkgutil
 import sys
 import time
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Dict, List, Optional, Type
+from typing import Any, Dict, List, Optional, Type
 
 logger = logging.getLogger("sentinel-plugins")
 
@@ -96,11 +96,16 @@ class PluginRegistry:
             temp = plugin_class.__new__(plugin_class)
             name = temp.name
         except Exception as exc:
-            raise TypeError(f"Could not read .name from {plugin_class!r}: {exc}") from exc
+            raise TypeError(
+                f"Could not read .name from {plugin_class!r}: {exc}"
+            ) from exc
 
         if name in self._plugins:
-            logger.warning("Plugin %r already registered; replacing with %s",
-                           name, plugin_class.__name__)
+            logger.warning(
+                "Plugin %r already registered; replacing with %s",
+                name,
+                plugin_class.__name__,
+            )
         self._plugins[name] = _PluginEntry(plugin_class)
         logger.info("Plugin registered: %s (%s)", name, plugin_class.__name__)
         return plugin_class

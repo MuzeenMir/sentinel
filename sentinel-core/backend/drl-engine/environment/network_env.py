@@ -8,6 +8,7 @@ reward function.  Ground-truth labels are known inside the environment but
 are *not* exposed in the observation vector, so the agent must learn from
 noisy threat signals.
 """
+
 from __future__ import annotations
 
 import logging
@@ -23,17 +24,37 @@ from agent.state_builder import StateBuilder
 logger = logging.getLogger(__name__)
 
 _THREAT_TYPES = [
-    "brute_force", "ddos", "port_scan", "malware",
-    "data_exfiltration", "sql_injection", "c2_communication",
-    "privilege_escalation", "lateral_movement", "credential_stuffing",
+    "brute_force",
+    "ddos",
+    "port_scan",
+    "malware",
+    "data_exfiltration",
+    "sql_injection",
+    "c2_communication",
+    "privilege_escalation",
+    "lateral_movement",
+    "credential_stuffing",
 ]
 
 _PROTOCOLS = ["TCP", "UDP", "ICMP"]
 _PROTOCOL_WEIGHTS = [0.70, 0.20, 0.10]
 
 _COMMON_PORTS = [
-    22, 23, 25, 53, 80, 110, 443, 445,
-    1433, 3306, 3389, 5432, 8080, 8443, 9200,
+    22,
+    23,
+    25,
+    53,
+    80,
+    110,
+    443,
+    445,
+    1433,
+    3306,
+    3389,
+    5432,
+    8080,
+    8443,
+    9200,
 ]
 
 
@@ -57,7 +78,8 @@ class NetworkSecurityEnv(gym.Env):
         self._threat_ratio = threat_ratio
 
         self.observation_space = spaces.Box(
-            low=0.0, high=1.0,
+            low=0.0,
+            high=1.0,
             shape=(self._sb.state_dim,),
             dtype=np.float32,
         )
@@ -85,7 +107,8 @@ class NetworkSecurityEnv(gym.Env):
         return obs, {}
 
     def step(
-        self, action: int,
+        self,
+        action: int,
     ) -> Tuple[np.ndarray, float, bool, bool, Dict[str, Any]]:
         self._step_count += 1
 
@@ -128,7 +151,9 @@ class NetworkSecurityEnv(gym.Env):
         if is_threat:
             src_ip = self._random_public_ip()
         else:
-            src_ip = f"192.168.{self._rng.integers(0, 256)}.{self._rng.integers(1, 255)}"
+            src_ip = (
+                f"192.168.{self._rng.integers(0, 256)}.{self._rng.integers(1, 255)}"
+            )
         dest_ip = f"10.0.{self._rng.integers(0, 10)}.{self._rng.integers(1, 255)}"
 
         return {
@@ -141,13 +166,19 @@ class NetworkSecurityEnv(gym.Env):
             "asset_criticality": float(self._rng.integers(1, 6)),
             "context": {
                 "connection_rate": float(
-                    self._rng.exponential(100) if is_threat else self._rng.exponential(10)
+                    self._rng.exponential(100)
+                    if is_threat
+                    else self._rng.exponential(10)
                 ),
                 "bytes_per_second": float(
-                    self._rng.exponential(10_000) if is_threat else self._rng.exponential(1_000)
+                    self._rng.exponential(10_000)
+                    if is_threat
+                    else self._rng.exponential(1_000)
                 ),
                 "packets_per_second": float(
-                    self._rng.exponential(500) if is_threat else self._rng.exponential(50)
+                    self._rng.exponential(500)
+                    if is_threat
+                    else self._rng.exponential(50)
                 ),
                 "historical_alerts": int(
                     self._rng.poisson(10) if is_threat else self._rng.poisson(1)
@@ -163,8 +194,11 @@ class NetworkSecurityEnv(gym.Env):
         while True:
             octets = self._rng.integers(1, 224, size=4)
             first = int(octets[0])
-            if first not in (10, 127) and not (first == 172 and 16 <= int(octets[1]) <= 31) \
-               and not (first == 192 and int(octets[1]) == 168):
+            if (
+                first not in (10, 127)
+                and not (first == 172 and 16 <= int(octets[1]) <= 31)
+                and not (first == 192 and int(octets[1]) == 168)
+            ):
                 return ".".join(str(int(o)) for o in octets)
 
     # -- reward (mirrors production RewardFunction logic) ------------------

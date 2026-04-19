@@ -1,41 +1,101 @@
 """Maps SENTINEL firewall/security policies to compliance framework controls."""
+
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 
 _POLICY_TYPE_KEYWORDS: Dict[str, List[str]] = {
     "firewall": [
-        "firewall", "network", "traffic", "port", "protocol", "ingress",
-        "egress", "deny", "allow", "block", "filter", "segment",
+        "firewall",
+        "network",
+        "traffic",
+        "port",
+        "protocol",
+        "ingress",
+        "egress",
+        "deny",
+        "allow",
+        "block",
+        "filter",
+        "segment",
     ],
     "access_control": [
-        "access", "authentication", "authorization", "rbac", "role",
-        "privilege", "permission", "credential", "identity", "mfa", "login",
+        "access",
+        "authentication",
+        "authorization",
+        "rbac",
+        "role",
+        "privilege",
+        "permission",
+        "credential",
+        "identity",
+        "mfa",
+        "login",
     ],
     "encryption": [
-        "encrypt", "tls", "ssl", "cipher", "key", "certificate",
-        "cryptograph", "hash", "aes", "rsa",
+        "encrypt",
+        "tls",
+        "ssl",
+        "cipher",
+        "key",
+        "certificate",
+        "cryptograph",
+        "hash",
+        "aes",
+        "rsa",
     ],
     "monitoring": [
-        "monitor", "audit", "log", "alert", "detect", "siem",
-        "intrusion", "anomaly", "event", "observation",
+        "monitor",
+        "audit",
+        "log",
+        "alert",
+        "detect",
+        "siem",
+        "intrusion",
+        "anomaly",
+        "event",
+        "observation",
     ],
     "data_protection": [
-        "data", "retention", "backup", "erasure", "anonymi",
-        "pseudonymi", "mask", "classification", "privacy",
+        "data",
+        "retention",
+        "backup",
+        "erasure",
+        "anonymi",
+        "pseudonymi",
+        "mask",
+        "classification",
+        "privacy",
     ],
     "incident_response": [
-        "incident", "response", "breach", "recovery", "forensic",
-        "containment", "notification", "escalation",
+        "incident",
+        "response",
+        "breach",
+        "recovery",
+        "forensic",
+        "containment",
+        "notification",
+        "escalation",
     ],
     "vulnerability_management": [
-        "vulnerability", "patch", "scan", "penetration", "remediat",
-        "update", "cve", "exploit",
+        "vulnerability",
+        "patch",
+        "scan",
+        "penetration",
+        "remediat",
+        "update",
+        "cve",
+        "exploit",
     ],
     "physical_security": [
-        "physical", "facility", "badge", "cctv", "workstation",
-        "media", "disposal",
+        "physical",
+        "facility",
+        "badge",
+        "cctv",
+        "workstation",
+        "media",
+        "disposal",
     ],
 }
 
@@ -45,14 +105,25 @@ _FRAMEWORK_CONTROL_KEYWORDS: Dict[str, Dict[str, List[str]]] = {
         "access_control": ["GDPR-5.1f", "GDPR-32", "GDPR-25"],
         "monitoring": ["GDPR-5.1f", "GDPR-32"],
         "data_protection": [
-            "GDPR-5.1b", "GDPR-5.1c", "GDPR-5.1e", "GDPR-15",
-            "GDPR-17", "GDPR-20", "GDPR-25", "GDPR-30",
+            "GDPR-5.1b",
+            "GDPR-5.1c",
+            "GDPR-5.1e",
+            "GDPR-15",
+            "GDPR-17",
+            "GDPR-20",
+            "GDPR-25",
+            "GDPR-30",
         ],
         "incident_response": ["GDPR-33", "GDPR-34"],
         "firewall": ["GDPR-32"],
     },
     "HIPAA": {
-        "access_control": ["HIPAA-308-a3", "HIPAA-308-a4", "HIPAA-312-a", "HIPAA-312-d"],
+        "access_control": [
+            "HIPAA-308-a3",
+            "HIPAA-308-a4",
+            "HIPAA-312-a",
+            "HIPAA-312-d",
+        ],
         "encryption": ["HIPAA-312-a", "HIPAA-312-e"],
         "monitoring": ["HIPAA-312-b", "HIPAA-308-a1"],
         "incident_response": ["HIPAA-308-a6", "HIPAA-308-a7"],
@@ -95,13 +166,10 @@ _FRAMEWORK_CONTROL_KEYWORDS: Dict[str, Dict[str, List[str]]] = {
 
 
 class PolicyToControlMapper:
-
     def __init__(self, frameworks: Dict[str, Any]) -> None:
         self._frameworks = frameworks
 
-    def map_policies(
-        self, policies: List[Dict], framework_id: str
-    ) -> Dict[str, Any]:
+    def map_policies(self, policies: List[Dict], framework_id: str) -> Dict[str, Any]:
         framework_id = framework_id.upper()
         if framework_id not in self._frameworks:
             logger.warning("Unknown framework for policy mapping: %s", framework_id)
@@ -126,9 +194,7 @@ class PolicyToControlMapper:
             "unmapped": unmapped,
         }
 
-    def map_single_policy(
-        self, policy: Dict, framework_id: str
-    ) -> Dict[str, Any]:
+    def map_single_policy(self, policy: Dict, framework_id: str) -> Dict[str, Any]:
         return self._map_single(policy, framework_id.upper())
 
     def _map_single(self, policy: Dict, framework_id: str) -> Dict[str, Any]:
@@ -176,9 +242,7 @@ class PolicyToControlMapper:
         return matched_types
 
     @staticmethod
-    def _calculate_confidence(
-        policy_types: List[str], control_ids: List[str]
-    ) -> float:
+    def _calculate_confidence(policy_types: List[str], control_ids: List[str]) -> float:
         if not policy_types or not control_ids:
             return 0.0
         type_score = min(len(policy_types) * 0.2, 0.4)

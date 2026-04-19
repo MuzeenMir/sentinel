@@ -5,6 +5,7 @@ Provides high-accuracy supervised classification with probability calibration,
 feature importance tracking, and safe fallback to a default model when no
 trained artefact exists on disk.
 """
+
 import json
 import logging
 import os
@@ -149,7 +150,9 @@ class XGBoostDetector(BaseDetector):
 
             joblib.dump(self.model, os.path.join(save_path, "xgboost_model.joblib"))
             if self.scaler is not None:
-                joblib.dump(self.scaler, os.path.join(save_path, "xgboost_scaler.joblib"))
+                joblib.dump(
+                    self.scaler, os.path.join(save_path, "xgboost_scaler.joblib")
+                )
 
             meta = {
                 "version": self._version,

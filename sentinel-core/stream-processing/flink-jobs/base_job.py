@@ -4,6 +4,7 @@ Base class for SENTINEL stream processing jobs.
 Provides Kafka consumer/producer lifecycle management, offset-based
 checkpointing, and graceful shutdown via SIGTERM/SIGINT.
 """
+
 from __future__ import annotations
 
 import json
@@ -38,11 +39,13 @@ class BaseStreamJob(ABC):
         self._producer: Optional[Producer] = None
 
         self.kafka_servers = os.environ.get(
-            "KAFKA_BOOTSTRAP_SERVERS", "localhost:9092",
+            "KAFKA_BOOTSTRAP_SERVERS",
+            "localhost:9092",
         )
         self.parallelism = int(os.environ.get("FLINK_PARALLELISM", "1"))
         self.checkpoint_dir = os.environ.get(
-            "CHECKPOINT_DIR", f"/tmp/flink-checkpoints/{job_name}",
+            "CHECKPOINT_DIR",
+            f"/tmp/flink-checkpoints/{job_name}",
         )
 
         self._install_signal_handlers()
@@ -122,7 +125,9 @@ class BaseStreamJob(ABC):
         key: Optional[str] = None,
     ):
         if self._producer is None:
-            raise RuntimeError("Producer not initialised — call create_producer() in setup()")
+            raise RuntimeError(
+                "Producer not initialised — call create_producer() in setup()"
+            )
         self._producer.produce(
             topic=topic,
             value=json.dumps(value).encode("utf-8"),
@@ -134,7 +139,9 @@ class BaseStreamJob(ABC):
     @staticmethod
     def _on_delivery(err, msg):
         if err is not None:
-            logger.error("Delivery failed [%s/%d]: %s", msg.topic(), msg.partition(), err)
+            logger.error(
+                "Delivery failed [%s/%d]: %s", msg.topic(), msg.partition(), err
+            )
 
     def commit_offsets(self):
         if self._consumer is not None:
@@ -170,7 +177,8 @@ class BaseStreamJob(ABC):
                 if attempt < KAFKA_CONNECT_MAX_RETRIES:
                     logger.info(
                         "Waiting for Kafka (%d/%d)…",
-                        attempt, KAFKA_CONNECT_MAX_RETRIES,
+                        attempt,
+                        KAFKA_CONNECT_MAX_RETRIES,
                     )
                     time.sleep(KAFKA_CONNECT_DELAY)
         raise RuntimeError(
@@ -207,7 +215,9 @@ class BaseStreamJob(ABC):
             except (json.JSONDecodeError, UnicodeDecodeError):
                 logger.warning(
                     "Skipping malformed message on %s [%d:%d]",
-                    msg.topic(), msg.partition(), msg.offset(),
+                    msg.topic(),
+                    msg.partition(),
+                    msg.offset(),
                 )
                 continue
 
@@ -216,7 +226,9 @@ class BaseStreamJob(ABC):
             except Exception:
                 logger.exception(
                     "Error processing message %s [%d:%d]",
-                    msg.topic(), msg.partition(), msg.offset(),
+                    msg.topic(),
+                    msg.partition(),
+                    msg.offset(),
                 )
                 continue
 

@@ -22,6 +22,7 @@ logger = logging.getLogger("sentinel.ebpf.loader")
 @dataclass
 class ProgramInfo:
     """Metadata for a loaded eBPF program."""
+
     name: str
     path: str
     prog_type: str
@@ -108,9 +109,7 @@ class ProgramLoader:
         self._bpf_available = self._check_bpf_available()
 
         if not self._bpf_available:
-            logger.warning(
-                "BPF runtime not available; operating in dry-run mode"
-            )
+            logger.warning("BPF runtime not available; operating in dry-run mode")
 
     @staticmethod
     def _check_bpf_available() -> bool:
@@ -141,8 +140,9 @@ class ProgramLoader:
                 h.update(chunk)
         return h.hexdigest()
 
-    def load(self, name: str, prog_type: str = "xdp",
-             attach_target: Optional[str] = None) -> ProgramInfo:
+    def load(
+        self, name: str, prog_type: str = "xdp", attach_target: Optional[str] = None
+    ) -> ProgramInfo:
         """Load a compiled eBPF program by name.
 
         Args:
@@ -165,9 +165,7 @@ class ProgramLoader:
 
         if not self._verifier.verify(str(obj_path)):
             self._audit("load", name, False, "signature verification failed")
-            raise PermissionError(
-                f"Signature verification failed for {obj_path}"
-            )
+            raise PermissionError(f"Signature verification failed for {obj_path}")
 
         sha256 = self._file_sha256(str(obj_path))
 
@@ -184,15 +182,16 @@ class ProgramLoader:
         else:
             logger.info(
                 "DRY-RUN: would load %s (%s) attached to %s",
-                name, prog_type, attach_target,
+                name,
+                prog_type,
+                attach_target,
             )
 
         self._loaded[name] = info
         self._audit("load", name, True, f"sha256={sha256}")
         return info
 
-    def _do_load(self, info: ProgramInfo,
-                 attach_target: Optional[str]) -> ProgramInfo:
+    def _do_load(self, info: ProgramInfo, attach_target: Optional[str]) -> ProgramInfo:
         """Actually load the program into the kernel using libbpf/bcc.
 
         This is the integration point for the real BPF loading library.
@@ -200,6 +199,7 @@ class ProgramLoader:
         """
         try:
             from bcc import BPF  # type: ignore[import-untyped]
+
             b = BPF(src_file=info.path)
             if info.prog_type == "xdp" and attach_target:
                 fn = b.load_func(info.name, BPF.XDP)
@@ -207,14 +207,11 @@ class ProgramLoader:
                 info.fd = fn.fd
             logger.info("Loaded %s via bcc", info.name)
         except ImportError:
-            logger.info(
-                "bcc not available, attempting libbpf ctypes fallback"
-            )
+            logger.info("bcc not available, attempting libbpf ctypes fallback")
             self._load_via_libbpf(info, attach_target)
         return info
 
-    def _load_via_libbpf(self, info: ProgramInfo,
-                         attach_target: Optional[str]) -> None:
+    def _load_via_libbpf(self, info: ProgramInfo, attach_target: Optional[str]) -> None:
         """Placeholder for libbpf-based loading via ctypes.
 
         A full implementation would use ctypes to call:

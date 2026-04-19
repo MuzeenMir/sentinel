@@ -9,37 +9,37 @@ Components
 * **Compliance** – bonus for actions that align with compliance posture.
 * **Action cost** – minor per-action cost reflecting operational overhead.
 """
+
 from __future__ import annotations
 
 import logging
 from typing import Any, Dict, List, Optional
 
 import numpy as np
-import redis as _redis_mod
 
 logger = logging.getLogger(__name__)
 
-_THREAT_BLOCKED_REWARD  = 1.0
+_THREAT_BLOCKED_REWARD = 1.0
 _FALSE_POSITIVE_PENALTY = -2.0
-_LATENCY_PENALTY_SCALE  = -0.5
+_LATENCY_PENALTY_SCALE = -0.5
 _COMPLIANCE_BONUS_SCALE = 0.3
 
 # 8-action cost table (indices 0-7 matching ActionType)
 _ACTION_COST: Dict[int, float] = {
-    0: 0.00,    # ALLOW
-    1: -0.05,   # DENY
-    2: -0.02,   # RATE_LIMIT_LOW
-    3: -0.02,   # RATE_LIMIT_MEDIUM
-    4: -0.03,   # RATE_LIMIT_HIGH
-    5: -0.10,   # QUARANTINE_SHORT
-    6: -0.15,   # QUARANTINE_LONG
-    7: 0.00,    # MONITOR
+    0: 0.00,  # ALLOW
+    1: -0.05,  # DENY
+    2: -0.02,  # RATE_LIMIT_LOW
+    3: -0.02,  # RATE_LIMIT_MEDIUM
+    4: -0.03,  # RATE_LIMIT_HIGH
+    5: -0.10,  # QUARANTINE_SHORT
+    6: -0.15,  # QUARANTINE_LONG
+    7: 0.00,  # MONITOR
 }
 
-_EMA_ALPHA    = 0.01
+_EMA_ALPHA = 0.01
 _REDIS_PREFIX = "drl:reward"
-_GAE_GAMMA    = 0.99
-_GAE_LAMBDA   = 0.95
+_GAE_GAMMA = 0.99
+_GAE_LAMBDA = 0.95
 
 
 class RewardFunction:
@@ -161,7 +161,7 @@ class RewardFunction:
     # ------------------------------------------------------------------
 
     def _ema_normalise(self, key: str, value: float) -> float:
-        mean   = self._ema_update(f"{key}:mean", value)
+        mean = self._ema_update(f"{key}:mean", value)
         sq_mean = self._ema_update(f"{key}:sq", value * value)
         std = max(float(np.sqrt(max(sq_mean - mean * mean, 0.0))), 1e-8)
         return (value - mean) / std

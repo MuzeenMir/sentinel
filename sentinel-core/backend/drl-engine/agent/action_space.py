@@ -12,6 +12,7 @@ Actions (8 total)
 6  QUARANTINE_LONG  – isolate for 24 hours (confirmed threat)
 7  MONITOR          – allow but flag for deep inspection
 """
+
 from __future__ import annotations
 
 import random
@@ -19,17 +20,17 @@ from enum import IntEnum
 from typing import Any, Dict, List, Optional
 
 
-
 class ActionType(IntEnum):
     """Named constants for each discrete action index."""
-    ALLOW            = 0
-    DENY             = 1
-    RATE_LIMIT_LOW   = 2
+
+    ALLOW = 0
+    DENY = 1
+    RATE_LIMIT_LOW = 2
     RATE_LIMIT_MEDIUM = 3
-    RATE_LIMIT_HIGH  = 4
+    RATE_LIMIT_HIGH = 4
     QUARANTINE_SHORT = 5
-    QUARANTINE_LONG  = 6
-    MONITOR          = 7
+    QUARANTINE_LONG = 6
+    MONITOR = 7
 
 
 _ACTION_DEFS: List[Dict[str, Any]] = [
@@ -67,19 +68,31 @@ _ACTION_DEFS: List[Dict[str, Any]] = [
         "index": ActionType.QUARANTINE_SHORT,
         "name": "QUARANTINE",
         "description": "Isolate source for 1 hour",
-        "parameters": {"duration": 3600, "segment": "quarantine-vlan", "allow_dns": False},
+        "parameters": {
+            "duration": 3600,
+            "segment": "quarantine-vlan",
+            "allow_dns": False,
+        },
     },
     {
         "index": ActionType.QUARANTINE_LONG,
         "name": "QUARANTINE",
         "description": "Isolate source for 24 hours",
-        "parameters": {"duration": 86400, "segment": "quarantine-vlan", "allow_dns": False},
+        "parameters": {
+            "duration": 86400,
+            "segment": "quarantine-vlan",
+            "allow_dns": False,
+        },
     },
     {
         "index": ActionType.MONITOR,
         "name": "MONITOR",
         "description": "Allow but flag for deep packet inspection",
-        "parameters": {"inspection_level": "deep", "enhanced_logging": True, "alert_on_anomaly": True},
+        "parameters": {
+            "inspection_level": "deep",
+            "enhanced_logging": True,
+            "alert_on_anomaly": True,
+        },
     },
 ]
 

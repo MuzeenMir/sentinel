@@ -1,4 +1,5 @@
 """Compliance assessment storage and report generation backed by Redis."""
+
 import json
 import logging
 from datetime import datetime, timedelta
@@ -7,15 +8,14 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 _ASSESSMENT_KEY_PREFIX = "compliance:assessment:"
-_REPORT_KEY_PREFIX     = "compliance:report:"
-_ASSESSMENT_INDEX      = "compliance:assessments:index"
-_REPORTS_INDEX         = "compliance:reports:index"
-_ASSESSMENT_TTL_DAYS   = 365
-_REPORT_TTL_DAYS       = 90
+_REPORT_KEY_PREFIX = "compliance:report:"
+_ASSESSMENT_INDEX = "compliance:assessments:index"
+_REPORTS_INDEX = "compliance:reports:index"
+_ASSESSMENT_TTL_DAYS = 365
+_REPORT_TTL_DAYS = 90
 
 
 class ComplianceReporter:
-
     def __init__(self, redis_client: Any) -> None:
         self._redis = redis_client
 
@@ -48,13 +48,18 @@ class ComplianceReporter:
                 timedelta(days=_ASSESSMENT_TTL_DAYS),
                 json.dumps(record, default=str),
             )
-            self._redis.lpush(_ASSESSMENT_INDEX, json.dumps({
-                "assessment_id": assessment_id,
-                "framework": framework,
-                "timestamp": record["timestamp"],
-                "overall_score": record["overall_score"],
-                "status": record["status"],
-            }))
+            self._redis.lpush(
+                _ASSESSMENT_INDEX,
+                json.dumps(
+                    {
+                        "assessment_id": assessment_id,
+                        "framework": framework,
+                        "timestamp": record["timestamp"],
+                        "overall_score": record["overall_score"],
+                        "status": record["status"],
+                    }
+                ),
+            )
             self._redis.ltrim(_ASSESSMENT_INDEX, 0, 999)
             logger.info("Stored assessment %s for %s", assessment_id, framework)
         except Exception:
@@ -94,17 +99,21 @@ class ComplianceReporter:
                 }
             else:
                 period = {
-                    "start": (datetime.utcnow() - timedelta(days=30)).strftime("%Y-%m-%d"),
+                    "start": (datetime.utcnow() - timedelta(days=30)).strftime(
+                        "%Y-%m-%d"
+                    ),
                     "end": datetime.utcnow().strftime("%Y-%m-%d"),
                 }
 
             content = {
-                "executive_summary": raw.pop("_executive_summary",
-                    f"{report_type.title()} compliance report for {framework_id}."),
+                "executive_summary": raw.pop(
+                    "_executive_summary",
+                    f"{report_type.title()} compliance report for {framework_id}.",
+                ),
                 "assessment_period": period,
                 "sections": raw.pop("_sections", [raw] if raw else []),
             }
-            content.update(raw)   # any remaining top-level keys become part of content
+            content.update(raw)  # any remaining top-level keys become part of content
 
             report = {
                 "report_id": report_id,
@@ -121,12 +130,17 @@ class ComplianceReporter:
                     timedelta(days=_REPORT_TTL_DAYS),
                     json.dumps(report, default=str),
                 )
-                self._redis.lpush(_REPORTS_INDEX, json.dumps({
-                    "report_id": report_id,
-                    "framework": framework_id,
-                    "type": report_type,
-                    "generated_at": now,
-                }))
+                self._redis.lpush(
+                    _REPORTS_INDEX,
+                    json.dumps(
+                        {
+                            "report_id": report_id,
+                            "framework": framework_id,
+                            "type": report_type,
+                            "generated_at": now,
+                        }
+                    ),
+                )
                 self._redis.ltrim(_REPORTS_INDEX, 0, 999)
             except Exception:
                 logger.exception("Failed to persist report %s", report_id)
@@ -149,7 +163,10 @@ class ComplianceReporter:
             history: List[Dict[str, Any]] = []
             for entry in raw_entries:
                 record = json.loads(entry)
-                if framework and record.get("framework", "").upper() != framework.upper():
+                if (
+                    framework
+                    and record.get("framework", "").upper() != framework.upper()
+                ):
                     continue
                 history.append(record)
                 if len(history) >= limit:
@@ -242,7 +259,12 @@ class ComplianceReporter:
         for ca in latest.get("control_assessments", []):
             cat = ca.get("category", "Other")
             if cat not in by_category:
-                by_category[cat] = {"compliant": 0, "partial": 0, "non_compliant": 0, "controls": []}
+                by_category[cat] = {
+                    "compliant": 0,
+                    "partial": 0,
+                    "non_compliant": 0,
+                    "controls": [],
+                }
             bucket = by_category[cat]
             if ca["status"] == "compliant":
                 bucket["compliant"] += 1
@@ -260,7 +282,9 @@ class ComplianceReporter:
                     "compliant": data["compliant"],
                     "partially_compliant": data["partial"],
                     "non_compliant": data["non_compliant"],
-                    "total": data["compliant"] + data["partial"] + data["non_compliant"],
+                    "total": data["compliant"]
+                    + data["partial"]
+                    + data["non_compliant"],
                 }
                 for cat, data in by_category.items()
             },
@@ -297,8 +321,10 @@ class ComplianceReporter:
         ]
         scores = [t["score"] for t in trend_data]
         direction = (
-            "improving" if len(scores) > 1 and scores[-1] > scores[0]
-            else "declining" if len(scores) > 1 and scores[-1] < scores[0]
+            "improving"
+            if len(scores) > 1 and scores[-1] > scores[0]
+            else "declining"
+            if len(scores) > 1 and scores[-1] < scores[0]
             else "stable"
         )
         section = {

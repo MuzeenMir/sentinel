@@ -1,4 +1,5 @@
 """Registry and factory for firewall vendor adapters."""
+
 import logging
 from typing import Any, Dict, List, Optional, Type
 
@@ -29,9 +30,7 @@ class VendorFactory:
         self._adapters["nftables"] = NftablesAdapter
         self._adapters["aws_security_group"] = AWSSecurityGroupAdapter
 
-    def register(
-        self, vendor_key: str, adapter_cls: Type[BaseVendorAdapter]
-    ) -> None:
+    def register(self, vendor_key: str, adapter_cls: Type[BaseVendorAdapter]) -> None:
         """Register a custom vendor adapter class under *vendor_key*."""
         self._adapters[vendor_key] = adapter_cls
         logger.info("Registered vendor adapter: %s", vendor_key)
@@ -51,16 +50,20 @@ class VendorFactory:
             try:
                 adapter = cls()
                 status = adapter.get_status()
-                vendors.append({
-                    "name": adapter.name,
-                    "type": adapter.vendor_type,
-                    "available": status.get("available", False),
-                })
+                vendors.append(
+                    {
+                        "name": adapter.name,
+                        "type": adapter.vendor_type,
+                        "available": status.get("available", False),
+                    }
+                )
             except Exception as exc:
                 logger.warning("Vendor %s status check failed: %s", key, exc)
-                vendors.append({
-                    "name": key,
-                    "type": key,
-                    "available": False,
-                })
+                vendors.append(
+                    {
+                        "name": key,
+                        "type": key,
+                        "available": False,
+                    }
+                )
         return vendors

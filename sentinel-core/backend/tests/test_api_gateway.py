@@ -8,7 +8,7 @@ import os
 import sys
 import json
 import time
-from unittest.mock import patch, MagicMock, PropertyMock
+from unittest.mock import patch, MagicMock
 
 import pytest
 import requests as _requests_lib
@@ -39,6 +39,7 @@ _redis_patcher.stop()
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _mock_response(status_code=200, json_data=None, content=b"ok"):
     """Build a MagicMock that behaves like requests.Response."""
@@ -71,6 +72,7 @@ AUTH_HEADER = {"Authorization": "Bearer valid-token"}
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(autouse=True)
 def _patch_redis():
@@ -105,6 +107,7 @@ def client_with_limiter():
 # Health check
 # ===================================================================
 
+
 class TestHealthCheck:
     def test_health_returns_200(self, client, _patch_redis):
         _patch_redis.scan_iter.return_value = iter([])
@@ -127,12 +130,13 @@ class TestHealthCheck:
 # Auth proxy endpoints
 # ===================================================================
 
+
 class TestAuthProxy:
     @patch("requests.post")
     def test_login_proxy(self, mock_post, client):
-        mock_post.return_value = _mock_response(200, {
-            "token": "jwt-token", "user": {"username": "admin"}
-        })
+        mock_post.return_value = _mock_response(
+            200, {"token": "jwt-token", "user": {"username": "admin"}}
+        )
         resp = client.post(
             "/api/v1/auth/login",
             json={"username": "admin", "password": "secret"},
@@ -153,9 +157,9 @@ class TestAuthProxy:
 
     @patch("requests.post")
     def test_verify_proxy(self, mock_post, client):
-        mock_post.return_value = _mock_response(200, {
-            "user": {"username": "u", "role": "admin"}
-        })
+        mock_post.return_value = _mock_response(
+            200, {"user": {"username": "u", "role": "admin"}}
+        )
         resp = client.post(
             "/api/v1/auth/verify",
             headers=AUTH_HEADER,
@@ -184,7 +188,10 @@ class TestAuthProxy:
         resp = client.delete("/api/v1/auth/users/1")
         assert resp.status_code == 200
 
-    @patch("requests.post", side_effect=_requests_lib.exceptions.ConnectionError("conn refused"))
+    @patch(
+        "requests.post",
+        side_effect=_requests_lib.exceptions.ConnectionError("conn refused"),
+    )
     def test_auth_proxy_service_unavailable(self, _mock, client):
         resp = client.post(
             "/api/v1/auth/login",
@@ -199,6 +206,7 @@ class TestAuthProxy:
 # require_auth decorator
 # ===================================================================
 
+
 class TestRequireAuth:
     def test_missing_token_returns_401(self, client):
         resp = client.get("/api/v1/threats")
@@ -210,7 +218,9 @@ class TestRequireAuth:
         resp = client.get("/api/v1/threats", headers=AUTH_HEADER)
         assert resp.status_code == 401
 
-    @patch("requests.post", side_effect=_requests_lib.exceptions.ConnectionError("timeout"))
+    @patch(
+        "requests.post", side_effect=_requests_lib.exceptions.ConnectionError("timeout")
+    )
     def test_auth_service_down_returns_503(self, _mock, client):
         resp = client.get("/api/v1/threats", headers=AUTH_HEADER)
         assert resp.status_code == 503
@@ -232,6 +242,7 @@ class TestRequireAuth:
 # ===================================================================
 # require_role decorator
 # ===================================================================
+
 
 class TestRequireRole:
     @patch("requests.post", side_effect=_auth_verify_ok_viewer)
@@ -270,15 +281,21 @@ class TestRequireRole:
 # Threat endpoints
 # ===================================================================
 
+
 class TestThreatEndpoints:
-    @patch("requests.get", return_value=_mock_response(200, {"threats": [], "total": 0}))
+    @patch(
+        "requests.get", return_value=_mock_response(200, {"threats": [], "total": 0})
+    )
     @patch("requests.post", side_effect=_auth_verify_ok)
     def test_get_threats(self, _post, _get, client):
         resp = client.get("/api/v1/threats", headers=AUTH_HEADER)
         assert resp.status_code == 200
         assert "threats" in resp.get_json()
 
-    @patch("requests.get", return_value=_mock_response(200, {"id": 42, "type": "brute_force"}))
+    @patch(
+        "requests.get",
+        return_value=_mock_response(200, {"id": 42, "type": "brute_force"}),
+    )
     @patch("requests.post", side_effect=_auth_verify_ok)
     def test_get_single_threat(self, _post, _get, client):
         resp = client.get("/api/v1/threats/42", headers=AUTH_HEADER)
@@ -304,23 +321,32 @@ class TestThreatEndpoints:
         )
         assert resp.status_code == 201
 
-    @patch("requests.get", side_effect=_requests_lib.exceptions.ConnectionError("downstream down"))
+    @patch(
+        "requests.get",
+        side_effect=_requests_lib.exceptions.ConnectionError("downstream down"),
+    )
     @patch("requests.post", side_effect=_auth_verify_ok)
     def test_get_threats_service_unavailable(self, _post, _get, client):
         resp = client.get("/api/v1/threats", headers=AUTH_HEADER)
         assert resp.status_code == 503
 
-    @patch("requests.get", return_value=_mock_response(200, {"threats": [{"id": 1}], "total": 1}))
+    @patch(
+        "requests.get",
+        return_value=_mock_response(200, {"threats": [{"id": 1}], "total": 1}),
+    )
     @patch("requests.post", side_effect=_auth_verify_ok)
     def test_get_threats_passes_query_params(self, _post, mock_get, client):
         client.get("/api/v1/threats?severity=high&limit=10", headers=AUTH_HEADER)
         call_kwargs = mock_get.call_args
-        assert "severity" in str(call_kwargs) or call_kwargs[1].get("params") is not None
+        assert (
+            "severity" in str(call_kwargs) or call_kwargs[1].get("params") is not None
+        )
 
 
 # ===================================================================
 # Alert endpoints
 # ===================================================================
+
 
 class TestAlertEndpoints:
     @patch("requests.get", return_value=_mock_response(200, {"alerts": []}))
@@ -329,7 +355,9 @@ class TestAlertEndpoints:
         resp = client.get("/api/v1/alerts", headers=AUTH_HEADER)
         assert resp.status_code == 200
 
-    @patch("requests.get", return_value=_mock_response(200, {"id": 7, "severity": "high"}))
+    @patch(
+        "requests.get", return_value=_mock_response(200, {"id": 7, "severity": "high"})
+    )
     @patch("requests.post", side_effect=_auth_verify_ok)
     def test_get_single_alert(self, _post, _get, client):
         resp = client.get("/api/v1/alerts/7", headers=AUTH_HEADER)
@@ -381,7 +409,10 @@ class TestAlertEndpoints:
         assert resp.status_code == 200
         assert resp.get_json()["acknowledged"] is True
 
-    @patch("requests.get", side_effect=_requests_lib.exceptions.ConnectionError("alert svc down"))
+    @patch(
+        "requests.get",
+        side_effect=_requests_lib.exceptions.ConnectionError("alert svc down"),
+    )
     @patch("requests.post", side_effect=_auth_verify_ok)
     def test_get_alerts_service_unavailable(self, _post, _get, client):
         resp = client.get("/api/v1/alerts", headers=AUTH_HEADER)
@@ -392,6 +423,7 @@ class TestAlertEndpoints:
 # Policy endpoints (via _proxy_to)
 # ===================================================================
 
+
 class TestPolicyEndpoints:
     @patch("requests.get", return_value=_mock_response(200, {"policies": []}))
     @patch("requests.post", side_effect=_auth_verify_ok)
@@ -399,7 +431,10 @@ class TestPolicyEndpoints:
         resp = client.get("/api/v1/policies", headers=AUTH_HEADER)
         assert resp.status_code == 200
 
-    @patch("requests.get", return_value=_mock_response(200, {"id": "p1", "name": "block-ssh"}))
+    @patch(
+        "requests.get",
+        return_value=_mock_response(200, {"id": "p1", "name": "block-ssh"}),
+    )
     @patch("requests.post", side_effect=_auth_verify_ok)
     def test_get_single_policy(self, _post, _get, client):
         resp = client.get("/api/v1/policies/p1", headers=AUTH_HEADER)
@@ -418,8 +453,12 @@ class TestPolicyEndpoints:
         resp = client.post(
             "/api/v1/policies",
             headers=AUTH_HEADER,
-            json={"name": "allow-http", "action": "allow",
-                  "source": "10.0.0.0/8", "destination": "0.0.0.0/0"},
+            json={
+                "name": "allow-http",
+                "action": "allow",
+                "source": "10.0.0.0/8",
+                "destination": "0.0.0.0/0",
+            },
             content_type="application/json",
         )
         assert resp.status_code == 201
@@ -462,7 +501,10 @@ class TestPolicyEndpoints:
         resp = client.delete("/api/v1/policies/p1", headers=AUTH_HEADER)
         assert resp.status_code == 204
 
-    @patch("requests.get", side_effect=_requests_lib.exceptions.ConnectionError("policy svc down"))
+    @patch(
+        "requests.get",
+        side_effect=_requests_lib.exceptions.ConnectionError("policy svc down"),
+    )
     @patch("requests.post", side_effect=_auth_verify_ok)
     def test_policy_service_unavailable(self, _post, _get, client):
         resp = client.get("/api/v1/policies", headers=AUTH_HEADER)
@@ -473,6 +515,7 @@ class TestPolicyEndpoints:
 # ===================================================================
 # _proxy_to helper
 # ===================================================================
+
 
 class TestProxyToHelper:
     def test_proxy_constructs_correct_url(self, client):
@@ -495,7 +538,9 @@ class TestProxyToHelper:
 
     def test_proxy_post_sends_json(self, client):
         with gw.app.test_request_context(
-            "/test", method="POST", json={"key": "val"},
+            "/test",
+            method="POST",
+            json={"key": "val"},
             content_type="application/json",
         ):
             with patch("requests.post") as mock_post:
@@ -505,7 +550,9 @@ class TestProxyToHelper:
 
     def test_proxy_put_sends_json(self, client):
         with gw.app.test_request_context(
-            "/test", method="PUT", json={"k": "v"},
+            "/test",
+            method="PUT",
+            json={"k": "v"},
             content_type="application/json",
         ):
             with patch("requests.put") as mock_put:
@@ -538,7 +585,10 @@ class TestProxyToHelper:
 
     def test_proxy_connection_error(self, client):
         with gw.app.test_request_context("/test", method="GET"):
-            with patch("requests.get", side_effect=_requests_lib.exceptions.ConnectionError("refused")):
+            with patch(
+                "requests.get",
+                side_effect=_requests_lib.exceptions.ConnectionError("refused"),
+            ):
                 result, status = gw._proxy_to("http://svc:5000", "/api/v1/x")
                 assert status == 503
 
@@ -546,6 +596,7 @@ class TestProxyToHelper:
 # ===================================================================
 # Statistics endpoint
 # ===================================================================
+
 
 class TestStatisticsEndpoint:
     @patch("requests.get")
@@ -556,15 +607,24 @@ class TestStatisticsEndpoint:
         def get_router(*args, **kwargs):
             url = args[0] if args else ""
             if "/alerts/statistics" in url:
-                return _mock_response(200, {
-                    "total_alerts": 42, "by_severity": {"high": 10}, "by_status": {"open": 30}
-                })
+                return _mock_response(
+                    200,
+                    {
+                        "total_alerts": 42,
+                        "by_severity": {"high": 10},
+                        "by_status": {"open": 30},
+                    },
+                )
             if "/threats" in url:
                 return _mock_response(200, {"total": 99})
             if "/statistics" in url:
-                return _mock_response(200, {
-                    "total_policies": 15, "policies_by_action": {"allow": 10, "deny": 5}
-                })
+                return _mock_response(
+                    200,
+                    {
+                        "total_policies": 15,
+                        "policies_by_action": {"allow": 10, "deny": 5},
+                    },
+                )
             return _mock_response(200, {})
 
         mock_get.side_effect = get_router
@@ -587,19 +647,28 @@ class TestStatisticsEndpoint:
 
     @patch("requests.post", side_effect=_auth_verify_ok)
     def test_stats_uses_cache(self, _post, client, _patch_redis):
-        cached = json.dumps({
-            "threats_detected": 5, "alerts_total": 3,
-            "alerts_by_severity": {}, "alerts_by_status": {},
-            "policies_total": 1, "policies_by_action": {},
-        })
+        cached = json.dumps(
+            {
+                "threats_detected": 5,
+                "alerts_total": 3,
+                "alerts_by_severity": {},
+                "alerts_by_status": {},
+                "policies_total": 1,
+                "policies_by_action": {},
+            }
+        )
         _patch_redis.get.return_value = cached
         resp = client.get("/api/v1/stats", headers=AUTH_HEADER)
         assert resp.status_code == 200
         assert resp.get_json()["threats_detected"] == 5
 
-    @patch("requests.get", side_effect=_requests_lib.exceptions.ConnectionError("all down"))
+    @patch(
+        "requests.get", side_effect=_requests_lib.exceptions.ConnectionError("all down")
+    )
     @patch("requests.post", side_effect=_auth_verify_ok)
-    def test_stats_downstream_failures_graceful(self, _post, _get, client, _patch_redis):
+    def test_stats_downstream_failures_graceful(
+        self, _post, _get, client, _patch_redis
+    ):
         _patch_redis.get.return_value = None
         resp = client.get("/api/v1/stats", headers=AUTH_HEADER)
         assert resp.status_code == 200
@@ -612,14 +681,13 @@ class TestStatisticsEndpoint:
 # SSE stream endpoints
 # ===================================================================
 
+
 class TestSSEStreams:
     @patch("requests.post", side_effect=_auth_verify_ok)
     def test_stream_threats_content_type(self, _post, client):
         mock_pubsub = MagicMock()
         threat_event = {"type": "message", "data": '{"threat_id": 1}'}
-        mock_pubsub.get_message = MagicMock(
-            side_effect=[threat_event, GeneratorExit()]
-        )
+        mock_pubsub.get_message = MagicMock(side_effect=[threat_event, GeneratorExit()])
 
         mock_redis_conn = MagicMock()
         mock_redis_conn.pubsub.return_value = mock_pubsub
@@ -663,6 +731,7 @@ class TestSSEStreams:
 # Configuration endpoints
 # ===================================================================
 
+
 class TestConfigEndpoints:
     @patch("requests.post", side_effect=_auth_verify_ok)
     def test_get_config_returns_defaults(self, _post, client, _patch_redis):
@@ -676,9 +745,9 @@ class TestConfigEndpoints:
 
     @patch("requests.post", side_effect=_auth_verify_ok)
     def test_get_config_from_redis(self, _post, client, _patch_redis):
-        stored = json.dumps({
-            "ai_engine": {"model_path": "/custom"}, "firewall": {}, "monitoring": {}
-        })
+        stored = json.dumps(
+            {"ai_engine": {"model_path": "/custom"}, "firewall": {}, "monitoring": {}}
+        )
         _patch_redis.get.return_value = stored
         resp = client.get("/api/v1/config", headers=AUTH_HEADER)
         assert resp.status_code == 200
@@ -687,7 +756,11 @@ class TestConfigEndpoints:
     @patch("requests.post", side_effect=_auth_verify_ok)
     def test_update_config_success(self, _post, client, _patch_redis):
         new_cfg = {
-            "ai_engine": {"model_path": "/v2", "confidence_threshold": 0.9, "batch_size": 500},
+            "ai_engine": {
+                "model_path": "/v2",
+                "confidence_threshold": 0.9,
+                "batch_size": 500,
+            },
             "firewall": {"max_rules": 5000, "sync_interval": 60},
             "monitoring": {"alert_threshold": 0.99, "retention_days": 30},
         }
@@ -732,14 +805,20 @@ class TestConfigEndpoints:
 # Compliance proxy endpoints
 # ===================================================================
 
+
 class TestComplianceProxy:
-    @patch("requests.get", return_value=_mock_response(200, {"frameworks": ["CIS", "NIST"]}))
+    @patch(
+        "requests.get",
+        return_value=_mock_response(200, {"frameworks": ["CIS", "NIST"]}),
+    )
     @patch("requests.post", side_effect=_auth_verify_ok)
     def test_get_frameworks(self, _post, _get, client):
         resp = client.get("/api/v1/frameworks", headers=AUTH_HEADER)
         assert resp.status_code == 200
 
-    @patch("requests.get", return_value=_mock_response(200, {"id": "cis", "controls": []}))
+    @patch(
+        "requests.get", return_value=_mock_response(200, {"id": "cis", "controls": []})
+    )
     @patch("requests.post", side_effect=_auth_verify_ok)
     def test_get_single_framework(self, _post, _get, client):
         resp = client.get("/api/v1/frameworks/cis", headers=AUTH_HEADER)
@@ -806,6 +885,7 @@ class TestComplianceProxy:
 # ===================================================================
 # XAI proxy endpoints
 # ===================================================================
+
 
 class TestXAIProxy:
     @patch("requests.post", side_effect=_auth_verify_ok)
@@ -876,6 +956,7 @@ class TestXAIProxy:
 # AI Engine proxy endpoints
 # ===================================================================
 
+
 class TestAIEngineProxy:
     @patch("requests.post", side_effect=_auth_verify_ok)
     def test_ai_detect(self, mock_post, client):
@@ -916,6 +997,7 @@ class TestAIEngineProxy:
 # DRL Engine proxy endpoints
 # ===================================================================
 
+
 class TestDRLEngineProxy:
     @patch("requests.post", side_effect=_auth_verify_ok)
     def test_drl_decide(self, mock_post, client):
@@ -951,7 +1033,10 @@ class TestDRLEngineProxy:
         )
         assert resp.status_code == 200
 
-    @patch("requests.get", return_value=_mock_response(200, {"actions": ["block", "allow"]}))
+    @patch(
+        "requests.get",
+        return_value=_mock_response(200, {"actions": ["block", "allow"]}),
+    )
     @patch("requests.post", side_effect=_auth_verify_ok)
     def test_drl_action_space(self, _post, _get, client):
         resp = client.get("/api/v1/action-space", headers=AUTH_HEADER)
@@ -967,6 +1052,7 @@ class TestDRLEngineProxy:
 # ===================================================================
 # Rate limiting
 # ===================================================================
+
 
 class TestRateLimiting:
     def test_rate_limit_endpoint_returns_200(self, client):
@@ -985,6 +1071,7 @@ class TestRateLimiting:
 # ===================================================================
 # Error handlers
 # ===================================================================
+
 
 class TestErrorHandlers:
     def test_404_handler(self, client):
@@ -1008,6 +1095,7 @@ class TestErrorHandlers:
 # Middleware: before_request / after_request
 # ===================================================================
 
+
 class TestMiddleware:
     def test_response_time_header(self, client):
         resp = client.get("/health")
@@ -1024,9 +1112,12 @@ class TestMiddleware:
 # validate_json_request helper
 # ===================================================================
 
+
 class TestValidateJsonRequest:
     def test_non_json_returns_400(self, client):
-        with gw.app.test_request_context("/test", method="POST", data="text", content_type="text/plain"):
+        with gw.app.test_request_context(
+            "/test", method="POST", data="text", content_type="text/plain"
+        ):
             result = gw.validate_json_request(["field1"])
             assert result is not None
             resp, code = result
@@ -1046,14 +1137,20 @@ class TestValidateJsonRequest:
 
     def test_valid_json_returns_none(self, client):
         with gw.app.test_request_context(
-            "/test", method="POST", json={"x": 1, "y": 2}, content_type="application/json"
+            "/test",
+            method="POST",
+            json={"x": 1, "y": 2},
+            content_type="application/json",
         ):
             result = gw.validate_json_request(["x", "y"])
             assert result is None
 
     def test_no_required_fields_returns_none(self, client):
         with gw.app.test_request_context(
-            "/test", method="POST", json={"any": "data"}, content_type="application/json"
+            "/test",
+            method="POST",
+            json={"any": "data"},
+            content_type="application/json",
         ):
             result = gw.validate_json_request()
             assert result is None
@@ -1063,6 +1160,7 @@ class TestValidateJsonRequest:
 # _fetch_downstream_stats
 # ===================================================================
 
+
 class TestFetchDownstreamStats:
     @patch("requests.get")
     def test_returns_aggregated_stats(self, mock_get, client, _patch_redis):
@@ -1071,15 +1169,20 @@ class TestFetchDownstreamStats:
         def router(*args, **kwargs):
             url = args[0] if args else ""
             if "/alerts/statistics" in url:
-                return _mock_response(200, {
-                    "total_alerts": 10, "by_severity": {"high": 5}, "by_status": {"open": 8}
-                })
+                return _mock_response(
+                    200,
+                    {
+                        "total_alerts": 10,
+                        "by_severity": {"high": 5},
+                        "by_status": {"open": 8},
+                    },
+                )
             if "/threats" in url:
                 return _mock_response(200, {"total": 77})
             if "/statistics" in url:
-                return _mock_response(200, {
-                    "total_policies": 20, "policies_by_action": {"deny": 12}
-                })
+                return _mock_response(
+                    200, {"total_policies": 20, "policies_by_action": {"deny": 12}}
+                )
             return _mock_response(200, {})
 
         mock_get.side_effect = router
@@ -1091,16 +1194,26 @@ class TestFetchDownstreamStats:
         _patch_redis.set.assert_called_once()
 
     def test_returns_cached_value(self, client, _patch_redis):
-        cached = json.dumps({"threats_detected": 1, "alerts_total": 2,
-                             "alerts_by_severity": {}, "alerts_by_status": {},
-                             "policies_total": 3, "policies_by_action": {}})
+        cached = json.dumps(
+            {
+                "threats_detected": 1,
+                "alerts_total": 2,
+                "alerts_by_severity": {},
+                "alerts_by_status": {},
+                "policies_total": 3,
+                "policies_by_action": {},
+            }
+        )
         _patch_redis.get.return_value = cached
         with gw.app.app_context():
             result = gw._fetch_downstream_stats()
         assert result["threats_detected"] == 1
         assert result["policies_total"] == 3
 
-    @patch("requests.get", side_effect=_requests_lib.exceptions.ConnectionError("everything broken"))
+    @patch(
+        "requests.get",
+        side_effect=_requests_lib.exceptions.ConnectionError("everything broken"),
+    )
     def test_graceful_degradation(self, _get, client, _patch_redis):
         _patch_redis.get.return_value = None
         with gw.app.app_context():
@@ -1116,7 +1229,9 @@ class TestFetchDownstreamStats:
         def router(*args, **kwargs):
             url = args[0] if args else ""
             if "/alerts/statistics" in url:
-                return _mock_response(200, {"total_alerts": 5, "by_severity": {}, "by_status": {}})
+                return _mock_response(
+                    200, {"total_alerts": 5, "by_severity": {}, "by_status": {}}
+                )
             raise _requests_lib.exceptions.ConnectionError("service down")
 
         mock_get.side_effect = router
@@ -1130,6 +1245,7 @@ class TestFetchDownstreamStats:
 # _load_config / _save_config
 # ===================================================================
 
+
 class TestConfigPersistence:
     def test_load_defaults_when_redis_empty(self, client, _patch_redis):
         _patch_redis.get.return_value = None
@@ -1138,8 +1254,13 @@ class TestConfigPersistence:
         assert cfg["ai_engine"]["confidence_threshold"] == 0.85
 
     def test_load_from_redis(self, client, _patch_redis):
-        stored = json.dumps({"ai_engine": {"confidence_threshold": 0.5},
-                             "firewall": {}, "monitoring": {}})
+        stored = json.dumps(
+            {
+                "ai_engine": {"confidence_threshold": 0.5},
+                "firewall": {},
+                "monitoring": {},
+            }
+        )
         _patch_redis.get.return_value = stored
         with gw.app.app_context():
             cfg = gw._load_config()
@@ -1162,6 +1283,7 @@ class TestConfigPersistence:
 # ===================================================================
 # get_request_stats
 # ===================================================================
+
 
 class TestGetRequestStats:
     def test_aggregates_from_redis(self, client, _patch_redis):

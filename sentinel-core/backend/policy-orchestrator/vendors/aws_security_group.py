@@ -1,4 +1,5 @@
 """AWS Security Group firewall adapter."""
+
 import logging
 import os
 from typing import Any, Dict, List, Optional
@@ -10,6 +11,7 @@ logger = logging.getLogger(__name__)
 try:
     import boto3
     from botocore.exceptions import ClientError
+
     _HAS_BOTO3 = True
 except ImportError:
     boto3 = None  # type: ignore[assignment]
@@ -35,10 +37,7 @@ class AWSSecurityGroupAdapter(BaseVendorAdapter):
         security_group_id: Optional[str] = None,
         region: Optional[str] = None,
     ) -> None:
-        self._sg_id = (
-            security_group_id
-            or os.environ.get("AWS_SECURITY_GROUP_ID")
-        )
+        self._sg_id = security_group_id or os.environ.get("AWS_SECURITY_GROUP_ID")
         self._region = region or os.environ.get("AWS_REGION", "us-east-1")
         self._client: Any = None
 
@@ -52,9 +51,7 @@ class AWSSecurityGroupAdapter(BaseVendorAdapter):
 
     # ── public API ────────────────────────────────────────────────
 
-    def translate_rules(
-        self, rules: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
+    def translate_rules(self, rules: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         translated = []
         for rule in rules:
             action = rule.get("action", "")
@@ -66,12 +63,14 @@ class AWSSecurityGroupAdapter(BaseVendorAdapter):
                 continue
 
             perm = self._to_ip_permission(rule)
-            translated.append({
-                "rule_id": rule.get("id"),
-                "direction": rule.get("direction", "INBOUND"),
-                "action": action,
-                "ip_permission": perm,
-            })
+            translated.append(
+                {
+                    "rule_id": rule.get("id"),
+                    "direction": rule.get("direction", "INBOUND"),
+                    "action": action,
+                    "ip_permission": perm,
+                }
+            )
         return translated
 
     def apply_rules(self, rules: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -152,10 +151,12 @@ class AWSSecurityGroupAdapter(BaseVendorAdapter):
         cidr = rule.get("source_cidr", "/32")
         cidr_str = "0.0.0.0/0" if src_ip == "*" else f"{src_ip}{cidr}"
 
-        perm["IpRanges"] = [{
-            "CidrIp": cidr_str,
-            "Description": f"SENTINEL rule {rule.get('id', 'unknown')}",
-        }]
+        perm["IpRanges"] = [
+            {
+                "CidrIp": cidr_str,
+                "Description": f"SENTINEL rule {rule.get('id', 'unknown')}",
+            }
+        ]
 
         return perm
 
@@ -168,9 +169,7 @@ class AWSSecurityGroupAdapter(BaseVendorAdapter):
             self._client = boto3.client("ec2", region_name=self._region)
         return self._client
 
-    def _apply_permissions(
-        self, translated: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+    def _apply_permissions(self, translated: List[Dict[str, Any]]) -> Dict[str, Any]:
         errors: List[str] = []
         applied = 0
 
@@ -210,7 +209,8 @@ class AWSSecurityGroupAdapter(BaseVendorAdapter):
                 applied += 1
             except ClientError as exc:
                 code = getattr(
-                    getattr(exc, "response", {}), "get",
+                    getattr(exc, "response", {}),
+                    "get",
                     lambda *a: {},
                 )("Error", {}).get("Code", "")
                 if code == "InvalidPermission.Duplicate":
@@ -227,8 +227,7 @@ class AWSSecurityGroupAdapter(BaseVendorAdapter):
             return {
                 "success": False,
                 "message": (
-                    f"Applied {applied}/{len(translated)}, "
-                    f"{len(errors)} error(s)"
+                    f"Applied {applied}/{len(translated)}, " f"{len(errors)} error(s)"
                 ),
                 "errors": errors,
                 "enforce_mode": True,
@@ -239,9 +238,7 @@ class AWSSecurityGroupAdapter(BaseVendorAdapter):
             "enforce_mode": True,
         }
 
-    def _revoke_permissions(
-        self, translated: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+    def _revoke_permissions(self, translated: List[Dict[str, Any]]) -> Dict[str, Any]:
         errors: List[str] = []
         removed = 0
 
@@ -268,7 +265,8 @@ class AWSSecurityGroupAdapter(BaseVendorAdapter):
                 removed += 1
             except ClientError as exc:
                 code = getattr(
-                    getattr(exc, "response", {}), "get",
+                    getattr(exc, "response", {}),
+                    "get",
                     lambda *a: {},
                 )("Error", {}).get("Code", "")
                 if code == "InvalidPermission.NotFound":
@@ -285,8 +283,7 @@ class AWSSecurityGroupAdapter(BaseVendorAdapter):
             return {
                 "success": False,
                 "message": (
-                    f"Removed {removed}/{len(translated)}, "
-                    f"{len(errors)} error(s)"
+                    f"Removed {removed}/{len(translated)}, " f"{len(errors)} error(s)"
                 ),
                 "errors": errors,
                 "enforce_mode": True,

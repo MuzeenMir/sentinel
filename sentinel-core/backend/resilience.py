@@ -21,7 +21,6 @@ import sys
 import threading
 import time
 from functools import wraps
-from typing import Any, Optional
 
 # ── Structured JSON Logging ──────────────────────────────────────────
 
@@ -66,9 +65,11 @@ def setup_structured_logging(service_name: str, level: str = "INFO") -> None:
     if use_json:
         handler.setFormatter(JSONFormatter(service_name))
     else:
-        handler.setFormatter(logging.Formatter(
-            f"%(asctime)s [{service_name}] %(levelname)s %(name)s %(message)s"
-        ))
+        handler.setFormatter(
+            logging.Formatter(
+                f"%(asctime)s [{service_name}] %(levelname)s %(name)s %(message)s"
+            )
+        )
     root.addHandler(handler)
 
 
@@ -77,6 +78,7 @@ def setup_structured_logging(service_name: str, level: str = "INFO") -> None:
 
 class CircuitBreakerOpen(Exception):
     """Raised when the circuit is open and calls are rejected."""
+
     pass
 
 
@@ -134,7 +136,8 @@ class _CircuitBreaker:
                 self._state = self.OPEN
                 logging.getLogger("sentinel.circuit_breaker").warning(
                     "Circuit breaker '%s' OPEN after %d failures",
-                    self.name, self._failure_count,
+                    self.name,
+                    self._failure_count,
                 )
 
 
@@ -157,8 +160,9 @@ def circuit_breaker(
     """Decorator: wraps a function with a named circuit breaker."""
 
     def decorator(f):
-        breaker = _get_breaker(name, failure_threshold=failure_threshold,
-                               recovery_timeout=recovery_timeout)
+        breaker = _get_breaker(
+            name, failure_threshold=failure_threshold, recovery_timeout=recovery_timeout
+        )
 
         @wraps(f)
         def wrapper(*args, **kwargs):
@@ -205,10 +209,14 @@ def retry_with_backoff(
                     last_exception = exc
                     if attempt == max_retries:
                         break
-                    delay = min(base_delay * (exponential_base ** attempt), max_delay)
+                    delay = min(base_delay * (exponential_base**attempt), max_delay)
                     logging.getLogger("sentinel.retry").warning(
                         "Retry %d/%d for %s after %.1fs: %s",
-                        attempt + 1, max_retries, f.__qualname__, delay, exc,
+                        attempt + 1,
+                        max_retries,
+                        f.__qualname__,
+                        delay,
+                        exc,
                     )
                     time.sleep(delay)
             raise last_exception

@@ -4,6 +4,7 @@ Base classes for SENTINEL threat detection models.
 Defines the abstract detector interface and the canonical threat taxonomy
 that all model implementations share.
 """
+
 import logging
 from abc import ABC, abstractmethod
 from enum import Enum

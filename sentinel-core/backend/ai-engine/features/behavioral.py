@@ -4,6 +4,7 @@ Behavioral feature extraction from network traffic patterns.
 Captures connection patterns, session characteristics, request frequency,
 and automated-access indicators.
 """
+
 import logging
 import math
 from collections import Counter, defaultdict
@@ -29,15 +30,9 @@ class BehavioralFeatureExtractor:
         features: Dict[str, float] = {}
 
         try:
-            features.update(
-                self._connection_features(raw_data.get("connections", []))
-            )
-            features.update(
-                self._request_features(raw_data.get("requests", []))
-            )
-            features.update(
-                self._session_features(raw_data.get("sessions", []))
-            )
+            features.update(self._connection_features(raw_data.get("connections", [])))
+            features.update(self._request_features(raw_data.get("requests", [])))
+            features.update(self._session_features(raw_data.get("sessions", [])))
             features.update(self._access_pattern_features(raw_data))
         except Exception as exc:
             logger.error("Behavioral feature extraction failed: %s", exc)
@@ -80,9 +75,7 @@ class BehavioralFeatureExtractor:
         ip_port_map: Dict[str, set] = defaultdict(set)
         for c in connections:
             ip_port_map[c.get("src_ip", "")].add(c.get("dst_port", 0))
-        max_ports_per_src = max(
-            (len(v) for v in ip_port_map.values()), default=0
-        )
+        max_ports_per_src = max((len(v) for v in ip_port_map.values()), default=0)
 
         return {
             "conn_count": float(n),

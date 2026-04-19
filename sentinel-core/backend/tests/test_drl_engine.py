@@ -15,7 +15,6 @@ import json
 import tempfile
 import pytest
 from unittest.mock import MagicMock, patch
-from datetime import datetime
 import numpy as np
 
 # ---------------------------------------------------------------------------
@@ -45,6 +44,7 @@ def _install_torch_stub():
     global _TORCH_IS_REAL
     try:
         import torch
+
         torch.zeros(1)
         _TORCH_IS_REAL = True
         return
@@ -54,18 +54,25 @@ def _install_torch_stub():
     class _Module:
         def __init_subclass__(cls, **kw):
             super().__init_subclass__(**kw)
+
         def __init__(self, *a, **kw):
             pass
+
         def parameters(self):
             return []
+
         def to(self, *a, **kw):
             return self
+
         def eval(self):
             return self
+
         def train(self, mode=True):
             return self
+
         def state_dict(self):
             return {}
+
         def load_state_dict(self, d, **kw):
             pass
 
@@ -79,13 +86,19 @@ def _install_torch_stub():
     _nn.ReLU = lambda *a, **kw: _Module()
     _nn.Softmax = lambda *a, **kw: _Module()
     _nn.LSTM = lambda *a, **kw: _Module()
-    _nn.MSELoss = lambda: (lambda x, y: type("L", (), {"item": lambda s: 0.0, "backward": lambda s: None})())
+    _nn.MSELoss = lambda: (
+        lambda x, y: type(
+            "L", (), {"item": lambda s: 0.0, "backward": lambda s: None}
+        )()
+    )
     _nn_utils = _types.ModuleType("torch.nn.utils")
     _nn_utils.clip_grad_norm_ = lambda *a, **kw: None
     _nn.utils = _nn_utils
 
     _optim = _types.ModuleType("torch.optim")
-    _optim.Adam = lambda *a, **kw: type("O", (), {"zero_grad": lambda s: None, "step": lambda s: None})()
+    _optim.Adam = lambda *a, **kw: type(
+        "O", (), {"zero_grad": lambda s: None, "step": lambda s: None}
+    )()
 
     _dist = _types.ModuleType("torch.distributions")
     _dist.Categorical = lambda *a, **kw: None
@@ -111,15 +124,21 @@ def _install_torch_stub():
     _torch.LongTensor = lambda *a: None
     _torch.save = lambda *a, **kw: None
     _torch.load = lambda *a, **kw: {}
-    _torch.no_grad = lambda: type("C", (), {"__enter__": lambda s: None, "__exit__": lambda s, *a: None})()
+    _torch.no_grad = lambda: type(
+        "C", (), {"__enter__": lambda s: None, "__exit__": lambda s, *a: None}
+    )()
     _torch.exp = lambda x: x
     _torch.clamp = lambda *a, **kw: None
     _torch.min = lambda *a: (None,)
 
     for name, mod in [
-        ("torch", _torch), ("torch.nn", _nn), ("torch.nn.utils", _nn_utils),
-        ("torch.optim", _optim), ("torch.distributions", _dist),
-        ("torch.utils", _utils), ("torch.utils.data", _data),
+        ("torch", _torch),
+        ("torch.nn", _nn),
+        ("torch.nn.utils", _nn_utils),
+        ("torch.optim", _optim),
+        ("torch.distributions", _dist),
+        ("torch.utils", _utils),
+        ("torch.utils.data", _data),
         ("torch.cuda", _cuda),
     ]:
         sys.modules.setdefault(name, mod)
@@ -137,6 +156,7 @@ _redis_patcher.start()
 
 # Use a unique module name so running alongside test_ai_engine doesn't clash.
 import importlib.util as _ilu
+
 _spec = _ilu.spec_from_file_location(
     "sentinel_drl_engine_app",
     os.path.join(_drl_engine_dir, "app.py"),
@@ -189,10 +209,21 @@ def _make_mock_ppo_agent(*, action_idx=1, ready=True):
 # Fixtures
 # ===================================================================
 
+
 @pytest.fixture()
 def mock_redis():
     _mock_redis_client.reset_mock(side_effect=True)
-    for attr in ("get", "set", "lrange", "llen", "incr", "lpush", "ltrim", "expire", "keys"):
+    for attr in (
+        "get",
+        "set",
+        "lrange",
+        "llen",
+        "incr",
+        "lpush",
+        "ltrim",
+        "expire",
+        "keys",
+    ):
         child = getattr(_mock_redis_client, attr)
         child.side_effect = None
         child.return_value = None
@@ -218,7 +249,10 @@ def _bypass_auth():
 
 @pytest.fixture()
 def auth_headers():
-    return {"Authorization": "Bearer test-valid-token", "Content-Type": "application/json"}
+    return {
+        "Authorization": "Bearer test-valid-token",
+        "Content-Type": "application/json",
+    }
 
 
 @pytest.fixture()
@@ -267,6 +301,7 @@ def bare_client(mock_redis):
 # Health check
 # ===================================================================
 
+
 class TestHealthCheck:
     def test_healthy_with_agent(self, client, mock_ppo_agent):
         resp = client.get("/health")
@@ -305,9 +340,14 @@ class TestHealthCheck:
 # Single decision  (/api/v1/decide)
 # ===================================================================
 
+
 class TestDecide:
-    def test_successful_decision(self, client, auth_headers, mock_ppo_agent, mock_redis):
-        resp = client.post("/api/v1/decide", headers=auth_headers, json=_SAMPLE_DETECTION)
+    def test_successful_decision(
+        self, client, auth_headers, mock_ppo_agent, mock_redis
+    ):
+        resp = client.post(
+            "/api/v1/decide", headers=auth_headers, json=_SAMPLE_DETECTION
+        )
         assert resp.status_code == 200
         data = resp.get_json()
         assert "decision_id" in data
@@ -316,7 +356,9 @@ class TestDecide:
         assert 0.0 <= data["confidence"] <= 1.0
         assert data["state_features"]["threat_score"] == 0.92
 
-    def test_decision_stores_to_redis(self, client, auth_headers, mock_ppo_agent, mock_redis):
+    def test_decision_stores_to_redis(
+        self, client, auth_headers, mock_ppo_agent, mock_redis
+    ):
         client.post("/api/v1/decide", headers=auth_headers, json=_SAMPLE_DETECTION)
         mock_redis.set.assert_called()
         mock_redis.incr.assert_any_call("drl:total_decisions")
@@ -338,11 +380,15 @@ class TestDecide:
 
     def test_agent_failure_returns_500(self, client, auth_headers, mock_ppo_agent):
         mock_ppo_agent.select_action.side_effect = RuntimeError("torch error")
-        resp = client.post("/api/v1/decide", headers=auth_headers, json=_SAMPLE_DETECTION)
+        resp = client.post(
+            "/api/v1/decide", headers=auth_headers, json=_SAMPLE_DETECTION
+        )
         assert resp.status_code == 500
 
     def test_parameters_include_target(self, client, auth_headers, mock_ppo_agent):
-        resp = client.post("/api/v1/decide", headers=auth_headers, json=_SAMPLE_DETECTION)
+        resp = client.post(
+            "/api/v1/decide", headers=auth_headers, json=_SAMPLE_DETECTION
+        )
         params = resp.get_json()["parameters"]
         assert params["target"]["source_ip"] == "192.168.1.100"
         assert params["target"]["dest_port"] == 22
@@ -356,6 +402,7 @@ class TestDecide:
 # ===================================================================
 # Batch decisions  (/api/v1/decide/batch)
 # ===================================================================
+
 
 class TestDecideBatch:
     @staticmethod
@@ -374,7 +421,9 @@ class TestDecideBatch:
         }
 
     def test_successful_batch(self, client, auth_headers, mock_ppo_agent):
-        resp = client.post("/api/v1/decide/batch", headers=auth_headers, json=self._batch_payload())
+        resp = client.post(
+            "/api/v1/decide/batch", headers=auth_headers, json=self._batch_payload()
+        )
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["total"] == 3
@@ -394,7 +443,9 @@ class TestDecideBatch:
             return actions[idx], probs
 
         mock_ppo_agent.select_action.side_effect = side_effect
-        resp = client.post("/api/v1/decide/batch", headers=auth_headers, json=self._batch_payload())
+        resp = client.post(
+            "/api/v1/decide/batch", headers=auth_headers, json=self._batch_payload()
+        )
         data = resp.get_json()
         action_names = [d["action"] for d in data["decisions"]]
         assert "ALLOW" in action_names
@@ -402,18 +453,26 @@ class TestDecideBatch:
         assert "MONITOR" in action_names
 
     def test_missing_detections_returns_400(self, client, auth_headers):
-        resp = client.post("/api/v1/decide/batch", headers=auth_headers, json={"foo": "bar"})
+        resp = client.post(
+            "/api/v1/decide/batch", headers=auth_headers, json={"foo": "bar"}
+        )
         assert resp.status_code == 400
         assert "detections" in resp.get_json()["error"]
 
     def test_single_item_batch(self, client, auth_headers, mock_ppo_agent):
-        resp = client.post("/api/v1/decide/batch", headers=auth_headers, json=self._batch_payload(count=1))
+        resp = client.post(
+            "/api/v1/decide/batch",
+            headers=auth_headers,
+            json=self._batch_payload(count=1),
+        )
         assert resp.status_code == 200
         assert resp.get_json()["total"] == 1
 
     def test_agent_failure_returns_500(self, client, auth_headers, mock_ppo_agent):
         mock_ppo_agent.select_action.side_effect = RuntimeError("fail")
-        resp = client.post("/api/v1/decide/batch", headers=auth_headers, json=self._batch_payload())
+        resp = client.post(
+            "/api/v1/decide/batch", headers=auth_headers, json=self._batch_payload()
+        )
         assert resp.status_code == 500
 
     def test_requires_auth(self, bare_client, mock_ppo_agent):
@@ -426,14 +485,17 @@ class TestDecideBatch:
 # Feedback  (/api/v1/feedback)
 # ===================================================================
 
+
 class TestFeedback:
     def _stored_decision(self):
-        return json.dumps({
-            "decision_id": "drl_20260313_test01",
-            "action": "DENY",
-            "action_code": 1,
-            "state": [0.9, 0.5, 0.8, 0.2, 0.3, 0.5, 0.1, 0.0, 0.9, 0.2, 0.3, 0.2],
-        })
+        return json.dumps(
+            {
+                "decision_id": "drl_20260313_test01",
+                "action": "DENY",
+                "action_code": 1,
+                "state": [0.9, 0.5, 0.8, 0.2, 0.3, 0.5, 0.1, 0.0, 0.9, 0.2, 0.3, 0.2],
+            }
+        )
 
     def test_successful_feedback(self, client, auth_headers, mock_redis):
         mock_redis.get.return_value = self._stored_decision()
@@ -472,7 +534,9 @@ class TestFeedback:
         assert resp.status_code == 404
 
     def test_missing_decision_id_returns_400(self, client, auth_headers):
-        resp = client.post("/api/v1/feedback", headers=auth_headers, json={"outcome": "success"})
+        resp = client.post(
+            "/api/v1/feedback", headers=auth_headers, json={"outcome": "success"}
+        )
         assert resp.status_code == 400
 
     def test_experience_trimmed(self, client, auth_headers, mock_redis):
@@ -491,29 +555,38 @@ class TestFeedback:
 # Train endpoint  (/api/v1/train)
 # ===================================================================
 
+
 class TestTrain:
     def _make_experiences(self, count):
         return [
-            json.dumps({
-                "state": [0.5] * 12,
-                "action": 1,
-                "reward": 0.8,
-                "outcome": "success",
-            }).encode()
+            json.dumps(
+                {
+                    "state": [0.5] * 12,
+                    "action": 1,
+                    "reward": 0.8,
+                    "outcome": "success",
+                }
+            ).encode()
             for _ in range(count)
         ]
 
     def test_successful_training(self, client, auth_headers, mock_redis, mock_trainer):
         mock_redis.lrange.return_value = self._make_experiences(700)
-        resp = client.post("/api/v1/train", headers=auth_headers, json={"epochs": 5, "batch_size": 64})
+        resp = client.post(
+            "/api/v1/train", headers=auth_headers, json={"epochs": 5, "batch_size": 64}
+        )
         assert resp.status_code == 200
         data = resp.get_json()
         assert "metrics" in data
         assert data["experiences_used"] == 700
 
-    def test_insufficient_data_returns_400(self, client, auth_headers, mock_redis, mock_trainer):
+    def test_insufficient_data_returns_400(
+        self, client, auth_headers, mock_redis, mock_trainer
+    ):
         mock_redis.lrange.return_value = self._make_experiences(10)
-        resp = client.post("/api/v1/train", headers=auth_headers, json={"batch_size": 64})
+        resp = client.post(
+            "/api/v1/train", headers=auth_headers, json={"batch_size": 64}
+        )
         assert resp.status_code == 400
         assert "Insufficient" in resp.get_json()["error"]
 
@@ -523,7 +596,10 @@ class TestTrain:
             mv.return_value = {"user_id": "u2", "username": "viewer", "role": "viewer"}
             resp = bare_client.post(
                 "/api/v1/train",
-                headers={"Authorization": "Bearer tok", "Content-Type": "application/json"},
+                headers={
+                    "Authorization": "Bearer tok",
+                    "Content-Type": "application/json",
+                },
                 json={},
             )
             assert resp.status_code == 403
@@ -532,6 +608,7 @@ class TestTrain:
 # ===================================================================
 # Model save/load endpoints
 # ===================================================================
+
 
 class TestModelSaveLoad:
     def test_save_success(self, client, auth_headers, mock_ppo_agent):
@@ -557,7 +634,11 @@ class TestModelSaveLoad:
     def test_save_requires_admin(self, bare_client, mock_ppo_agent):
         drl_app.ppo_agent = mock_ppo_agent
         with patch("auth_middleware._verify_token") as mv:
-            mv.return_value = {"user_id": "u2", "username": "analyst", "role": "security_analyst"}
+            mv.return_value = {
+                "user_id": "u2",
+                "username": "analyst",
+                "role": "security_analyst",
+            }
             resp = bare_client.post(
                 "/api/v1/model/save",
                 headers={"Authorization": "Bearer tok"},
@@ -569,8 +650,11 @@ class TestModelSaveLoad:
 # Statistics  (/api/v1/statistics)
 # ===================================================================
 
+
 class TestStatistics:
-    def test_returns_computed_stats(self, client, auth_headers, mock_redis, mock_ppo_agent):
+    def test_returns_computed_stats(
+        self, client, auth_headers, mock_redis, mock_ppo_agent
+    ):
         mock_redis.get.side_effect = lambda k: {
             "drl:total_decisions": b"500",
             "drl:total_feedback": b"200",
@@ -588,7 +672,9 @@ class TestStatistics:
         assert data["block_rate"] == pytest.approx(180 / 200)
         assert data["experiences_available"] == 1500
 
-    def test_handles_zero_feedback(self, client, auth_headers, mock_redis, mock_ppo_agent):
+    def test_handles_zero_feedback(
+        self, client, auth_headers, mock_redis, mock_ppo_agent
+    ):
         mock_redis.get.return_value = None
         mock_redis.llen.return_value = 0
         resp = client.get("/api/v1/statistics", headers=auth_headers)
@@ -600,6 +686,7 @@ class TestStatistics:
 # ===================================================================
 # Action space / state space info endpoints
 # ===================================================================
+
 
 class TestInfoEndpoints:
     def test_action_space(self, client, auth_headers):
@@ -622,6 +709,7 @@ class TestInfoEndpoints:
 # Error handlers
 # ===================================================================
 
+
 class TestErrorHandlers:
     def test_404(self, client):
         resp = client.get("/nonexistent-path")
@@ -632,6 +720,7 @@ class TestErrorHandlers:
 # ===================================================================
 # StateBuilder  (unit tests on the real class)
 # ===================================================================
+
 
 class TestStateBuilder:
     @pytest.fixture()
@@ -725,6 +814,7 @@ class TestStateBuilder:
 # ActionSpace  (unit tests on the real class)
 # ===================================================================
 
+
 class TestActionSpace:
     @pytest.fixture()
     def space(self):
@@ -787,13 +877,28 @@ class TestActionSpace:
         assert space.encode_action("deny") == ActionType.DENY
 
     def test_encode_rate_limit_by_pps(self, space):
-        assert space.encode_action("RATE_LIMIT", {"packets_per_second": 1000}) == ActionType.RATE_LIMIT_LOW
-        assert space.encode_action("RATE_LIMIT", {"packets_per_second": 100}) == ActionType.RATE_LIMIT_MEDIUM
-        assert space.encode_action("RATE_LIMIT", {"packets_per_second": 5}) == ActionType.RATE_LIMIT_HIGH
+        assert (
+            space.encode_action("RATE_LIMIT", {"packets_per_second": 1000})
+            == ActionType.RATE_LIMIT_LOW
+        )
+        assert (
+            space.encode_action("RATE_LIMIT", {"packets_per_second": 100})
+            == ActionType.RATE_LIMIT_MEDIUM
+        )
+        assert (
+            space.encode_action("RATE_LIMIT", {"packets_per_second": 5})
+            == ActionType.RATE_LIMIT_HIGH
+        )
 
     def test_encode_quarantine_by_duration(self, space):
-        assert space.encode_action("QUARANTINE", {"duration": 3600}) == ActionType.QUARANTINE_SHORT
-        assert space.encode_action("QUARANTINE", {"duration": 86400}) == ActionType.QUARANTINE_LONG
+        assert (
+            space.encode_action("QUARANTINE", {"duration": 3600})
+            == ActionType.QUARANTINE_SHORT
+        )
+        assert (
+            space.encode_action("QUARANTINE", {"duration": 86400})
+            == ActionType.QUARANTINE_LONG
+        )
 
     def test_encode_unknown_defaults_to_monitor(self, space):
         assert space.encode_action("NUKE_FROM_ORBIT") == ActionType.MONITOR
@@ -835,6 +940,7 @@ class TestActionSpace:
 # RewardFunction  (unit tests on the real class)
 # ===================================================================
 
+
 class TestRewardFunction:
     @pytest.fixture()
     def rf(self):
@@ -849,7 +955,9 @@ class TestRewardFunction:
         assert reward < 0
 
     def test_allow_with_no_threat_small_positive(self, rf):
-        reward = rf.calculate_reward(action=0, blocked_threat=False, false_positive=False)
+        reward = rf.calculate_reward(
+            action=0, blocked_threat=False, false_positive=False
+        )
         assert reward > 0
 
     def test_allow_missed_threat_negative(self, rf):
@@ -906,6 +1014,7 @@ class TestRewardFunction:
 # PPOAgent  (requires torch — skipped cleanly when not installed)
 # ===================================================================
 
+
 class TestPPOAgent:
     """Test the real PPOAgent class.  Requires PyTorch."""
 
@@ -917,6 +1026,7 @@ class TestPPOAgent:
     @pytest.fixture()
     def agent(self):
         from agent.ppo_agent import PPOAgent
+
         return PPOAgent(state_dim=12, action_dim=8, model_path=tempfile.mkdtemp())
 
     def test_init_sets_dimensions(self, agent):
@@ -960,7 +1070,9 @@ class TestPPOAgent:
         old_log_probs = np.random.randn(batch).astype(np.float32)
         advantages = np.random.randn(batch).astype(np.float32)
 
-        metrics = agent.update(states, actions, rewards, old_log_probs, advantages, epochs=2)
+        metrics = agent.update(
+            states, actions, rewards, old_log_probs, advantages, epochs=2
+        )
         assert "policy_loss" in metrics
         assert "value_loss" in metrics
         assert "entropy" in metrics
@@ -988,6 +1100,7 @@ class TestPPOAgent:
         assert agent.save_model() is True
 
         from agent.ppo_agent import PPOAgent
+
         new_agent = PPOAgent(state_dim=12, action_dim=8, model_path=agent.model_path)
         assert new_agent.load_model() is True
 
@@ -1020,6 +1133,7 @@ class TestPPOAgent:
         agent.save_model()
 
         from agent.ppo_agent import PPOAgent
+
         new_agent = PPOAgent(state_dim=12, action_dim=8, model_path=agent.model_path)
         new_agent.load_model()
         assert new_agent.get_version() == "2.0.0"
@@ -1028,6 +1142,7 @@ class TestPPOAgent:
     def test_torch_not_available_raises(self):
         """Verify the guard in __init__ when torch is absent."""
         from agent import ppo_agent as ppo_mod
+
         original = ppo_mod.torch
         ppo_mod.torch = None
         try:
@@ -1041,10 +1156,16 @@ class TestPPOAgent:
 # store_decision helper
 # ===================================================================
 
+
 class TestStoreDecision:
     def test_stores_decision_and_increments_counter(self, mock_redis):
         decision = {"decision_id": "drl_test_001", "action": "DENY", "action_code": 1}
-        context = {"threat_score": 0.9, "source_ip": "1.2.3.4", "dest_port": 22, "protocol": "TCP"}
+        context = {
+            "threat_score": 0.9,
+            "source_ip": "1.2.3.4",
+            "dest_port": 22,
+            "protocol": "TCP",
+        }
         drl_app.store_decision(decision, context)
         mock_redis.set.assert_called_once()
         stored = mock_redis.set.call_args[0][1]

@@ -1,4 +1,5 @@
 """Model-agnostic SHAP-based explanation generator for SENTINEL AI decisions."""
+
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -12,11 +13,12 @@ try:
     _SHAP_AVAILABLE = True
 except ImportError:
     _SHAP_AVAILABLE = False
-    logger.warning("SHAP library not available — falling back to approximate explanations")
+    logger.warning(
+        "SHAP library not available — falling back to approximate explanations"
+    )
 
 
 class SHAPExplainer:
-
     def __init__(self, background_samples: int = 100) -> None:
         self._background_samples = background_samples
         self._explainer: Optional[Any] = None
@@ -55,7 +57,9 @@ class SHAPExplainer:
         )
         shap_values = explainer.shap_values(feature_values)[0]
 
-        importance = self._build_importance(feature_names, feature_values[0], shap_values)
+        importance = self._build_importance(
+            feature_names, feature_values[0], shap_values
+        )
         importance.sort(key=lambda x: abs(x["shap_value"]), reverse=True)
 
         return {
@@ -85,13 +89,15 @@ class SHAPExplainer:
             weight = weights.get(name, 1.0 / max(len(feature_names), 1))
             approx_shap = numeric * weight * (confidence - 0.5)
 
-            importance.append({
-                "feature": name,
-                "value": raw,
-                "shap_value": round(float(approx_shap), 6),
-                "direction": "threat" if approx_shap > 0 else "benign",
-                "magnitude": round(abs(float(approx_shap)), 6),
-            })
+            importance.append(
+                {
+                    "feature": name,
+                    "value": raw,
+                    "shap_value": round(float(approx_shap), 6),
+                    "direction": "threat" if approx_shap > 0 else "benign",
+                    "magnitude": round(abs(float(approx_shap)), 6),
+                }
+            )
 
         importance.sort(key=lambda x: x["magnitude"], reverse=True)
 
@@ -116,13 +122,15 @@ class SHAPExplainer:
         result: List[Dict[str, Any]] = []
         for i, name in enumerate(names):
             sv = float(shap_vals[i])
-            result.append({
-                "feature": name,
-                "value": float(values[i]),
-                "shap_value": round(sv, 6),
-                "direction": "threat" if sv > 0 else "benign",
-                "magnitude": round(abs(sv), 6),
-            })
+            result.append(
+                {
+                    "feature": name,
+                    "value": float(values[i]),
+                    "shap_value": round(sv, 6),
+                    "direction": "threat" if sv > 0 else "benign",
+                    "magnitude": round(abs(sv), 6),
+                }
+            )
         return result
 
     @staticmethod

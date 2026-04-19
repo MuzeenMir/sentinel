@@ -19,13 +19,14 @@ Usage:
   # Override base URL
   SENTINEL_API_URL=http://10.0.0.5:8080 pytest backend/tests/test_e2e_pipeline.py -v
 """
+
 import json
 import os
 import time
 import uuid
 import threading
 from datetime import datetime, timezone
-from typing import Dict, Any, Optional
+from typing import Dict
 
 import pytest
 import requests
@@ -141,7 +142,9 @@ class TestIngestToAlert:
         }
 
         resp = requests.post(
-            f"{GATEWAY_URL}/api/v1/ingest" if "8080" in GATEWAY_URL else f"{DATA_COLLECTOR_URL}/api/v1/ingest",
+            f"{GATEWAY_URL}/api/v1/ingest"
+            if "8080" in GATEWAY_URL
+            else f"{DATA_COLLECTOR_URL}/api/v1/ingest",
             json=event,
             headers=auth_headers,
             timeout=10,
@@ -195,7 +198,14 @@ class TestDRLDecision:
         assert resp.status_code == 200, f"DRL decide failed: {resp.text}"
         decision = resp.json()
         assert "action" in decision, f"No action in decision: {decision}"
-        assert decision["action"] in ("DENY", "RATE_LIMIT", "MONITOR", "ALLOW", "QUARANTINE", "ALERT")
+        assert decision["action"] in (
+            "DENY",
+            "RATE_LIMIT",
+            "MONITOR",
+            "ALLOW",
+            "QUARANTINE",
+            "ALERT",
+        )
 
 
 class TestPolicyAutoApply:
@@ -272,7 +282,9 @@ class TestSSEStream:
 
         def _reader():
             try:
-                with requests.get(url, headers=headers, stream=True, timeout=timeout) as r:
+                with requests.get(
+                    url, headers=headers, stream=True, timeout=timeout
+                ) as r:
                     for line in r.iter_lines(decode_unicode=True):
                         if line and line.startswith("data: "):
                             payload = json.loads(line[6:])
@@ -332,7 +344,9 @@ class TestFullPipeline:
             headers=auth_headers,
             timeout=5,
         )
-        baseline_count = baseline.json().get("total", 0) if baseline.status_code == 200 else 0
+        baseline_count = (
+            baseline.json().get("total", 0) if baseline.status_code == 200 else 0
+        )
 
         # Step 2 — ingest a clearly malicious event
         event = {

@@ -6,6 +6,7 @@ Model (CIM), computes statistical features (packet rate, byte entropy,
 connection frequency, inter-arrival statistics), and publishes enriched
 events to the ``extracted_features`` topic.
 """
+
 from __future__ import annotations
 
 import logging
@@ -14,7 +15,7 @@ import os
 import time
 import uuid
 from collections import defaultdict, deque
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import numpy as np
 
@@ -23,18 +24,18 @@ from base_job import BaseStreamJob
 logger = logging.getLogger(__name__)
 
 CIM_FIELD_MAP: Dict[str, List[str]] = {
-    "src_ip":      ["src_ip", "source_ip", "srcip", "src_addr", "source_address"],
-    "dst_ip":      ["dst_ip", "dest_ip", "dstip", "dst_addr", "destination_address"],
-    "src_port":    ["src_port", "source_port", "srcport", "sport"],
-    "dst_port":    ["dst_port", "dest_port", "dstport", "dport"],
-    "protocol":    ["protocol", "proto", "ip_protocol"],
-    "action":      ["action", "event_action", "disposition"],
-    "bytes_in":    ["bytes_in", "bytes_received", "in_bytes", "rx_bytes"],
-    "bytes_out":   ["bytes_out", "bytes_sent", "out_bytes", "tx_bytes"],
-    "packets_in":  ["packets_in", "pkts_in", "rx_packets"],
+    "src_ip": ["src_ip", "source_ip", "srcip", "src_addr", "source_address"],
+    "dst_ip": ["dst_ip", "dest_ip", "dstip", "dst_addr", "destination_address"],
+    "src_port": ["src_port", "source_port", "srcport", "sport"],
+    "dst_port": ["dst_port", "dest_port", "dstport", "dport"],
+    "protocol": ["protocol", "proto", "ip_protocol"],
+    "action": ["action", "event_action", "disposition"],
+    "bytes_in": ["bytes_in", "bytes_received", "in_bytes", "rx_bytes"],
+    "bytes_out": ["bytes_out", "bytes_sent", "out_bytes", "tx_bytes"],
+    "packets_in": ["packets_in", "pkts_in", "rx_packets"],
     "packets_out": ["packets_out", "pkts_out", "tx_packets"],
-    "duration":    ["duration", "flow_duration", "session_duration"],
-    "timestamp":   ["timestamp", "ts", "event_time", "@timestamp"],
+    "duration": ["duration", "flow_duration", "session_duration"],
+    "timestamp": ["timestamp", "ts", "event_time", "@timestamp"],
 }
 
 PROTOCOL_RISK = {"tcp": 0.3, "udp": 0.5, "icmp": 0.6}
@@ -125,10 +126,11 @@ class ConnectionTracker:
 
 
 class FeatureExtractionJob(BaseStreamJob):
-
     def __init__(self):
         super().__init__("feature-extraction")
-        self.input_topic = os.environ.get("KAFKA_INPUT_TOPIC", "sentinel-network-events")
+        self.input_topic = os.environ.get(
+            "KAFKA_INPUT_TOPIC", "sentinel-network-events"
+        )
         self.output_topic = os.environ.get("KAFKA_OUTPUT_TOPIC", "extracted_features")
         self.tracker = ConnectionTracker(window_seconds=300)
         self._processed = 0

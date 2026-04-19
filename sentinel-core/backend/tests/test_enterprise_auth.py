@@ -5,13 +5,13 @@ and Tenant CRUD.
 
 Uses in-memory SQLite + mocked Redis. No network calls.
 """
+
 import os
 import sys
 import json
 import hashlib
 import pytest
 from unittest.mock import patch, MagicMock
-from datetime import datetime
 
 # ---------------------------------------------------------------------------
 # Environment setup BEFORE any app import
@@ -59,8 +59,10 @@ _mock_redis.delete = MagicMock(side_effect=_mock_delete)
 for mod_name in ("app", "enterprise_auth"):
     sys.modules.pop(mod_name, None)
 
-with patch("redis.ConnectionPool.from_url", return_value=MagicMock()), \
-     patch("redis.Redis", return_value=_mock_redis):
+with (
+    patch("redis.ConnectionPool.from_url", return_value=MagicMock()),
+    patch("redis.Redis", return_value=_mock_redis),
+):
     # Direct import so the module registers as "app" in sys.modules.
     # enterprise_auth.register_enterprise_auth() does `from app import db, User`
     # — it must find this exact module, not a separate copy.
@@ -80,6 +82,7 @@ VALID_PASSWORD = "Test@1234"
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(autouse=True)
 def setup_db():
     app.config["TESTING"] = True
@@ -87,6 +90,7 @@ def setup_db():
         # SQLite doesn't support autoincrement on BigInteger; swap to Integer
         # for the test-only in-memory DB so Tenant.id auto-generates.
         from sqlalchemy import Integer as _Int
+
         Tenant.__table__.columns["id"].type = _Int()
         db.create_all()
         yield
@@ -107,6 +111,7 @@ def client():
 def _create_user(role=UserRole.VIEWER, mfa=False, tenant_id=None):
     """Create a user directly in the DB and return it."""
     import bcrypt
+
     user = User(
         username=f"user_{id(role)}",
         email=f"user_{id(role)}@test.com",
@@ -117,6 +122,7 @@ def _create_user(role=UserRole.VIEWER, mfa=False, tenant_id=None):
     )
     if mfa:
         import pyotp
+
         user.mfa_secret = pyotp.random_base32()
         user.mfa_enabled = True
     db.session.add(user)
@@ -125,10 +131,13 @@ def _create_user(role=UserRole.VIEWER, mfa=False, tenant_id=None):
 
 
 def _login(client, user):
-    return client.post("/api/v1/auth/login", json={
-        "username": user.username,
-        "password": VALID_PASSWORD,
-    })
+    return client.post(
+        "/api/v1/auth/login",
+        json={
+            "username": user.username,
+            "password": VALID_PASSWORD,
+        },
+    )
 
 
 def _auth_header(token):
@@ -146,6 +155,7 @@ def _get_admin_token(client):
 # MFA Challenge Flow
 # ===================================================================
 
+
 class TestMFAChallenge:
     def test_login_returns_mfa_required_when_mfa_enabled(self, client):
         user = _create_user(mfa=True)
@@ -156,6 +166,7 @@ class TestMFAChallenge:
 
     def test_mfa_challenge_with_valid_totp(self, client):
         import pyotp
+
         user = _create_user(mfa=True)
         login_resp = _login(client, user)
         mfa_token = login_resp.json["mfa_token"]
@@ -163,10 +174,13 @@ class TestMFAChallenge:
         totp = pyotp.TOTP(user.mfa_secret)
         code = totp.now()
 
-        resp = client.post("/api/v1/auth/mfa/challenge", json={
-            "mfa_token": mfa_token,
-            "code": code,
-        })
+        resp = client.post(
+            "/api/v1/auth/mfa/challenge",
+            json={
+                "mfa_token": mfa_token,
+                "code": code,
+            },
+        )
         assert resp.status_code == 200
         assert "access_token" in resp.json
         assert "refresh_token" in resp.json
@@ -177,26 +191,34 @@ class TestMFAChallenge:
         login_resp = _login(client, user)
         mfa_token = login_resp.json["mfa_token"]
 
-        resp = client.post("/api/v1/auth/mfa/challenge", json={
-            "mfa_token": mfa_token,
-            "code": "000000",
-        })
+        resp = client.post(
+            "/api/v1/auth/mfa/challenge",
+            json={
+                "mfa_token": mfa_token,
+                "code": "000000",
+            },
+        )
         assert resp.status_code == 401
 
     def test_mfa_challenge_with_expired_token(self, client):
-        resp = client.post("/api/v1/auth/mfa/challenge", json={
-            "mfa_token": "nonexistent-token",
-            "code": "123456",
-        })
+        resp = client.post(
+            "/api/v1/auth/mfa/challenge",
+            json={
+                "mfa_token": "nonexistent-token",
+                "code": "123456",
+            },
+        )
         assert resp.status_code == 401
-        assert "expired" in resp.json["error"].lower() or "invalid" in resp.json["error"].lower()
+        assert (
+            "expired" in resp.json["error"].lower()
+            or "invalid" in resp.json["error"].lower()
+        )
 
     def test_mfa_challenge_missing_fields(self, client):
         resp = client.post("/api/v1/auth/mfa/challenge", json={"mfa_token": "x"})
         assert resp.status_code == 400
 
     def test_mfa_challenge_with_backup_code(self, client):
-        import pyotp
         user = _create_user(mfa=True)
 
         # Generate backup codes
@@ -210,10 +232,13 @@ class TestMFAChallenge:
         mfa_token = login_resp.json["mfa_token"]
 
         # Use backup code
-        resp = client.post("/api/v1/auth/mfa/challenge", json={
-            "mfa_token": mfa_token,
-            "code": "AAAA1111",
-        })
+        resp = client.post(
+            "/api/v1/auth/mfa/challenge",
+            json={
+                "mfa_token": mfa_token,
+                "code": "AAAA1111",
+            },
+        )
         assert resp.status_code == 200
         assert "access_token" in resp.json
 
@@ -227,6 +252,7 @@ class TestMFAChallenge:
     def test_mfa_challenge_consumes_token(self, client):
         """After successful MFA, the same mfa_token cannot be reused."""
         import pyotp
+
         user = _create_user(mfa=True)
         login_resp = _login(client, user)
         mfa_token = login_resp.json["mfa_token"]
@@ -235,21 +261,30 @@ class TestMFAChallenge:
         code = totp.now()
 
         # First use succeeds
-        resp1 = client.post("/api/v1/auth/mfa/challenge", json={
-            "mfa_token": mfa_token, "code": code,
-        })
+        resp1 = client.post(
+            "/api/v1/auth/mfa/challenge",
+            json={
+                "mfa_token": mfa_token,
+                "code": code,
+            },
+        )
         assert resp1.status_code == 200
 
         # Second use fails
-        resp2 = client.post("/api/v1/auth/mfa/challenge", json={
-            "mfa_token": mfa_token, "code": code,
-        })
+        resp2 = client.post(
+            "/api/v1/auth/mfa/challenge",
+            json={
+                "mfa_token": mfa_token,
+                "code": code,
+            },
+        )
         assert resp2.status_code == 401
 
 
 # ===================================================================
 # MFA Enroll / Verify / Disable / Backup-Codes (enterprise_auth.py)
 # ===================================================================
+
 
 class TestMFAEndpoints:
     def _get_token(self, client, user):
@@ -260,14 +295,14 @@ class TestMFAEndpoints:
     def test_enroll(self, client):
         user = _create_user()
         token = self._get_token(client, user)
-        resp = client.post("/api/v1/auth/mfa/enroll",
-                           headers=_auth_header(token))
+        resp = client.post("/api/v1/auth/mfa/enroll", headers=_auth_header(token))
         assert resp.status_code == 200
         assert "provisioning_uri" in resp.json
         assert "otpauth://" in resp.json["provisioning_uri"]
 
     def test_verify_enables_mfa(self, client):
         import pyotp
+
         user = _create_user()
         token = self._get_token(client, user)
 
@@ -280,9 +315,11 @@ class TestMFAEndpoints:
             secret = refreshed.mfa_secret
 
         totp = pyotp.TOTP(secret)
-        resp = client.post("/api/v1/auth/mfa/verify",
-                           headers=_auth_header(token),
-                           json={"code": totp.now()})
+        resp = client.post(
+            "/api/v1/auth/mfa/verify",
+            headers=_auth_header(token),
+            json={"code": totp.now()},
+        )
         assert resp.status_code == 200
         assert resp.json["valid"] is True
 
@@ -296,43 +333,53 @@ class TestMFAEndpoints:
         token = self._get_token(client, user)
         client.post("/api/v1/auth/mfa/enroll", headers=_auth_header(token))
 
-        resp = client.post("/api/v1/auth/mfa/verify",
-                           headers=_auth_header(token),
-                           json={"code": "000000"})
+        resp = client.post(
+            "/api/v1/auth/mfa/verify",
+            headers=_auth_header(token),
+            json={"code": "000000"},
+        )
         assert resp.status_code == 401
 
     def test_verify_without_enroll_returns_400(self, client):
         user = _create_user()
         token = self._get_token(client, user)
-        resp = client.post("/api/v1/auth/mfa/verify",
-                           headers=_auth_header(token),
-                           json={"code": "123456"})
+        resp = client.post(
+            "/api/v1/auth/mfa/verify",
+            headers=_auth_header(token),
+            json={"code": "123456"},
+        )
         assert resp.status_code == 400
 
     def test_disable_requires_valid_code(self, client):
-        import pyotp
         user = _create_user(mfa=True)
         # Need non-MFA login path: directly create token
         from flask_jwt_extended import create_access_token
+
         with app.app_context():
             token = create_access_token(identity=str(user.id))
 
-        resp = client.post("/api/v1/auth/mfa/disable",
-                           headers=_auth_header(token),
-                           json={"code": "000000"})
+        resp = client.post(
+            "/api/v1/auth/mfa/disable",
+            headers=_auth_header(token),
+            json={"code": "000000"},
+        )
         assert resp.status_code == 401
 
     def test_disable_with_valid_code(self, client):
         import pyotp
+
         user = _create_user(mfa=True)
         from flask_jwt_extended import create_access_token
+
         with app.app_context():
             token = create_access_token(identity=str(user.id))
 
         totp = pyotp.TOTP(user.mfa_secret)
-        resp = client.post("/api/v1/auth/mfa/disable",
-                           headers=_auth_header(token),
-                           json={"code": totp.now()})
+        resp = client.post(
+            "/api/v1/auth/mfa/disable",
+            headers=_auth_header(token),
+            json={"code": totp.now()},
+        )
         assert resp.status_code == 200
 
         with app.app_context():
@@ -341,14 +388,13 @@ class TestMFAEndpoints:
             assert refreshed.mfa_secret is None
 
     def test_backup_codes_generation(self, client):
-        import pyotp
         user = _create_user(mfa=True)
         from flask_jwt_extended import create_access_token
+
         with app.app_context():
             token = create_access_token(identity=str(user.id))
 
-        resp = client.post("/api/v1/auth/mfa/backup-codes",
-                           headers=_auth_header(token))
+        resp = client.post("/api/v1/auth/mfa/backup-codes", headers=_auth_header(token))
         assert resp.status_code == 200
         assert len(resp.json["backup_codes"]) == 10
 
@@ -364,15 +410,13 @@ class TestMFAEndpoints:
     def test_backup_codes_require_mfa_enabled(self, client):
         user = _create_user()
         token = _login(client, user).json["access_token"]
-        resp = client.post("/api/v1/auth/mfa/backup-codes",
-                           headers=_auth_header(token))
+        resp = client.post("/api/v1/auth/mfa/backup-codes", headers=_auth_header(token))
         assert resp.status_code == 400
 
     def test_mfa_status(self, client):
         user = _create_user()
         token = _login(client, user).json["access_token"]
-        resp = client.get("/api/v1/auth/mfa/status",
-                          headers=_auth_header(token))
+        resp = client.get("/api/v1/auth/mfa/status", headers=_auth_header(token))
         assert resp.status_code == 200
         assert resp.json["enabled"] is False
         assert resp.json["method"] == "totp"
@@ -381,6 +425,7 @@ class TestMFAEndpoints:
 # ===================================================================
 # OIDC / SAML status endpoints (no IdP needed)
 # ===================================================================
+
 
 class TestSSOStatus:
     def test_oidc_status_disabled(self, client):
@@ -412,6 +457,7 @@ class TestSSOStatus:
 # SCIM 2.0 Provisioning
 # ===================================================================
 
+
 class TestSCIM:
     SCIM_HEADERS = {
         "Authorization": "Bearer test-scim-token-12345",
@@ -426,13 +472,15 @@ class TestSCIM:
         assert resp.json["totalResults"] >= 1
 
     def test_create_user(self, client):
-        resp = client.post("/api/v1/auth/scim/v2/Users",
-                           headers=self.SCIM_HEADERS,
-                           json={
-                               "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
-                               "userName": "scim_user",
-                               "emails": [{"value": "scim@example.com", "primary": True}],
-                           })
+        resp = client.post(
+            "/api/v1/auth/scim/v2/Users",
+            headers=self.SCIM_HEADERS,
+            json={
+                "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
+                "userName": "scim_user",
+                "emails": [{"value": "scim@example.com", "primary": True}],
+            },
+        )
         assert resp.status_code == 201
         assert resp.json["userName"] == "scim_user"
         assert resp.json["active"] is True
@@ -443,45 +491,54 @@ class TestSCIM:
             "userName": "dup_user",
             "emails": [{"value": "dup@example.com"}],
         }
-        client.post("/api/v1/auth/scim/v2/Users", headers=self.SCIM_HEADERS, json=payload)
-        resp = client.post("/api/v1/auth/scim/v2/Users", headers=self.SCIM_HEADERS, json=payload)
+        client.post(
+            "/api/v1/auth/scim/v2/Users", headers=self.SCIM_HEADERS, json=payload
+        )
+        resp = client.post(
+            "/api/v1/auth/scim/v2/Users", headers=self.SCIM_HEADERS, json=payload
+        )
         assert resp.status_code == 409
 
     def test_create_user_missing_username(self, client):
-        resp = client.post("/api/v1/auth/scim/v2/Users",
-                           headers=self.SCIM_HEADERS,
-                           json={
-                               "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
-                           })
+        resp = client.post(
+            "/api/v1/auth/scim/v2/Users",
+            headers=self.SCIM_HEADERS,
+            json={
+                "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
+            },
+        )
         assert resp.status_code == 400
 
     def test_get_user(self, client):
         user = _create_user()
-        resp = client.get(f"/api/v1/auth/scim/v2/Users/{user.id}",
-                          headers=self.SCIM_HEADERS)
+        resp = client.get(
+            f"/api/v1/auth/scim/v2/Users/{user.id}", headers=self.SCIM_HEADERS
+        )
         assert resp.status_code == 200
         assert resp.json["id"] == str(user.id)
 
     def test_get_user_not_found(self, client):
-        resp = client.get("/api/v1/auth/scim/v2/Users/99999",
-                          headers=self.SCIM_HEADERS)
+        resp = client.get("/api/v1/auth/scim/v2/Users/99999", headers=self.SCIM_HEADERS)
         assert resp.status_code == 404
 
     def test_update_user(self, client):
         user = _create_user()
-        resp = client.put(f"/api/v1/auth/scim/v2/Users/{user.id}",
-                          headers=self.SCIM_HEADERS,
-                          json={
-                              "userName": "updated_scim",
-                              "active": True,
-                          })
+        resp = client.put(
+            f"/api/v1/auth/scim/v2/Users/{user.id}",
+            headers=self.SCIM_HEADERS,
+            json={
+                "userName": "updated_scim",
+                "active": True,
+            },
+        )
         assert resp.status_code == 200
         assert resp.json["userName"] == "updated_scim"
 
     def test_delete_user_deactivates(self, client):
         user = _create_user()
-        resp = client.delete(f"/api/v1/auth/scim/v2/Users/{user.id}",
-                             headers=self.SCIM_HEADERS)
+        resp = client.delete(
+            f"/api/v1/auth/scim/v2/Users/{user.id}", headers=self.SCIM_HEADERS
+        )
         assert resp.status_code == 204
 
         with app.app_context():
@@ -489,8 +546,10 @@ class TestSCIM:
             assert refreshed.status == UserStatus.INACTIVE
 
     def test_unauthorized_scim_request(self, client):
-        resp = client.get("/api/v1/auth/scim/v2/Users",
-                          headers={"Authorization": "Bearer wrong-token"})
+        resp = client.get(
+            "/api/v1/auth/scim/v2/Users",
+            headers={"Authorization": "Bearer wrong-token"},
+        )
         assert resp.status_code == 401
 
     def test_service_provider_config(self, client):
@@ -499,12 +558,14 @@ class TestSCIM:
         assert "authenticationSchemes" in resp.json
 
     def test_invalid_schema_returns_400(self, client):
-        resp = client.post("/api/v1/auth/scim/v2/Users",
-                           headers=self.SCIM_HEADERS,
-                           json={
-                               "schemas": ["urn:wrong:schema"],
-                               "userName": "bad",
-                           })
+        resp = client.post(
+            "/api/v1/auth/scim/v2/Users",
+            headers=self.SCIM_HEADERS,
+            json={
+                "schemas": ["urn:wrong:schema"],
+                "userName": "bad",
+            },
+        )
         assert resp.status_code == 400
 
 
@@ -512,12 +573,15 @@ class TestSCIM:
 # Tenant CRUD
 # ===================================================================
 
+
 class TestTenantCRUD:
     def test_create_tenant(self, client):
         token = _get_admin_token(client)
-        resp = client.post("/api/v1/tenants",
-                           headers=_auth_header(token),
-                           json={"name": "acme-corp", "plan": "enterprise"})
+        resp = client.post(
+            "/api/v1/tenants",
+            headers=_auth_header(token),
+            json={"name": "acme-corp", "plan": "enterprise"},
+        )
         assert resp.status_code == 201
         assert resp.json["tenant"]["name"] == "acme-corp"
         assert resp.json["tenant"]["plan"] == "enterprise"
@@ -525,26 +589,26 @@ class TestTenantCRUD:
 
     def test_create_tenant_missing_name(self, client):
         token = _get_admin_token(client)
-        resp = client.post("/api/v1/tenants",
-                           headers=_auth_header(token),
-                           json={})
+        resp = client.post("/api/v1/tenants", headers=_auth_header(token), json={})
         assert resp.status_code == 400
 
     def test_list_tenants(self, client):
         token = _get_admin_token(client)
-        client.post("/api/v1/tenants", headers=_auth_header(token),
-                    json={"name": "tenant-a"})
-        client.post("/api/v1/tenants", headers=_auth_header(token),
-                    json={"name": "tenant-b"})
+        client.post(
+            "/api/v1/tenants", headers=_auth_header(token), json={"name": "tenant-a"}
+        )
+        client.post(
+            "/api/v1/tenants", headers=_auth_header(token), json={"name": "tenant-b"}
+        )
         resp = client.get("/api/v1/tenants", headers=_auth_header(token))
         assert resp.status_code == 200
         assert len(resp.json["tenants"]) >= 2
 
     def test_get_tenant(self, client):
         token = _get_admin_token(client)
-        create_resp = client.post("/api/v1/tenants",
-                                  headers=_auth_header(token),
-                                  json={"name": "get-me"})
+        create_resp = client.post(
+            "/api/v1/tenants", headers=_auth_header(token), json={"name": "get-me"}
+        )
         pk = create_resp.json["tenant"]["id"]
         resp = client.get(f"/api/v1/tenants/{pk}", headers=_auth_header(token))
         assert resp.status_code == 200
@@ -552,25 +616,26 @@ class TestTenantCRUD:
 
     def test_update_tenant(self, client):
         token = _get_admin_token(client)
-        create_resp = client.post("/api/v1/tenants",
-                                  headers=_auth_header(token),
-                                  json={"name": "updatable"})
+        create_resp = client.post(
+            "/api/v1/tenants", headers=_auth_header(token), json={"name": "updatable"}
+        )
         pk = create_resp.json["tenant"]["id"]
-        resp = client.put(f"/api/v1/tenants/{pk}",
-                          headers=_auth_header(token),
-                          json={"plan": "enterprise", "retention_days": 365})
+        resp = client.put(
+            f"/api/v1/tenants/{pk}",
+            headers=_auth_header(token),
+            json={"plan": "enterprise", "retention_days": 365},
+        )
         assert resp.status_code == 200
         assert resp.json["tenant"]["plan"] == "enterprise"
         assert resp.json["tenant"]["retention_days"] == 365
 
     def test_deactivate_tenant(self, client):
         token = _get_admin_token(client)
-        create_resp = client.post("/api/v1/tenants",
-                                  headers=_auth_header(token),
-                                  json={"name": "deletable"})
+        create_resp = client.post(
+            "/api/v1/tenants", headers=_auth_header(token), json={"name": "deletable"}
+        )
         pk = create_resp.json["tenant"]["id"]
-        resp = client.delete(f"/api/v1/tenants/{pk}",
-                             headers=_auth_header(token))
+        resp = client.delete(f"/api/v1/tenants/{pk}", headers=_auth_header(token))
         assert resp.status_code == 200
         assert "deactivated" in resp.json["message"].lower()
 
@@ -583,7 +648,7 @@ class TestTenantCRUD:
         user = _create_user(role=UserRole.VIEWER)
         resp = _login(client, user)
         token = resp.json["access_token"]
-        resp = client.post("/api/v1/tenants",
-                           headers=_auth_header(token),
-                           json={"name": "nope"})
+        resp = client.post(
+            "/api/v1/tenants", headers=_auth_header(token), json={"name": "nope"}
+        )
         assert resp.status_code == 403

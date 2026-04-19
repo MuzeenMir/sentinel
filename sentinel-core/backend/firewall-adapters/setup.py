@@ -1,4 +1,5 @@
 """SENTINEL Firewall Adapters - installable package for policy-orchestrator and other consumers."""
+
 from setuptools import setup
 
 setup(

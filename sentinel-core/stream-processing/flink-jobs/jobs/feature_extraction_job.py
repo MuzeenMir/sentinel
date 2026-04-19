@@ -10,12 +10,12 @@ This job:
 3. Computes statistical and behavioral features
 4. Outputs enriched features to Kafka for AI engine consumption
 """
+
 import os
 import sys
 import json
 import logging
-from datetime import datetime, timedelta
-from typing import Dict, Any, List, Iterable
+from datetime import datetime
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -28,70 +28,66 @@ from config import config
 from utils.feature_functions import (
     compute_statistical_features,
     compute_behavioral_features,
-    compute_flow_features,
-    aggregate_window_features
-)
-from utils.serialization import (
-    deserialize_traffic,
-    serialize_features,
-    create_flow_key,
-    create_bidirectional_flow_key
 )
 
 
 class FeatureExtractionJob:
     """
     Flink job for real-time feature extraction.
-    
+
     Implements multiple windowing strategies:
     - Tumbling windows (1m, 5m, 15m) for periodic aggregation
     - Sliding windows for overlapping analysis
     - Session windows for flow-based grouping
     """
-    
+
     def __init__(self, kafka_config=None, window_config=None):
         """Initialize the feature extraction job."""
         self.kafka_config = kafka_config or config.kafka
         self.window_config = window_config or config.windows
-        
+
         self.env = None
         self.t_env = None
-        
+
     def setup_environment(self):
         """Set up Flink execution environment."""
         try:
             from pyflink.datastream import StreamExecutionEnvironment
             from pyflink.table import StreamTableEnvironment, EnvironmentSettings
             from pyflink.datastream.checkpointing_mode import CheckpointingMode
-            
+
             # Create streaming environment
             self.env = StreamExecutionEnvironment.get_execution_environment()
-            
+
             # Configure checkpointing
             self.env.enable_checkpointing(config.checkpoint_interval_ms)
-            self.env.get_checkpoint_config().set_checkpointing_mode(CheckpointingMode.EXACTLY_ONCE)
+            self.env.get_checkpoint_config().set_checkpointing_mode(
+                CheckpointingMode.EXACTLY_ONCE
+            )
             self.env.get_checkpoint_config().set_min_pause_between_checkpoints(500)
-            
+
             # Set parallelism
             self.env.set_parallelism(config.parallelism)
-            
+
             # Create table environment
             settings = EnvironmentSettings.new_instance().in_streaming_mode().build()
-            self.t_env = StreamTableEnvironment.create(self.env, environment_settings=settings)
-            
+            self.t_env = StreamTableEnvironment.create(
+                self.env, environment_settings=settings
+            )
+
             logger.info("Flink environment initialized")
-            
+
         except ImportError as e:
             logger.error(f"PyFlink not available: {e}")
             logger.info("Running in standalone mode for development")
             self.env = None
             self.t_env = None
-    
+
     def create_kafka_source(self):
         """Create Kafka source table."""
         if not self.t_env:
             return
-        
+
         source_ddl = f"""
             CREATE TABLE traffic_source (
                 event_id STRING,
@@ -120,12 +116,12 @@ class FeatureExtractionJob:
         """
         self.t_env.execute_sql(source_ddl)
         logger.info("Kafka source table created")
-    
+
     def create_kafka_sink(self):
         """Create Kafka sink table for features."""
         if not self.t_env:
             return
-        
+
         sink_ddl = f"""
             CREATE TABLE features_sink (
                 feature_id STRING,
@@ -154,18 +150,20 @@ class FeatureExtractionJob:
         """
         self.t_env.execute_sql(sink_ddl)
         logger.info("Kafka sink table created")
-    
+
     def run_tumbling_window_aggregation(self, window_size_minutes: int):
         """
         Run tumbling window aggregation.
-        
+
         Args:
             window_size_minutes: Window size in minutes
         """
         if not self.t_env:
-            logger.info(f"Simulating {window_size_minutes}m tumbling window aggregation")
+            logger.info(
+                f"Simulating {window_size_minutes}m tumbling window aggregation"
+            )
             return
-        
+
         aggregation_sql = f"""
             INSERT INTO features_sink
             SELECT
@@ -198,69 +196,68 @@ class FeatureExtractionJob:
                 dest_ip,
                 transport
         """
-        
+
         self.t_env.execute_sql(aggregation_sql)
         logger.info(f"Started {window_size_minutes}m tumbling window aggregation")
-    
+
     def run(self):
         """Run the feature extraction job."""
         logger.info("Starting SENTINEL Feature Extraction Job")
-        
+
         # Setup environment
         self.setup_environment()
-        
+
         if self.env and self.t_env:
             # Create sources and sinks
             self.create_kafka_source()
             self.create_kafka_sink()
-            
+
             # Run window aggregations
-            self.run_tumbling_window_aggregation(1)   # 1 minute
-            self.run_tumbling_window_aggregation(5)   # 5 minutes
+            self.run_tumbling_window_aggregation(1)  # 1 minute
+            self.run_tumbling_window_aggregation(5)  # 5 minutes
             self.run_tumbling_window_aggregation(15)  # 15 minutes
-            
+
             logger.info("Feature extraction job running")
         else:
             logger.info("Running in development mode (no Flink)")
             self._run_development_mode()
-    
+
     def _run_development_mode(self):
         """Run in development mode without Flink."""
-        import time
-        
+
         logger.info("Development mode: Simulating feature extraction")
-        
+
         # Simulate processing
         sample_records = [
             {
-                'event_id': f'evt_{i}',
-                'event_time': datetime.utcnow().isoformat(),
-                'src_ip': f'192.168.1.{i % 255}',
-                'dest_ip': f'10.0.0.{i % 255}',
-                'src_port': 50000 + i,
-                'dest_port': 443,
-                'transport': 'TCP',
-                'bytes': 1000 + i * 100,
-                'packets': 1,
-                'direction': 'outbound',
-                'tcp_flags': 0x02 if i % 5 == 0 else 0x10
+                "event_id": f"evt_{i}",
+                "event_time": datetime.utcnow().isoformat(),
+                "src_ip": f"192.168.1.{i % 255}",
+                "dest_ip": f"10.0.0.{i % 255}",
+                "src_port": 50000 + i,
+                "dest_port": 443,
+                "transport": "TCP",
+                "bytes": 1000 + i * 100,
+                "packets": 1,
+                "direction": "outbound",
+                "tcp_flags": 0x02 if i % 5 == 0 else 0x10,
             }
             for i in range(100)
         ]
-        
+
         # Compute features
         stats = compute_statistical_features(sample_records)
         behavioral = compute_behavioral_features(sample_records)
-        
+
         features = {
             **stats.to_dict(),
             **behavioral.to_dict(),
-            'window_type': 'development',
-            'timestamp': datetime.utcnow().isoformat()
+            "window_type": "development",
+            "timestamp": datetime.utcnow().isoformat(),
         }
-        
+
         logger.info(f"Computed features: {json.dumps(features, indent=2)}")
-        
+
         return features
 
 
@@ -270,5 +267,5 @@ def main():
     job.run()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

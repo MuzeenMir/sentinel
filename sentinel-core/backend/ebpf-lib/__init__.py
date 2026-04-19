@@ -12,6 +12,7 @@ EBPF_AVAILABLE = False
 try:
     import ctypes
     import ctypes.util
+
     libc = ctypes.CDLL(ctypes.util.find_library("c") or "libc.so.6", use_errno=True)
     # SYS_bpf = 321 on x86_64
     EBPF_AVAILABLE = hasattr(libc, "syscall")

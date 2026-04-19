@@ -50,6 +50,7 @@ class PolicyAction(IntEnum):
 @dataclass(slots=True)
 class NetworkFlowEvent:
     """XDP flow summary exported from the per-flow hash map."""
+
     timestamp: float
     src_ip: str
     dst_ip: str
@@ -67,6 +68,7 @@ class NetworkFlowEvent:
 @dataclass(slots=True)
 class ProcessExecEvent:
     """sched_process_exec tracepoint — new process execution."""
+
     timestamp: float
     pid: int
     ppid: int
@@ -80,6 +82,7 @@ class ProcessExecEvent:
 @dataclass(slots=True)
 class FileAccessEvent:
     """sys_enter_openat tracepoint — sensitive file access."""
+
     timestamp: float
     pid: int
     uid: int
@@ -92,6 +95,7 @@ class FileAccessEvent:
 @dataclass(slots=True)
 class NetworkConnectEvent:
     """tcp_v4_connect kprobe — outbound connection per process."""
+
     timestamp: float
     pid: int
     uid: int
@@ -108,6 +112,7 @@ NetConnectEvent = NetworkConnectEvent
 @dataclass(slots=True)
 class PrivEscalationEvent:
     """sys_enter_setuid tracepoint — privilege escalation attempt."""
+
     timestamp: float
     pid: int
     uid: int
@@ -119,6 +124,7 @@ class PrivEscalationEvent:
 @dataclass(slots=True)
 class ModuleLoadEvent:
     """module_load tracepoint — kernel module insertion."""
+
     timestamp: float
     name: str
     pid: int
@@ -129,6 +135,7 @@ class ModuleLoadEvent:
 @dataclass(slots=True)
 class HIDSEvent:
     """Generic HIDS event for aggregated / synthetic alerts."""
+
     timestamp: float
     event_type: EventType
     severity: str
@@ -191,8 +198,17 @@ def _cstr(raw: bytes) -> str:
 
 def _decode_network_flow(data: bytes) -> NetworkFlowEvent:
     (
-        ts_ns, src_ip, dst_ip, src_port, dst_port, proto,
-        bytes_sent, bytes_recv, packets, duration_ms, flags,
+        ts_ns,
+        src_ip,
+        dst_ip,
+        src_port,
+        dst_port,
+        proto,
+        bytes_sent,
+        bytes_recv,
+        packets,
+        duration_ms,
+        flags,
     ) = struct.unpack_from(_NETWORK_FLOW_FMT, data)
     return NetworkFlowEvent(
         timestamp=ts_ns / 1e9,
@@ -211,11 +227,14 @@ def _decode_network_flow(data: bytes) -> NetworkFlowEvent:
 
 def _decode_process_exec(data: bytes) -> ProcessExecEvent:
     ts_ns, pid, ppid, uid, comm_raw, filename_raw = struct.unpack_from(
-        _PROCESS_EXEC_FMT, data,
+        _PROCESS_EXEC_FMT,
+        data,
     )
     return ProcessExecEvent(
         timestamp=ts_ns / 1e9,
-        pid=pid, ppid=ppid, uid=uid,
+        pid=pid,
+        ppid=ppid,
+        uid=uid,
         comm=_cstr(comm_raw),
         filename=_cstr(filename_raw),
     )
@@ -223,11 +242,13 @@ def _decode_process_exec(data: bytes) -> ProcessExecEvent:
 
 def _decode_file_access(data: bytes) -> FileAccessEvent:
     ts_ns, pid, uid, path_raw, flags, mode_raw = struct.unpack_from(
-        _FILE_ACCESS_FMT, data,
+        _FILE_ACCESS_FMT,
+        data,
     )
     return FileAccessEvent(
         timestamp=ts_ns / 1e9,
-        pid=pid, uid=uid,
+        pid=pid,
+        uid=uid,
         path=_cstr(path_raw),
         flags=flags,
         mode=_cstr(mode_raw),
@@ -236,11 +257,13 @@ def _decode_file_access(data: bytes) -> FileAccessEvent:
 
 def _decode_net_connect(data: bytes) -> NetworkConnectEvent:
     ts_ns, pid, uid, comm_raw, dst_ip, dst_port, proto = struct.unpack_from(
-        _NET_CONNECT_FMT, data,
+        _NET_CONNECT_FMT,
+        data,
     )
     return NetworkConnectEvent(
         timestamp=ts_ns / 1e9,
-        pid=pid, uid=uid,
+        pid=pid,
+        uid=uid,
         comm=_cstr(comm_raw),
         dst_ip=_ip_u32_to_str(dst_ip),
         dst_port=dst_port,
@@ -250,11 +273,13 @@ def _decode_net_connect(data: bytes) -> NetworkConnectEvent:
 
 def _decode_priv_escalation(data: bytes) -> PrivEscalationEvent:
     ts_ns, pid, uid, target_uid, comm_raw = struct.unpack_from(
-        _PRIV_ESCALATION_FMT, data,
+        _PRIV_ESCALATION_FMT,
+        data,
     )
     return PrivEscalationEvent(
         timestamp=ts_ns / 1e9,
-        pid=pid, uid=uid,
+        pid=pid,
+        uid=uid,
         target_uid=target_uid,
         comm=_cstr(comm_raw),
     )
@@ -265,7 +290,8 @@ def _decode_module_load(data: bytes) -> ModuleLoadEvent:
     return ModuleLoadEvent(
         timestamp=ts_ns / 1e9,
         name=_cstr(name_raw),
-        pid=pid, uid=uid,
+        pid=pid,
+        uid=uid,
     )
 
 
@@ -294,10 +320,16 @@ _MIN_SIZES = {
 def decode_event(
     raw_bytes: bytes,
     event_type: EventType,
-) -> Optional[Union[
-    NetworkFlowEvent, ProcessExecEvent, FileAccessEvent,
-    NetworkConnectEvent, PrivEscalationEvent, ModuleLoadEvent,
-]]:
+) -> Optional[
+    Union[
+        NetworkFlowEvent,
+        ProcessExecEvent,
+        FileAccessEvent,
+        NetworkConnectEvent,
+        PrivEscalationEvent,
+        ModuleLoadEvent,
+    ]
+]:
     """Parse a binary eBPF ring-buffer record into the appropriate dataclass.
 
     Returns ``None`` if the buffer is too short or the event type has no
@@ -312,7 +344,9 @@ def decode_event(
     if len(raw_bytes) < min_size:
         logger.warning(
             "Buffer too short for %s: got %d, need %d",
-            event_type.name, len(raw_bytes), min_size,
+            event_type.name,
+            len(raw_bytes),
+            min_size,
         )
         return None
 

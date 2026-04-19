@@ -4,6 +4,7 @@ Statistical feature extraction from raw network traffic data.
 Computes packet-rate, byte-rate, entropy, timing, and distributional
 statistics from raw traffic fields.
 """
+
 import logging
 import math
 from collections import Counter
@@ -46,7 +47,9 @@ class StatisticalFeatureExtractor:
             total_sent = sum(bytes_sent) if bytes_sent else 0
             total_recv = sum(bytes_received) if bytes_received else 0
             features["send_recv_ratio"] = (
-                total_sent / max(total_recv, 1) if (total_sent + total_recv) > 0 else 0.0
+                total_sent / max(total_recv, 1)
+                if (total_sent + total_recv) > 0
+                else 0.0
             )
             features["total_bytes"] = float(total_sent + total_recv)
 
@@ -121,7 +124,5 @@ class StatisticalFeatureExtractor:
         counts = Counter(values)
         total = len(values)
         return -sum(
-            (c / total) * math.log2(c / total)
-            for c in counts.values()
-            if c > 0
+            (c / total) * math.log2(c / total) for c in counts.values() if c > 0
         )

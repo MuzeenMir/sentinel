@@ -8,6 +8,7 @@ Validates:
 - verify_integrity() detects tampered records
 - Fallback to stdout when Redis is unavailable
 """
+
 import json
 import os
 import sys
@@ -31,10 +32,11 @@ from audit_logger import (
 # Fake Redis that stores sorted sets and hashes in-memory
 # ---------------------------------------------------------------------------
 
+
 class FakeRedis:
     def __init__(self):
-        self.sorted_sets = {}   # key -> list of (score, member)
-        self.hashes = {}        # key -> dict
+        self.sorted_sets = {}  # key -> list of (score, member)
+        self.hashes = {}  # key -> dict
         self.expiry = {}
 
     def zadd(self, key, mapping):
@@ -47,7 +49,7 @@ class FakeRedis:
     def zrangebyscore(self, key, min_score, max_score, start=0, num=100):
         entries = self.sorted_sets.get(key, [])
         filtered = [m for s, m in entries if min_score <= s <= max_score]
-        return filtered[start:start + num]
+        return filtered[start : start + num]
 
     def hincrby(self, key, field, amount=1):
         if key not in self.hashes:
@@ -71,10 +73,19 @@ def fake_redis():
 # AuditCategory enum
 # ===================================================================
 
+
 class TestAuditCategory:
     def test_all_categories_exist(self):
-        expected = {"auth", "authorization", "data_access", "config_change",
-                    "system", "compliance", "policy", "alert"}
+        expected = {
+            "auth",
+            "authorization",
+            "data_access",
+            "config_change",
+            "system",
+            "compliance",
+            "policy",
+            "alert",
+        }
         values = {c.value for c in AuditCategory}
         assert values == expected
 
@@ -86,6 +97,7 @@ class TestAuditCategory:
 # ===================================================================
 # audit_log()
 # ===================================================================
+
 
 class TestAuditLog:
     def test_returns_record_id(self, fake_redis):
@@ -181,9 +193,11 @@ class TestAuditLog:
         assert record["actor"] == "system"
 
     def test_fallback_to_stdout_when_no_redis(self):
-        with patch("audit_logger._in_request_context", return_value=False), \
-             patch("audit_logger._get_redis", return_value=None), \
-             patch("audit_logger.logger") as mock_logger:
+        with (
+            patch("audit_logger._in_request_context", return_value=False),
+            patch("audit_logger._get_redis", return_value=None),
+            patch("audit_logger.logger") as mock_logger,
+        ):
             rid = audit_log(AuditCategory.AUTH, "login", actor="user:1")
         assert rid is not None
         # Should have logged a warning and an info fallback
@@ -203,12 +217,12 @@ class TestAuditLog:
 # query_audit_log()
 # ===================================================================
 
+
 class TestQueryAuditLog:
     def _seed(self, fake_redis, n=5, category=AuditCategory.AUTH, actor="user:1"):
         with patch("audit_logger._in_request_context", return_value=False):
             for i in range(n):
-                audit_log(category, f"action_{i}", actor=actor,
-                          redis_client=fake_redis)
+                audit_log(category, f"action_{i}", actor=actor, redis_client=fake_redis)
 
     def test_query_all(self, fake_redis):
         self._seed(fake_redis, 3)
@@ -253,6 +267,7 @@ class TestQueryAuditLog:
 # get_audit_stats()
 # ===================================================================
 
+
 class TestGetAuditStats:
     def test_stats_after_writes(self, fake_redis):
         with patch("audit_logger._in_request_context", return_value=False):
@@ -282,11 +297,13 @@ class TestGetAuditStats:
 # verify_integrity()
 # ===================================================================
 
+
 class TestVerifyIntegrity:
     def test_valid_record(self, fake_redis):
         with patch("audit_logger._in_request_context", return_value=False):
-            audit_log(AuditCategory.AUTH, "test", actor="user:1",
-                      redis_client=fake_redis)
+            audit_log(
+                AuditCategory.AUTH, "test", actor="user:1", redis_client=fake_redis
+            )
 
         raw = fake_redis.sorted_sets["sentinel:audit:auth"][0][1]
         record = json.loads(raw)
@@ -294,8 +311,9 @@ class TestVerifyIntegrity:
 
     def test_tampered_record(self, fake_redis):
         with patch("audit_logger._in_request_context", return_value=False):
-            audit_log(AuditCategory.AUTH, "test", actor="user:1",
-                      redis_client=fake_redis)
+            audit_log(
+                AuditCategory.AUTH, "test", actor="user:1", redis_client=fake_redis
+            )
 
         raw = fake_redis.sorted_sets["sentinel:audit:auth"][0][1]
         record = json.loads(raw)
@@ -320,6 +338,7 @@ class TestVerifyIntegrity:
 # ===================================================================
 # _compute_integrity_hash()
 # ===================================================================
+
 
 class TestIntegrityHash:
     def test_deterministic(self):

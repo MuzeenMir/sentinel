@@ -23,6 +23,7 @@ Usage:
       --device cuda \\
       --output-path backend/ai-engine/trained_models
 """
+
 from __future__ import annotations
 
 import argparse
@@ -33,7 +34,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
 import numpy as np
 
@@ -49,7 +50,6 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from training.data_loader import (
     LABEL_TO_IDX,
     N_FEATURES,
-    THREAT_CATEGORIES,
     load_dataset,
     load_multiple_datasets,
 )
@@ -67,6 +67,7 @@ ALL_MODELS = [
 ]
 
 # ── Checkpoint helpers ───────────────────────────────────────────────────────
+
 
 def _ckpt_path(output_dir: str) -> str:
     return os.path.join(output_dir, ".training_checkpoint.json")
@@ -89,9 +90,8 @@ def _save_checkpoint(output_dir: str, state: Dict[str, Any]) -> None:
 
 # ── Model trainers ───────────────────────────────────────────────────────────
 
-def train_xgboost(
-    data: Dict, output_dir: str, device: str
-) -> Dict[str, float]:
+
+def train_xgboost(data: Dict, output_dir: str, device: str) -> Dict[str, float]:
     """Train XGBoost classifier."""
     from models.supervised.xgboost_detector import XGBoostDetector
     from models.base import ThreatCategory
@@ -126,15 +126,22 @@ def train_xgboost(
 
     # Evaluate on test set
     from sklearn.metrics import classification_report
+
     y_pred = detector.model.predict(data["X_test"])
     report = classification_report(
-        data["y_test"], y_pred, output_dict=True, zero_division=0,
+        data["y_test"],
+        y_pred,
+        output_dict=True,
+        zero_division=0,
     )
     metrics["test_accuracy"] = report["accuracy"]
     metrics["test_f1_weighted"] = report["weighted avg"]["f1-score"]
 
-    logger.info("XGBoost test accuracy: %.4f  F1: %.4f",
-                metrics["test_accuracy"], metrics["test_f1_weighted"])
+    logger.info(
+        "XGBoost test accuracy: %.4f  F1: %.4f",
+        metrics["test_accuracy"],
+        metrics["test_f1_weighted"],
+    )
     return metrics
 
 
@@ -176,18 +183,25 @@ def train_isolation_forest(
     true_threats = data["y_test"] != benign_idx
 
     from sklearn.metrics import precision_score, recall_score, f1_score
-    metrics["test_precision"] = float(precision_score(true_threats, pred_threats, zero_division=0))
-    metrics["test_recall"] = float(recall_score(true_threats, pred_threats, zero_division=0))
+
+    metrics["test_precision"] = float(
+        precision_score(true_threats, pred_threats, zero_division=0)
+    )
+    metrics["test_recall"] = float(
+        recall_score(true_threats, pred_threats, zero_division=0)
+    )
     metrics["test_f1"] = float(f1_score(true_threats, pred_threats, zero_division=0))
 
-    logger.info("Isolation Forest test P/R/F1: %.4f / %.4f / %.4f",
-                metrics["test_precision"], metrics["test_recall"], metrics["test_f1"])
+    logger.info(
+        "Isolation Forest test P/R/F1: %.4f / %.4f / %.4f",
+        metrics["test_precision"],
+        metrics["test_recall"],
+        metrics["test_f1"],
+    )
     return metrics
 
 
-def train_autoencoder(
-    data: Dict, output_dir: str, device: str
-) -> Dict[str, float]:
+def train_autoencoder(data: Dict, output_dir: str, device: str) -> Dict[str, float]:
     """Train Autoencoder on benign traffic."""
     import torch
     from models.unsupervised.autoencoder import AutoencoderDetector
@@ -247,18 +261,25 @@ def train_autoencoder(
     true_threats = data["y_test"] != benign_idx
 
     from sklearn.metrics import precision_score, recall_score, f1_score
-    metrics["test_precision"] = float(precision_score(true_threats, pred_threats, zero_division=0))
-    metrics["test_recall"] = float(recall_score(true_threats, pred_threats, zero_division=0))
+
+    metrics["test_precision"] = float(
+        precision_score(true_threats, pred_threats, zero_division=0)
+    )
+    metrics["test_recall"] = float(
+        recall_score(true_threats, pred_threats, zero_division=0)
+    )
     metrics["test_f1"] = float(f1_score(true_threats, pred_threats, zero_division=0))
 
-    logger.info("Autoencoder test P/R/F1: %.4f / %.4f / %.4f",
-                metrics["test_precision"], metrics["test_recall"], metrics["test_f1"])
+    logger.info(
+        "Autoencoder test P/R/F1: %.4f / %.4f / %.4f",
+        metrics["test_precision"],
+        metrics["test_recall"],
+        metrics["test_f1"],
+    )
     return metrics
 
 
-def train_lstm(
-    data: Dict, output_dir: str, device: str
-) -> Dict[str, float]:
+def train_lstm(data: Dict, output_dir: str, device: str) -> Dict[str, float]:
     """Train LSTM sequence detector."""
     import torch
     from models.supervised.lstm_sequence import LSTMSequenceDetector
@@ -318,6 +339,7 @@ def train_lstm(
 
     # Evaluate on validation sequences
     from sklearn.metrics import accuracy_score, f1_score
+
     val_preds = []
     detector.model.eval()
     with torch.no_grad():
@@ -328,16 +350,16 @@ def train_lstm(
     metrics["test_accuracy"] = float(accuracy_score(y_val_seq, val_preds))
     metrics["test_f1"] = float(f1_score(y_val_seq, val_preds, zero_division=0))
 
-    logger.info("LSTM test accuracy: %.4f  F1: %.4f",
-                metrics["test_accuracy"], metrics["test_f1"])
+    logger.info(
+        "LSTM test accuracy: %.4f  F1: %.4f",
+        metrics["test_accuracy"],
+        metrics["test_f1"],
+    )
     return metrics
 
 
-def train_ensemble(
-    data: Dict, output_dir: str, device: str
-) -> Dict[str, float]:
+def train_ensemble(data: Dict, output_dir: str, device: str) -> Dict[str, float]:
     """Train stacking ensemble meta-learner over base detector outputs."""
-    from models.base import ThreatCategory
     from models.supervised.xgboost_detector import XGBoostDetector
     from models.unsupervised.isolation_forest import IsolationForestDetector
     from models.unsupervised.autoencoder import AutoencoderDetector
@@ -368,8 +390,10 @@ def train_ensemble(
 
     ensemble = StackingEnsemble(base_detectors=detectors, use_meta_learner=True)
 
-    logger.info("Generating meta-features from %d base detectors on training data...",
-                len(detectors))
+    logger.info(
+        "Generating meta-features from %d base detectors on training data...",
+        len(detectors),
+    )
     X_train = data["X_train"]
     y_train = data["y_train"]
 
@@ -416,8 +440,13 @@ def train_ensemble(
                     X_meta[start + i, 2 * idx] = 1.0 if is_threat else 0.0
                     X_meta[start + i, 2 * idx + 1] = conf
             except Exception as exc:
-                logger.warning("  predict_batch failed for %s at [%d:%d]: %s",
-                               name, start, end, exc)
+                logger.warning(
+                    "  predict_batch failed for %s at [%d:%d]: %s",
+                    name,
+                    start,
+                    end,
+                    exc,
+                )
             if end % 50000 == 0 or end == n_samples:
                 logger.info("    %s: %d / %d", name, end, n_samples)
 
@@ -431,9 +460,7 @@ def train_ensemble(
     return metrics
 
 
-def train_drl(
-    data: Dict, output_dir: str, device: str
-) -> Dict[str, float]:
+def train_drl(data: Dict, output_dir: str, device: str) -> Dict[str, float]:
     """Train DRL PPO agent for firewall policy decisions."""
     logger.info("Training DRL PPO agent (device=%s)...", device)
     model_dir = os.path.join(output_dir, "drl")
@@ -453,6 +480,7 @@ def train_drl(
 
     class FirewallEnv(gym.Env):
         """Lightweight Gym environment for PPO training on threat contexts."""
+
         metadata = {"render_modes": []}
 
         def __init__(self, X: np.ndarray, y: np.ndarray):
@@ -460,7 +488,10 @@ def train_drl(
             self.X = X
             self.y = y
             self.observation_space = gym.spaces.Box(
-                low=-10.0, high=10.0, shape=(state_dim,), dtype=np.float32,
+                low=-10.0,
+                high=10.0,
+                shape=(state_dim,),
+                dtype=np.float32,
             )
             self.action_space = gym.spaces.Discrete(n_actions)
             self._idx = 0
@@ -473,20 +504,29 @@ def train_drl(
             # IMPORTANT: the ground-truth label must NOT appear in the state;
             # the agent should learn to infer threat level from indirect signals.
             threat_score = float(np.clip(np.mean(np.abs(row[:5])), 0, 1))
-            return np.array([
-                threat_score,
-                float(np.clip(row[0], -1, 1)),     # src_reputation proxy
-                0.5,                                # asset_criticality
-                float(np.clip(np.std(row[:10]), 0, 5) / 5),  # traffic_volume proxy
-                float(np.clip(row[2], 0, 1)),       # protocol_risk proxy
-                float(np.clip(row[10] if len(row) > 10 else 0.3, 0, 1)),  # time_risk proxy
-                float(np.clip(row[3], 0, 1)),       # historical_alerts proxy
-                float(np.clip(row[7] if len(row) > 7 else 0.0, 0, 1)),  # is_internal proxy
-                float(np.clip(row[4], 0, 1)),       # port_sensitivity proxy
-                float(np.clip(row[5], 0, 1)),       # connection_freq proxy
-                float(np.clip(np.mean(row[6:10]), 0, 1)),  # payload_anomaly proxy
-                float(np.clip(row[11] if len(row) > 11 else 0.2, 0, 1)),  # geo_risk proxy
-            ], dtype=np.float32)
+            return np.array(
+                [
+                    threat_score,
+                    float(np.clip(row[0], -1, 1)),  # src_reputation proxy
+                    0.5,  # asset_criticality
+                    float(np.clip(np.std(row[:10]), 0, 5) / 5),  # traffic_volume proxy
+                    float(np.clip(row[2], 0, 1)),  # protocol_risk proxy
+                    float(
+                        np.clip(row[10] if len(row) > 10 else 0.3, 0, 1)
+                    ),  # time_risk proxy
+                    float(np.clip(row[3], 0, 1)),  # historical_alerts proxy
+                    float(
+                        np.clip(row[7] if len(row) > 7 else 0.0, 0, 1)
+                    ),  # is_internal proxy
+                    float(np.clip(row[4], 0, 1)),  # port_sensitivity proxy
+                    float(np.clip(row[5], 0, 1)),  # connection_freq proxy
+                    float(np.clip(np.mean(row[6:10]), 0, 1)),  # payload_anomaly proxy
+                    float(
+                        np.clip(row[11] if len(row) > 11 else 0.2, 0, 1)
+                    ),  # geo_risk proxy
+                ],
+                dtype=np.float32,
+            )
 
         def reset(self, *, seed=None, options=None):
             super().reset(seed=seed)
@@ -501,22 +541,22 @@ def train_drl(
 
             # Graduated reward: scale missed-threat penalty by asset criticality
             if is_threat:
-                if action in (1, 5, 6):        # DENY / QUARANTINE
+                if action in (1, 5, 6):  # DENY / QUARANTINE
                     reward = 1.0
-                elif action in (2, 3, 4):      # RATE_LIMIT
+                elif action in (2, 3, 4):  # RATE_LIMIT
                     reward = 0.4
-                elif action == 7:              # MONITOR
+                elif action == 7:  # MONITOR
                     reward = -0.5
-                else:                          # ALLOW
+                else:  # ALLOW
                     reward = -1.0 - asset_crit  # -1.0 to -2.0
             else:
-                if action == 0:                # ALLOW (correct)
+                if action == 0:  # ALLOW (correct)
                     reward = 0.3
-                elif action == 7:              # MONITOR (acceptable)
+                elif action == 7:  # MONITOR (acceptable)
                     reward = 0.1
-                elif action in (2, 3, 4):      # RATE_LIMIT (minor overreaction)
+                elif action in (2, 3, 4):  # RATE_LIMIT (minor overreaction)
                     reward = -0.2
-                else:                          # DENY / QUARANTINE (false positive)
+                else:  # DENY / QUARANTINE (false positive)
                     reward = -1.0
 
             self._step_count += 1
@@ -529,7 +569,9 @@ def train_drl(
 
     # Use the DRL engine's custom PPOAgent so the saved format
     # (policy_net.pt, value_net.pt, meta.json) matches runtime expectations.
-    drl_engine_dir = os.path.join(os.path.dirname(__file__), "..", "backend", "drl-engine")
+    drl_engine_dir = os.path.join(
+        os.path.dirname(__file__), "..", "backend", "drl-engine"
+    )
     sys.path.insert(0, os.path.abspath(drl_engine_dir))
     from agent.ppo_agent import PPOAgent
 
@@ -550,7 +592,9 @@ def train_drl(
     n_update_epochs = 5
     total_timesteps = 0
 
-    logger.info("Training custom PPO for %d episodes (batch=%d)...", n_episodes, batch_size)
+    logger.info(
+        "Training custom PPO for %d episodes (batch=%d)...", n_episodes, batch_size
+    )
 
     for episode in range(n_episodes):
         states, actions, rewards, log_probs, values = [], [], [], [], []
@@ -579,7 +623,11 @@ def train_drl(
         gamma, lam = 0.99, 0.95
         next_value = agent.get_value(obs)
         for t in reversed(range(len(rewards))):
-            delta = rewards[t] + gamma * (next_value if t == len(rewards) - 1 else values[t + 1]) - values[t]
+            delta = (
+                rewards[t]
+                + gamma * (next_value if t == len(rewards) - 1 else values[t + 1])
+                - values[t]
+            )
             gae = delta + gamma * lam * gae
             returns.insert(0, gae + values[t])
             next_value = values[t]
@@ -598,7 +646,12 @@ def train_drl(
         )
 
         if (episode + 1) % 50 == 0:
-            logger.info("  Episode %d/%d  total_steps=%d", episode + 1, n_episodes, total_timesteps)
+            logger.info(
+                "  Episode %d/%d  total_steps=%d",
+                episode + 1,
+                n_episodes,
+                total_timesteps,
+            )
 
     agent.save_model(model_dir)
 
@@ -622,20 +675,23 @@ def train_drl(
         "eval_mean_reward": float(total_reward / n_eval),
         "eval_correct_rate": float(correct_actions / n_eval),
     }
-    logger.info("DRL eval: mean_reward=%.4f  correct_rate=%.4f",
-                metrics["eval_mean_reward"], metrics["eval_correct_rate"])
+    logger.info(
+        "DRL eval: mean_reward=%.4f  correct_rate=%.4f",
+        metrics["eval_mean_reward"],
+        metrics["eval_correct_rate"],
+    )
     return metrics
 
 
 # ── Training dispatcher ──────────────────────────────────────────────────────
 
 TRAINERS = {
-    "xgboost":          train_xgboost,
-    "isolation_forest":  train_isolation_forest,
-    "autoencoder":       train_autoencoder,
-    "lstm":              train_lstm,
-    "ensemble":          train_ensemble,
-    "drl":               train_drl,
+    "xgboost": train_xgboost,
+    "isolation_forest": train_isolation_forest,
+    "autoencoder": train_autoencoder,
+    "lstm": train_lstm,
+    "ensemble": train_ensemble,
+    "drl": train_drl,
 }
 
 
@@ -666,17 +722,23 @@ def run_training(args: argparse.Namespace) -> None:
     datasets_to_load = [d.strip() for d in args.dataset.split(",")]
     if len(datasets_to_load) == 1:
         data = load_dataset(
-            data_dir, datasets_to_load[0],
+            data_dir,
+            datasets_to_load[0],
             max_rows=args.max_rows,
         )
     else:
         data = load_multiple_datasets(
-            data_dir, datasets_to_load,
+            data_dir,
+            datasets_to_load,
             max_rows_per_dataset=args.max_rows,
         )
 
-    logger.info("Data loaded: train=%d  test=%d  features=%d",
-                len(data["X_train"]), len(data["X_test"]), data["X_train"].shape[1])
+    logger.info(
+        "Data loaded: train=%d  test=%d  features=%d",
+        len(data["X_train"]),
+        len(data["X_test"]),
+        data["X_train"].shape[1],
+    )
 
     # Determine which models to train
     models = args.models if args.models else ALL_MODELS
@@ -690,7 +752,9 @@ def run_training(args: argparse.Namespace) -> None:
             break
 
         if model_name in completed_models and not args.force:
-            logger.info("Skipping %s (already completed, use --force to retrain)", model_name)
+            logger.info(
+                "Skipping %s (already completed, use --force to retrain)", model_name
+            )
             continue
 
         trainer_fn = TRAINERS.get(model_name)
@@ -725,6 +789,7 @@ def run_training(args: argparse.Namespace) -> None:
         # next.  Safe no-op when CUDA is unavailable.
         try:
             import torch as _torch
+
             if _torch.cuda.is_available():
                 _torch.cuda.empty_cache()
                 _torch.cuda.synchronize()
@@ -745,6 +810,7 @@ def run_training(args: argparse.Namespace) -> None:
     # in-memory registrations unpersisted.
     try:
         from model_registry import ModelRegistry
+
         registry = ModelRegistry(
             local_path=os.path.join(output_dir, "registry.json"),
         )
@@ -779,18 +845,24 @@ def run_training(args: argparse.Namespace) -> None:
     logger.info("=" * 60)
     logger.info("TRAINING COMPLETE")
     logger.info("=" * 60)
-    logger.info("Total time:     %.1f seconds (%.1f minutes)", total_time, total_time / 60)
+    logger.info(
+        "Total time:     %.1f seconds (%.1f minutes)", total_time, total_time / 60
+    )
     logger.info("Models trained: %s", list(completed_models))
     logger.info("Output dir:     %s", output_dir)
     logger.info("Report:         %s", report_path)
     logger.info("")
     for name, m in all_metrics.items():
         if isinstance(m, dict) and "error" not in m:
-            logger.info("  %s: %s", name, {k: f"{v:.4f}" if isinstance(v, float) else v
-                                            for k, v in m.items()})
+            logger.info(
+                "  %s: %s",
+                name,
+                {k: f"{v:.4f}" if isinstance(v, float) else v for k, v in m.items()},
+            )
 
 
 # ── CLI ──────────────────────────────────────────────────────────────────────
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -798,23 +870,32 @@ def parse_args() -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
-        "--data-path", required=True,
+        "--data-path",
+        required=True,
         help="Path to directory containing dataset subdirectories",
     )
     parser.add_argument(
-        "--dataset", default="cicids2018",
+        "--dataset",
+        default="cicids2018",
         help="Dataset name (cicids2018, cicids2017, unsw_nb15) or comma-separated list",
     )
     parser.add_argument(
-        "--models", nargs="*", choices=ALL_MODELS, default=None,
+        "--models",
+        nargs="*",
+        choices=ALL_MODELS,
+        default=None,
         help="Specific models to train (default: all)",
     )
     parser.add_argument(
-        "--max-rows", type=int, default=None,
+        "--max-rows",
+        type=int,
+        default=None,
         help="Limit rows per dataset (for CI / quick runs)",
     )
     parser.add_argument(
-        "--device", choices=["cpu", "cuda"], default="cpu",
+        "--device",
+        choices=["cpu", "cuda"],
+        default="cpu",
         help="Device for PyTorch models (default: cpu)",
     )
     parser.add_argument(
@@ -823,7 +904,8 @@ def parse_args() -> argparse.Namespace:
         help="Directory to save trained models",
     )
     parser.add_argument(
-        "--force", action="store_true",
+        "--force",
+        action="store_true",
         help="Retrain models even if checkpoint shows them as completed",
     )
     return parser.parse_args()

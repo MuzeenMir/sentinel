@@ -5,6 +5,7 @@ Produces features that represent the *context* around a traffic event rather
 than the packet content itself: time-of-day risk, geo-risk, IP/domain
 reputation, protocol risk, and user-agent heuristics.
 """
+
 import logging
 import math
 from datetime import datetime
@@ -13,8 +14,23 @@ from typing import Any, Dict, Optional, Set
 logger = logging.getLogger(__name__)
 
 RISKY_PORTS: Set[int] = {
-    22, 23, 25, 135, 139, 445, 1433, 1521, 3306, 3389,
-    4444, 5432, 5900, 6379, 8080, 8443, 9200,
+    22,
+    23,
+    25,
+    135,
+    139,
+    445,
+    1433,
+    1521,
+    3306,
+    3389,
+    4444,
+    5432,
+    5900,
+    6379,
+    8080,
+    8443,
+    9200,
 }
 
 HIGH_RISK_PROTOCOLS: Set[str] = {"telnet", "ftp", "tftp", "snmp", "rsh", "rlogin"}
@@ -23,8 +39,16 @@ MODERATE_RISK_PROTOCOLS: Set[str] = {"http", "smtp", "pop3", "imap"}
 HIGH_RISK_COUNTRIES: Set[str] = {"CN", "RU", "KP", "IR"}
 
 SUSPICIOUS_UA_TOKENS = (
-    "curl", "wget", "python-requests", "nikto", "sqlmap",
-    "nmap", "masscan", "zgrab", "gobuster", "dirbuster",
+    "curl",
+    "wget",
+    "python-requests",
+    "nikto",
+    "sqlmap",
+    "nmap",
+    "masscan",
+    "zgrab",
+    "gobuster",
+    "dirbuster",
 )
 
 
@@ -132,9 +156,9 @@ class ContextualFeatureExtractor:
         src_country = raw_data.get("src_country", "")
         dst_country = raw_data.get("dst_country", "")
 
-        cross_border = 1.0 if (
-            src_country and dst_country and src_country != dst_country
-        ) else 0.0
+        cross_border = (
+            1.0 if (src_country and dst_country and src_country != dst_country) else 0.0
+        )
 
         src_risk = 1.0 if src_country in HIGH_RISK_COUNTRIES else 0.0
         dst_risk = 1.0 if dst_country in HIGH_RISK_COUNTRIES else 0.0

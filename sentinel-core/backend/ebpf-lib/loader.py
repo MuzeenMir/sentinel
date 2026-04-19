@@ -41,6 +41,7 @@ _SIGNATURE_DIR = os.environ.get(
 @dataclass(slots=True)
 class ProgramInfo:
     """Metadata for a loaded eBPF program."""
+
     name: str
     prog_type: str
     attach_target: str
@@ -109,7 +110,10 @@ class ProgramLoader:
     def _verify_signature(self, obj_path: Path, digest: str) -> None:
         sig_path = Path(_SIGNATURE_DIR) / f"{obj_path.stem}.sig"
         if not sig_path.is_file():
-            logger.debug("No signature file for %s (signature enforcement disabled)", obj_path.name)
+            logger.debug(
+                "No signature file for %s (signature enforcement disabled)",
+                obj_path.name,
+            )
             return
         expected = sig_path.read_text().strip().split()[0]
         if expected != digest:
@@ -175,7 +179,9 @@ class ProgramLoader:
             from bcc import BPF  # type: ignore[import-untyped]
 
             bpf = BPF(src_file=str(obj_path))
-            fn = bpf.load_func(obj_path.stem, BPF.XDP if prog_type == "xdp" else BPF.KPROBE)
+            fn = bpf.load_func(
+                obj_path.stem, BPF.XDP if prog_type == "xdp" else BPF.KPROBE
+            )
             if prog_type == "xdp" and attach_target:
                 bpf.attach_xdp(attach_target, fn)
             fd = fn.fd if hasattr(fn, "fd") else -1
@@ -236,7 +242,9 @@ class RingBufferReader:
         """Register a ring-buffer map for consumption."""
         with self._lock:
             self._registrations[name] = _Registration(
-                name=name, map_fd=map_fd, callback=callback,
+                name=name,
+                map_fd=map_fd,
+                callback=callback,
             )
         logger.info("Registered ring buffer '%s' (fd=%d)", name, map_fd)
 
@@ -299,6 +307,7 @@ class RingBufferReader:
         """Attempt poll via bcc / libbpf bindings."""
         try:
             from bcc import BPF  # type: ignore[import-untyped]
+
             return BPF.ring_buffer_poll(reg.map_fd, timeout_ms) or 0
         except (ImportError, AttributeError):
             return 0
@@ -344,12 +353,13 @@ class MapReader:
     def _bpf_map_lookup(self, key: bytes) -> Optional[bytes]:
         try:
             import ctypes
+
             key_buf = ctypes.create_string_buffer(key)
             val_buf = ctypes.create_string_buffer(256)
             libc = ctypes.CDLL("libc.so.6", use_errno=True)
-            ret = libc.syscall(321, 1, self._fd,
-                               ctypes.byref(key_buf),
-                               ctypes.byref(val_buf), 0)
+            ret = libc.syscall(
+                321, 1, self._fd, ctypes.byref(key_buf), ctypes.byref(val_buf), 0
+            )
             if ret == 0:
                 return val_buf.raw
         except Exception as exc:
@@ -359,12 +369,13 @@ class MapReader:
     def _bpf_map_update(self, key: bytes, value: bytes) -> bool:
         try:
             import ctypes
+
             key_buf = ctypes.create_string_buffer(key)
             val_buf = ctypes.create_string_buffer(value)
             libc = ctypes.CDLL("libc.so.6", use_errno=True)
-            ret = libc.syscall(321, 2, self._fd,
-                               ctypes.byref(key_buf),
-                               ctypes.byref(val_buf), 0)
+            ret = libc.syscall(
+                321, 2, self._fd, ctypes.byref(key_buf), ctypes.byref(val_buf), 0
+            )
             return ret == 0
         except Exception as exc:
             logger.debug("bpf_map_update failed: %s", exc)
@@ -373,10 +384,10 @@ class MapReader:
     def _bpf_map_delete(self, key: bytes) -> bool:
         try:
             import ctypes
+
             key_buf = ctypes.create_string_buffer(key)
             libc = ctypes.CDLL("libc.so.6", use_errno=True)
-            ret = libc.syscall(321, 3, self._fd,
-                               ctypes.byref(key_buf), 0, 0)
+            ret = libc.syscall(321, 3, self._fd, ctypes.byref(key_buf), 0, 0)
             return ret == 0
         except Exception as exc:
             logger.debug("bpf_map_delete failed: %s", exc)
@@ -386,17 +397,17 @@ class MapReader:
         result: List[bytes] = []
         try:
             import ctypes
+
             libc = ctypes.CDLL("libc.so.6", use_errno=True)
             key_buf = ctypes.create_string_buffer(256)
             next_buf = ctypes.create_string_buffer(256)
-            ret = libc.syscall(321, 4, self._fd, 0,
-                               ctypes.byref(next_buf), 0)
+            ret = libc.syscall(321, 4, self._fd, 0, ctypes.byref(next_buf), 0)
             while ret == 0:
                 result.append(bytes(next_buf.raw))
                 ctypes.memmove(key_buf, next_buf, 256)
-                ret = libc.syscall(321, 4, self._fd,
-                                   ctypes.byref(key_buf),
-                                   ctypes.byref(next_buf), 0)
+                ret = libc.syscall(
+                    321, 4, self._fd, ctypes.byref(key_buf), ctypes.byref(next_buf), 0
+                )
         except Exception as exc:
             logger.debug("bpf_map_get_next_key failed: %s", exc)
         return result

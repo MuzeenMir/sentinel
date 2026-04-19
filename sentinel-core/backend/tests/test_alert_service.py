@@ -9,9 +9,7 @@ All Redis and auth-service calls are mocked — nothing hits the network.
 import json
 import os
 import sys
-import time
-from datetime import datetime
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -83,8 +81,10 @@ def _noop_auth(fn):
 
 def _noop_role(*_roles):
     """Pass-through replacement for require_role."""
+
     def decorator(fn):
         return fn
+
     return decorator
 
 
@@ -95,18 +95,26 @@ _fake_pool = MagicMock()
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "alert-service"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-with patch.dict("sys.modules", {
-    "redis": MagicMock(
-        ConnectionPool=MagicMock(from_url=MagicMock(return_value=_fake_pool)),
-        Redis=MagicMock(return_value=_fake_redis_instance),
+with (
+    patch.dict(
+        "sys.modules",
+        {
+            "redis": MagicMock(
+                ConnectionPool=MagicMock(from_url=MagicMock(return_value=_fake_pool)),
+                Redis=MagicMock(return_value=_fake_redis_instance),
+            ),
+        },
     ),
-}), patch.dict("sys.modules", {
-    "auth_middleware": MagicMock(
-        require_auth=_noop_auth,
-        require_role=_noop_role,
+    patch.dict(
+        "sys.modules",
+        {
+            "auth_middleware": MagicMock(
+                require_auth=_noop_auth,
+                require_role=_noop_role,
+            ),
+        },
     ),
-}):
-    import importlib
+):
     # Force a fresh import so module-level code uses our fakes
     if "app" in sys.modules:
         del sys.modules["app"]
@@ -119,6 +127,7 @@ alert_app.redis_client = _fake_redis_instance
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(autouse=True)
 def _reset_state():
@@ -158,6 +167,7 @@ def _post_alert(client, data=None, **kwargs):
 # Health check
 # ===================================================================
 
+
 class TestHealthCheck:
     def test_returns_200(self, client):
         resp = client.get("/health")
@@ -170,6 +180,7 @@ class TestHealthCheck:
 # ===================================================================
 # Create alert
 # ===================================================================
+
 
 class TestCreateAlert:
     def test_success(self, client):
@@ -214,10 +225,13 @@ class TestCreateAlert:
         assert resp.status_code == 400
 
     def test_default_severity_is_medium(self, client):
-        resp = _post_alert(client, data={
-            "type": "network_anomaly",
-            "description": "No severity specified",
-        })
+        resp = _post_alert(
+            client,
+            data={
+                "type": "network_anomaly",
+                "description": "No severity specified",
+            },
+        )
         alert_id = resp.get_json()["alert_id"]
         stored = _fake_redis_store[f"alert:{alert_id}"]
         assert stored["severity"] == "medium"
@@ -239,16 +253,20 @@ class TestCreateAlert:
 # Get alerts (with filters and pagination)
 # ===================================================================
 
+
 class TestGetAlerts:
     def _seed_alerts(self, client, n=5):
         ids = []
         for i in range(n):
             severity = "critical" if i % 2 == 0 else "low"
-            resp = _post_alert(client, data={
-                "type": "network_anomaly",
-                "description": f"alert {i}",
-                "severity": severity,
-            })
+            resp = _post_alert(
+                client,
+                data={
+                    "type": "network_anomaly",
+                    "description": f"alert {i}",
+                    "severity": severity,
+                },
+            )
             ids.append(resp.get_json()["alert_id"])
         return ids
 
@@ -283,7 +301,7 @@ class TestGetAlerts:
         assert body["offset"] == 0
 
     def test_pagination_offset(self, client):
-        ids = self._seed_alerts(client, 5)
+        self._seed_alerts(client, 5)
         all_resp = client.get("/api/v1/alerts?limit=100")
         full_count = all_resp.get_json()["total"]
 
@@ -303,6 +321,7 @@ class TestGetAlerts:
 # Get single alert
 # ===================================================================
 
+
 class TestGetSingleAlert:
     def test_found(self, client):
         create_resp = _post_alert(client)
@@ -319,11 +338,14 @@ class TestGetSingleAlert:
         assert "not found" in resp.get_json()["error"].lower()
 
     def test_details_deserialized(self, client):
-        create_resp = _post_alert(client, data={
-            "type": "malware_detected",
-            "description": "test",
-            "details": {"file": "/tmp/bad.exe"},
-        })
+        create_resp = _post_alert(
+            client,
+            data={
+                "type": "malware_detected",
+                "description": "test",
+                "details": {"file": "/tmp/bad.exe"},
+            },
+        )
         alert_id = create_resp.get_json()["alert_id"]
         resp = client.get(f"/api/v1/alerts/{alert_id}")
         assert resp.get_json()["details"] == {"file": "/tmp/bad.exe"}
@@ -332,6 +354,7 @@ class TestGetSingleAlert:
 # ===================================================================
 # Update alert status
 # ===================================================================
+
 
 class TestUpdateAlertStatus:
     def test_update_success(self, client):
@@ -409,6 +432,7 @@ class TestUpdateAlertStatus:
 # Acknowledge / Resolve shortcuts
 # ===================================================================
 
+
 class TestAcknowledgeResolve:
     def test_acknowledge_success(self, client):
         aid = _post_alert(client).get_json()["alert_id"]
@@ -442,6 +466,7 @@ class TestAcknowledgeResolve:
 # Alert statistics
 # ===================================================================
 
+
 class TestAlertStatistics:
     def test_empty_stats(self, client):
         resp = client.get("/api/v1/alerts/statistics")
@@ -452,12 +477,22 @@ class TestAlertStatistics:
         assert "by_status" in body
 
     def test_stats_reflect_created_alerts(self, client):
-        _post_alert(client, data={
-            "type": "brute_force", "description": "a", "severity": "high",
-        })
-        _post_alert(client, data={
-            "type": "brute_force", "description": "b", "severity": "critical",
-        })
+        _post_alert(
+            client,
+            data={
+                "type": "brute_force",
+                "description": "a",
+                "severity": "high",
+            },
+        )
+        _post_alert(
+            client,
+            data={
+                "type": "brute_force",
+                "description": "b",
+                "severity": "critical",
+            },
+        )
         resp = client.get("/api/v1/alerts/statistics")
         body = resp.get_json()
         assert body["total_alerts"] == 2
@@ -469,6 +504,7 @@ class TestAlertStatistics:
 # ===================================================================
 # Alert types endpoint
 # ===================================================================
+
 
 class TestAlertTypes:
     def test_returns_enums(self, client):
@@ -491,6 +527,7 @@ class TestAlertTypes:
 # SSE publish on alert creation (Redis pub/sub)
 # ===================================================================
 
+
 class TestSSEPublish:
     def test_publish_called_on_create(self, client):
         _post_alert(client)
@@ -503,12 +540,15 @@ class TestSSEPublish:
         assert payload["alert"]["severity"] == "high"
 
     def test_publish_contains_alert_fields(self, client):
-        _post_alert(client, data={
-            "type": "malware_detected",
-            "description": "trojan found",
-            "severity": "critical",
-            "source": "hids-agent",
-        })
+        _post_alert(
+            client,
+            data={
+                "type": "malware_detected",
+                "description": "trojan found",
+                "severity": "critical",
+                "source": "hids-agent",
+            },
+        )
         _, raw = _fake_redis_publish_log[0]
         alert_payload = json.loads(raw)["alert"]
         assert alert_payload["type"] == "malware_detected"
@@ -535,37 +575,53 @@ class TestSSEPublish:
 # Email and Slack notification triggering
 # ===================================================================
 
+
 class TestNotificationTriggering:
     def test_email_triggered_for_high_severity(self):
         engine = alert_app.alert_engine
-        with alert_app.app.app_context(), patch.object(alert_app.notification_executor, "submit") as mock_submit:
-            engine.create_alert({
-                "type": "brute_force",
-                "description": "test",
-                "severity": "high",
-            })
+        with (
+            alert_app.app.app_context(),
+            patch.object(alert_app.notification_executor, "submit") as mock_submit,
+        ):
+            engine.create_alert(
+                {
+                    "type": "brute_force",
+                    "description": "test",
+                    "severity": "high",
+                }
+            )
             submitted_fns = [c.args[0].__name__ for c in mock_submit.call_args_list]
             assert "_send_email_async" in submitted_fns
 
     def test_email_triggered_for_critical_severity(self):
         engine = alert_app.alert_engine
-        with alert_app.app.app_context(), patch.object(alert_app.notification_executor, "submit") as mock_submit:
-            engine.create_alert({
-                "type": "malware_detected",
-                "description": "test",
-                "severity": "critical",
-            })
+        with (
+            alert_app.app.app_context(),
+            patch.object(alert_app.notification_executor, "submit") as mock_submit,
+        ):
+            engine.create_alert(
+                {
+                    "type": "malware_detected",
+                    "description": "test",
+                    "severity": "critical",
+                }
+            )
             submitted_fns = [c.args[0].__name__ for c in mock_submit.call_args_list]
             assert "_send_email_async" in submitted_fns
 
     def test_email_not_triggered_for_low_severity(self):
         engine = alert_app.alert_engine
-        with alert_app.app.app_context(), patch.object(alert_app.notification_executor, "submit") as mock_submit:
-            engine.create_alert({
-                "type": "configuration_change",
-                "description": "test",
-                "severity": "low",
-            })
+        with (
+            alert_app.app.app_context(),
+            patch.object(alert_app.notification_executor, "submit") as mock_submit,
+        ):
+            engine.create_alert(
+                {
+                    "type": "configuration_change",
+                    "description": "test",
+                    "severity": "low",
+                }
+            )
             submitted_fns = [c.args[0].__name__ for c in mock_submit.call_args_list]
             assert "_send_email_async" not in submitted_fns
 
@@ -573,12 +629,17 @@ class TestNotificationTriggering:
         engine = alert_app.alert_engine
         alert_app.app.config["SLACK_WEBHOOK_URL"] = "https://hooks.slack.com/test"
         try:
-            with alert_app.app.app_context(), patch.object(alert_app.notification_executor, "submit") as mock_submit:
-                engine.create_alert({
-                    "type": "malware_detected",
-                    "description": "test",
-                    "severity": "critical",
-                })
+            with (
+                alert_app.app.app_context(),
+                patch.object(alert_app.notification_executor, "submit") as mock_submit,
+            ):
+                engine.create_alert(
+                    {
+                        "type": "malware_detected",
+                        "description": "test",
+                        "severity": "critical",
+                    }
+                )
                 submitted_fns = [c.args[0].__name__ for c in mock_submit.call_args_list]
                 assert "_send_slack_async" in submitted_fns
         finally:
@@ -587,12 +648,17 @@ class TestNotificationTriggering:
     def test_slack_not_triggered_without_webhook(self):
         engine = alert_app.alert_engine
         alert_app.app.config["SLACK_WEBHOOK_URL"] = ""
-        with alert_app.app.app_context(), patch.object(alert_app.notification_executor, "submit") as mock_submit:
-            engine.create_alert({
-                "type": "malware_detected",
-                "description": "test",
-                "severity": "critical",
-            })
+        with (
+            alert_app.app.app_context(),
+            patch.object(alert_app.notification_executor, "submit") as mock_submit,
+        ):
+            engine.create_alert(
+                {
+                    "type": "malware_detected",
+                    "description": "test",
+                    "severity": "critical",
+                }
+            )
             submitted_fns = [c.args[0].__name__ for c in mock_submit.call_args_list]
             assert "_send_slack_async" not in submitted_fns
 
@@ -600,12 +666,17 @@ class TestNotificationTriggering:
         engine = alert_app.alert_engine
         alert_app.app.config["SLACK_WEBHOOK_URL"] = "https://hooks.slack.com/test"
         try:
-            with alert_app.app.app_context(), patch.object(alert_app.notification_executor, "submit") as mock_submit:
-                engine.create_alert({
-                    "type": "brute_force",
-                    "description": "test",
-                    "severity": "high",
-                })
+            with (
+                alert_app.app.app_context(),
+                patch.object(alert_app.notification_executor, "submit") as mock_submit,
+            ):
+                engine.create_alert(
+                    {
+                        "type": "brute_force",
+                        "description": "test",
+                        "severity": "high",
+                    }
+                )
                 submitted_fns = [c.args[0].__name__ for c in mock_submit.call_args_list]
                 assert "_send_slack_async" not in submitted_fns
         finally:
@@ -616,13 +687,18 @@ class TestNotificationTriggering:
 # AlertEngine unit tests (direct, not through Flask)
 # ===================================================================
 
+
 class TestAlertEngineUnit:
     def test_create_returns_id_string(self):
         engine = alert_app.AlertEngine()
         with alert_app.app.app_context():
-            aid = engine.create_alert({
-                "type": "test", "description": "unit", "severity": "low",
-            })
+            aid = engine.create_alert(
+                {
+                    "type": "test",
+                    "description": "unit",
+                    "severity": "low",
+                }
+            )
         assert isinstance(aid, str)
         assert aid.startswith("alert_")
 
@@ -645,21 +721,25 @@ class TestAlertEngineUnit:
     def test_correlation_id_stored(self):
         engine = alert_app.AlertEngine()
         with alert_app.app.app_context():
-            aid = engine.create_alert({
-                "type": "test",
-                "description": "corr",
-                "correlation_id": "corr-999",
-            })
+            aid = engine.create_alert(
+                {
+                    "type": "test",
+                    "description": "corr",
+                    "correlation_id": "corr-999",
+                }
+            )
             alert = engine.get_alert(aid)
         assert alert["correlation_id"] == "corr-999"
 
     def test_tags_round_trip(self):
         engine = alert_app.AlertEngine()
         with alert_app.app.app_context():
-            aid = engine.create_alert({
-                "type": "test",
-                "description": "tags",
-                "tags": ["ssh", "external"],
-            })
+            aid = engine.create_alert(
+                {
+                    "type": "test",
+                    "description": "tags",
+                    "tags": ["ssh", "external"],
+                }
+            )
             alert = engine.get_alert(aid)
         assert alert["tags"] == ["ssh", "external"]

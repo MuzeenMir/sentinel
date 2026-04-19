@@ -5,6 +5,7 @@ Wraps a Proximal Policy Optimization model with a custom feature extractor
 tailored to security-state vectors.  Falls back to a uniform random policy
 when no trained model is available.
 """
+
 from __future__ import annotations
 
 import json
@@ -29,6 +30,7 @@ logger = logging.getLogger(__name__)
 # Custom feature extractor
 # ---------------------------------------------------------------------------
 
+
 class SecurityFeatureExtractor(BaseFeaturesExtractor):
     """LayerNorm-stabilised MLP for security observation vectors."""
 
@@ -52,12 +54,15 @@ class SecurityFeatureExtractor(BaseFeaturesExtractor):
 # Minimal env for bootstrapping SB3 with correct obs/action spaces
 # ---------------------------------------------------------------------------
 
-class _BootstrapEnv(gym.Env):
 
+class _BootstrapEnv(gym.Env):
     def __init__(self, obs_dim: int, act_dim: int):
         super().__init__()
         self.observation_space = spaces.Box(
-            low=-np.inf, high=np.inf, shape=(obs_dim,), dtype=np.float32,
+            low=-np.inf,
+            high=np.inf,
+            shape=(obs_dim,),
+            dtype=np.float32,
         )
         self.action_space = spaces.Discrete(act_dim)
 
@@ -202,14 +207,19 @@ class PPOAgent:
         entropy, and training_steps.
         """
         if self._model is None:
-            return {"policy_loss": 0.0, "value_loss": 0.0, "entropy": 0.0, "training_steps": 0}
+            return {
+                "policy_loss": 0.0,
+                "value_loss": 0.0,
+                "entropy": 0.0,
+                "training_steps": 0,
+            }
 
         device = self._model.device
-        states_t     = torch.as_tensor(states,        dtype=torch.float32, device=device)
-        actions_t    = torch.as_tensor(actions,       dtype=torch.long,    device=device)
-        rewards_t    = torch.as_tensor(rewards,       dtype=torch.float32, device=device)
-        old_lp_t     = torch.as_tensor(old_log_probs, dtype=torch.float32, device=device)
-        advantages_t = torch.as_tensor(advantages,    dtype=torch.float32, device=device)
+        states_t = torch.as_tensor(states, dtype=torch.float32, device=device)
+        actions_t = torch.as_tensor(actions, dtype=torch.long, device=device)
+        rewards_t = torch.as_tensor(rewards, dtype=torch.float32, device=device)
+        old_lp_t = torch.as_tensor(old_log_probs, dtype=torch.float32, device=device)
+        advantages_t = torch.as_tensor(advantages, dtype=torch.float32, device=device)
 
         # Normalise advantages — skip mean subtraction when std ≈ 0 to avoid zero gradients
         adv_std = advantages_t.std()
@@ -222,17 +232,17 @@ class PPOAgent:
         optim = policy.optimizer
 
         total_policy_loss = 0.0
-        total_value_loss  = 0.0
-        total_entropy     = 0.0
+        total_value_loss = 0.0
+        total_entropy = 0.0
 
         for _ in range(epochs):
             values, log_probs, entropy = policy.evaluate_actions(states_t, actions_t)
             values = values.flatten()
-            ratio  = torch.exp(log_probs - old_lp_t)
+            ratio = torch.exp(log_probs - old_lp_t)
             clip_r = torch.clamp(ratio, 1 - 0.2, 1 + 0.2)
             policy_loss = -torch.min(ratio * advantages_t, clip_r * advantages_t).mean()
-            value_loss  = 0.5 * ((rewards_t - values) ** 2).mean()
-            loss        = policy_loss + 0.5 * value_loss - 0.01 * entropy.mean()
+            value_loss = 0.5 * ((rewards_t - values) ** 2).mean()
+            loss = policy_loss + 0.5 * value_loss - 0.01 * entropy.mean()
 
             optim.zero_grad()
             loss.backward()
@@ -240,16 +250,16 @@ class PPOAgent:
             optim.step()
 
             total_policy_loss += policy_loss.item()
-            total_value_loss  += value_loss.item()
-            total_entropy     += entropy.mean().item()
+            total_value_loss += value_loss.item()
+            total_entropy += entropy.mean().item()
 
         self._training_steps += epochs
 
         return {
-            "policy_loss":     total_policy_loss / epochs,
-            "value_loss":      total_value_loss  / epochs,
-            "entropy":         total_entropy     / epochs,
-            "training_steps":  epochs,
+            "policy_loss": total_policy_loss / epochs,
+            "value_loss": total_value_loss / epochs,
+            "entropy": total_entropy / epochs,
+            "training_steps": epochs,
         }
 
     def save_model(self, path: Optional[str] = None) -> bool:
@@ -293,7 +303,9 @@ class PPOAgent:
             logger.info("No saved model found at %s", model_zip)
             return False
         try:
-            env = DummyVecEnv([lambda: _BootstrapEnv(self._state_dim, self._action_dim)])
+            env = DummyVecEnv(
+                [lambda: _BootstrapEnv(self._state_dim, self._action_dim)]
+            )
             self._model = PPO.load(model_zip, env=env, device="auto")
             self._read_meta(load_dir)
             logger.info("Loaded DRL model v%s from %s", self._version, model_zip)
@@ -308,7 +320,9 @@ class PPOAgent:
 
     def _init_fresh_model(self) -> None:
         try:
-            env = DummyVecEnv([lambda: _BootstrapEnv(self._state_dim, self._action_dim)])
+            env = DummyVecEnv(
+                [lambda: _BootstrapEnv(self._state_dim, self._action_dim)]
+            )
             self._model = PPO(
                 "MlpPolicy",
                 env,
@@ -327,10 +341,13 @@ class PPOAgent:
             )
             logger.info(
                 "Initialised fresh PPO model (state_dim=%d, action_dim=%d)",
-                self._state_dim, self._action_dim,
+                self._state_dim,
+                self._action_dim,
             )
         except Exception:
-            logger.exception("Could not initialise PPO model — falling back to random policy")
+            logger.exception(
+                "Could not initialise PPO model — falling back to random policy"
+            )
             self._model = None
 
     def _read_meta(self, directory: str) -> None:
@@ -340,18 +357,18 @@ class PPOAgent:
         try:
             with open(meta_path, "r") as fh:
                 meta = json.load(fh)
-            self._version        = meta.get("version", self._version)
+            self._version = meta.get("version", self._version)
             self._training_steps = meta.get("training_steps", self._training_steps)
         except Exception:
             logger.warning("Could not read meta at %s", meta_path)
 
     def _write_meta(self, directory: str) -> None:
         meta = {
-            "version":        self._version,
-            "state_dim":      self._state_dim,
-            "action_dim":     self._action_dim,
+            "version": self._version,
+            "state_dim": self._state_dim,
+            "action_dim": self._action_dim,
             "training_steps": self._training_steps,
-            "saved_at":       datetime.now(timezone.utc).isoformat(),
+            "saved_at": datetime.now(timezone.utc).isoformat(),
         }
         meta_path = os.path.join(directory, "meta.json")
         try:

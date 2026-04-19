@@ -1,24 +1,26 @@
-import { useState } from 'react'
-import { useQuery, useMutation } from '@tanstack/react-query'
-import { CheckCircle, Play, X } from 'lucide-react'
-import { complianceApi, type ComplianceFrameworkId } from '../services/api'
-import type { Framework, AssessmentResult } from '../types'
+import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { CheckCircle, Play, X } from "lucide-react";
+import { complianceApi, type ComplianceFrameworkId } from "../services/api";
+import type { Framework, AssessmentResult } from "../types";
 
 export function Compliance() {
-  const [assessment, setAssessment] = useState<AssessmentResult | null>(null)
+  const [assessment, setAssessment] = useState<AssessmentResult | null>(null);
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['frameworks'],
+    queryKey: ["frameworks"],
     queryFn: () => complianceApi.getFrameworks().then((r) => r.data),
-  })
+  });
 
   const assessMutation = useMutation({
     mutationFn: (framework: ComplianceFrameworkId) =>
-      complianceApi.runAssessment(framework).then((r) => r.data as AssessmentResult),
+      complianceApi
+        .runAssessment(framework)
+        .then((r) => r.data as AssessmentResult),
     onSuccess: (result) => setAssessment(result),
-  })
+  });
 
-  const frameworks: Framework[] = data?.frameworks ?? data ?? []
+  const frameworks: Framework[] = data?.frameworks ?? data ?? [];
 
   return (
     <div className="space-y-6">
@@ -40,19 +42,25 @@ export function Compliance() {
           {frameworks.map((fw) => (
             <div key={fw.id} className="card p-5 space-y-3">
               <div>
-                <h3 className="text-base font-semibold text-white">{fw.name || fw.id}</h3>
+                <h3 className="text-base font-semibold text-white">
+                  {fw.name || fw.id}
+                </h3>
                 {fw.description && (
-                  <p className="mt-1 text-sm text-slate-400">{fw.description}</p>
+                  <p className="mt-1 text-sm text-slate-400">
+                    {fw.description}
+                  </p>
                 )}
               </div>
               <div className="flex items-center gap-3 text-xs text-slate-500">
                 {fw.version && <span>v{fw.version}</span>}
-                {typeof fw.controls_count === 'number' && (
+                {typeof fw.controls_count === "number" && (
                   <span>{fw.controls_count} controls</span>
                 )}
               </div>
               <button
-                onClick={() => assessMutation.mutate(fw.id as ComplianceFrameworkId)}
+                onClick={() =>
+                  assessMutation.mutate(fw.id as ComplianceFrameworkId)
+                }
                 disabled={assessMutation.isPending}
                 className="btn-primary w-full gap-2 text-sm"
               >
@@ -67,7 +75,9 @@ export function Compliance() {
       {assessment && (
         <div className="card p-6 space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-white">Assessment Results</h2>
+            <h2 className="text-lg font-semibold text-white">
+              Assessment Results
+            </h2>
             <button
               onClick={() => setAssessment(null)}
               className="btn-secondary gap-2 text-sm"
@@ -82,7 +92,9 @@ export function Compliance() {
             <span className="text-4xl font-bold text-cyan-400">
               {assessment.overall_score}%
             </span>
-            <span className="text-sm text-slate-400">{assessment.framework}</span>
+            <span className="text-sm text-slate-400">
+              {assessment.framework}
+            </span>
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -120,23 +132,25 @@ export function Compliance() {
                     <td className="table-cell font-mono text-xs text-cyan-400">
                       {d.control_id}
                     </td>
-                    <td className="table-cell font-medium text-white">{d.control_name}</td>
+                    <td className="table-cell font-medium text-white">
+                      {d.control_name}
+                    </td>
                     <td className="table-cell text-slate-400">{d.category}</td>
                     <td className="table-cell">
                       <span
                         className={
-                          d.status === 'compliant'
-                            ? 'text-green-400'
-                            : d.status === 'non_compliant'
-                            ? 'text-red-400'
-                            : 'text-slate-400'
+                          d.status === "compliant"
+                            ? "text-green-400"
+                            : d.status === "non_compliant"
+                              ? "text-red-400"
+                              : "text-slate-400"
                         }
                       >
                         {d.status}
                       </span>
                     </td>
                     <td className="table-cell text-sm text-slate-400">
-                      {d.findings.join('; ')}
+                      {d.findings.join("; ")}
                     </td>
                   </tr>
                 ))}
@@ -146,5 +160,5 @@ export function Compliance() {
         </div>
       )}
     </div>
-  )
+  );
 }

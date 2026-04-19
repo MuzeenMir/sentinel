@@ -12,6 +12,7 @@ This lets `alembic upgrade head` run twice on the same database without error
 Downgrade uses `DROP TABLE IF EXISTS` so a partially-upgraded database can
 still be reset.
 """
+
 from typing import Sequence, Union
 
 from alembic import op

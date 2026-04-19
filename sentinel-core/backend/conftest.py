@@ -82,6 +82,7 @@ def _reset_circuit_breakers():
     """Reset process-wide circuit breaker state between tests to avoid pollution."""
     try:
         from resilience import _breakers
+
         for br in _breakers.values():
             br._state = br.CLOSED
             br._failure_count = 0
@@ -90,4 +91,3 @@ def _reset_circuit_breakers():
     except Exception:
         pass
     yield
-

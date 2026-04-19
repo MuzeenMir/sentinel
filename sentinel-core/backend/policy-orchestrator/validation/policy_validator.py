@@ -10,6 +10,7 @@ Enforces safety constraints before rules reach any vendor adapter:
 * Flags overly permissive ALLOW rules on sensitive ports
 * Detects conflicting actions on identical network flows
 """
+
 import ipaddress
 import logging
 from typing import Any, Dict, List
@@ -18,11 +19,19 @@ logger = logging.getLogger(__name__)
 
 _SUPPORTED_PROTOCOLS = frozenset({"tcp", "udp", "icmp", "any"})
 _SUPPORTED_ACTIONS = frozenset({"ALLOW", "DENY", "RATE_LIMIT", "MONITOR"})
-_SENSITIVE_PORTS = frozenset({
-    22, 23, 3389,           # remote access
-    3306, 5432, 6379,       # databases
-    27017, 9200, 2379,      # NoSQL / search / etcd
-})
+_SENSITIVE_PORTS = frozenset(
+    {
+        22,
+        23,
+        3389,  # remote access
+        3306,
+        5432,
+        6379,  # databases
+        27017,
+        9200,
+        2379,  # NoSQL / search / etcd
+    }
+)
 _MAX_PORT = 65535
 _BROAD_CIDR_THRESHOLD = 16
 
@@ -79,9 +88,7 @@ class PolicyValidator:
         return []
 
     @staticmethod
-    def _check_ip(
-        value: str, label: str, rid: str
-    ) -> List[Dict[str, Any]]:
+    def _check_ip(value: str, label: str, rid: str) -> List[Dict[str, Any]]:
         if value in ("*", "any", ""):
             return []
         try:
@@ -90,9 +97,7 @@ class PolicyValidator:
             try:
                 ipaddress.ip_network(value, strict=False)
             except ValueError:
-                return [
-                    _issue("error", rid, f"Invalid {label} IP: {value}")
-                ]
+                return [_issue("error", rid, f"Invalid {label} IP: {value}")]
         return []
 
     @staticmethod
@@ -104,9 +109,7 @@ class PolicyValidator:
         try:
             if isinstance(port, int):
                 if not 0 <= port <= _MAX_PORT:
-                    return [
-                        _issue("error", rid, f"Port {port} out of range")
-                    ]
+                    return [_issue("error", rid, f"Port {port} out of range")]
                 return []
 
             s = str(port)
@@ -119,13 +122,9 @@ class PolicyValidator:
                         _issue("error", rid, f"Range start {lo} out of range")
                     )
                 if not 0 <= hi <= _MAX_PORT:
-                    issues.append(
-                        _issue("error", rid, f"Range end {hi} out of range")
-                    )
+                    issues.append(_issue("error", rid, f"Range end {hi} out of range"))
                 if lo > hi:
-                    issues.append(
-                        _issue("error", rid, f"Range start > end: {lo}-{hi}")
-                    )
+                    issues.append(_issue("error", rid, f"Range start > end: {lo}-{hi}"))
                 return issues
 
             p = int(s)
@@ -137,9 +136,7 @@ class PolicyValidator:
         return []
 
     @staticmethod
-    def _check_breadth(
-        rule: Dict[str, Any], rid: str
-    ) -> List[Dict[str, Any]]:
+    def _check_breadth(rule: Dict[str, Any], rid: str) -> List[Dict[str, Any]]:
         issues: List[Dict[str, Any]] = []
         action = rule.get("action", "")
         src = rule.get("source_ip", "*")
@@ -153,41 +150,51 @@ class PolicyValidator:
                 if prefix == 0:
                     is_wildcard = True
                 elif prefix <= _BROAD_CIDR_THRESHOLD:
-                    issues.append(_issue(
-                        "warning", rid,
-                        f"Source CIDR {src_cidr} is very broad "
-                        f"(<= /{_BROAD_CIDR_THRESHOLD})",
-                    ))
+                    issues.append(
+                        _issue(
+                            "warning",
+                            rid,
+                            f"Source CIDR {src_cidr} is very broad "
+                            f"(<= /{_BROAD_CIDR_THRESHOLD})",
+                        )
+                    )
             except (ValueError, TypeError):
                 pass
 
         if action == "DENY" and is_wildcard and port == "*":
-            issues.append(_issue(
-                "error", rid,
-                "DENY from any source on all ports would block all traffic",
-            ))
+            issues.append(
+                _issue(
+                    "error",
+                    rid,
+                    "DENY from any source on all ports would block all traffic",
+                )
+            )
 
         if action == "ALLOW" and is_wildcard:
             port_int = _port_as_int(port)
             if port_int in _SENSITIVE_PORTS:
-                issues.append(_issue(
-                    "warning", rid,
-                    f"ALLOW from any source on sensitive port {port_int}",
-                ))
+                issues.append(
+                    _issue(
+                        "warning",
+                        rid,
+                        f"ALLOW from any source on sensitive port {port_int}",
+                    )
+                )
             elif port == "*":
-                issues.append(_issue(
-                    "warning", rid,
-                    "ALLOW from any source on all ports is overly permissive",
-                ))
+                issues.append(
+                    _issue(
+                        "warning",
+                        rid,
+                        "ALLOW from any source on all ports is overly permissive",
+                    )
+                )
 
         return issues
 
     # ── cross-rule conflict detection ─────────────────────────────
 
     @staticmethod
-    def _detect_conflicts(
-        rules: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
+    def _detect_conflicts(rules: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         seen: Dict[tuple, List[Dict[str, Any]]] = {}
 
         for rule in rules:
@@ -206,16 +213,19 @@ class PolicyValidator:
             actions = {r.get("action") for r in group}
             if len(actions) > 1:
                 ids = [r.get("id", "?") for r in group]
-                issues.append(_issue(
-                    "error",
-                    ids[0],
-                    f"Conflicting actions {sorted(actions)} on same "
-                    f"target; affected rules: {', '.join(ids)}",
-                ))
+                issues.append(
+                    _issue(
+                        "error",
+                        ids[0],
+                        f"Conflicting actions {sorted(actions)} on same "
+                        f"target; affected rules: {', '.join(ids)}",
+                    )
+                )
         return issues
 
 
 # ── helpers ───────────────────────────────────────────────────────
+
 
 def _issue(severity: str, rule_id: str, message: str) -> Dict[str, Any]:
     return {"severity": severity, "rule_id": rule_id, "message": message}

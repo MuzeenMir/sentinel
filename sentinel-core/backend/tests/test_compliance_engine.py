@@ -6,11 +6,9 @@ gap-analysis, reports, report history, map-policy.
 Redis and auth_middleware are mocked — no real Redis connection.
 """
 
-import json
 import os
 import sys
 import importlib.util
-from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -20,8 +18,8 @@ import pytest
 # Fake Redis for Compliance Engine (lpush, ltrim, lrange, scan_iter)
 # ---------------------------------------------------------------------------
 
-_fake_lists: dict = {}   # key -> list  (for lpush/ltrim/lrange)
-_fake_store: dict = {}   # key -> value (for setex/get)
+_fake_lists: dict = {}  # key -> list  (for lpush/ltrim/lrange)
+_fake_store: dict = {}  # key -> value (for setex/get)
 
 
 class _FakeRedis:
@@ -84,8 +82,10 @@ _fake_redis_instance = _FakeRedis()
 sys.path.insert(0, _compliance_dir)
 sys.path.insert(0, _backend_root)
 
-with patch("redis.from_url", return_value=_fake_redis_instance), \
-     patch.dict("sys.modules", {"auth_middleware": MagicMock(require_auth=_noop_auth)}):
+with (
+    patch("redis.from_url", return_value=_fake_redis_instance),
+    patch.dict("sys.modules", {"auth_middleware": MagicMock(require_auth=_noop_auth)}),
+):
     _spec = importlib.util.spec_from_file_location(
         "compliance_engine_app",
         os.path.join(_compliance_dir, "app.py"),
@@ -488,7 +488,9 @@ def test_map_policy_mappings_structure(client):
 
 def test_assess_compliance_error_handling(client):
     """Assess endpoint returns 500 on internal error."""
-    with patch.object(_ce_mod.policy_mapper, "map_policies", side_effect=RuntimeError("boom")):
+    with patch.object(
+        _ce_mod.policy_mapper, "map_policies", side_effect=RuntimeError("boom")
+    ):
         resp = client.post(
             "/api/v1/assess",
             json={"framework": "NIST", "policies": [], "configurations": {}},
@@ -502,7 +504,11 @@ def test_assess_compliance_error_handling(client):
 
 def test_gap_analysis_error_handling(client):
     """Gap analysis endpoint returns 500 on internal error."""
-    with patch.object(_ce_mod.frameworks["NIST"], "detailed_gap_analysis", side_effect=ValueError("err")):
+    with patch.object(
+        _ce_mod.frameworks["NIST"],
+        "detailed_gap_analysis",
+        side_effect=ValueError("err"),
+    ):
         resp = client.post(
             "/api/v1/gap-analysis",
             json={"framework": "NIST", "current_controls": {}},
@@ -530,7 +536,9 @@ def test_generate_report_error_handling(client):
 
 def test_map_policy_error_handling(client):
     """Policy mapping returns 500 on internal error."""
-    with patch.object(_ce_mod.policy_mapper, "map_single_policy", side_effect=KeyError("bad")):
+    with patch.object(
+        _ce_mod.policy_mapper, "map_single_policy", side_effect=KeyError("bad")
+    ):
         resp = client.post(
             "/api/v1/map-policy",
             json={"policy": {"id": "p1"}, "frameworks": ["NIST"]},

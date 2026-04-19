@@ -1,27 +1,28 @@
-import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Settings as SettingsIcon, Save } from 'lucide-react'
-import { configApi } from '../services/api'
-import { useSettingsStore } from '../store/settingsStore'
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Settings as SettingsIcon, Save } from "lucide-react";
+import { configApi } from "../services/api";
+import { useSettingsStore } from "../store/settingsStore";
 
 export function Settings() {
-  const queryClient = useQueryClient()
-  const settings = useSettingsStore()
-  const [saved, setSaved] = useState(false)
+  const queryClient = useQueryClient();
+  const settings = useSettingsStore();
+  const [saved, setSaved] = useState(false);
 
   const configQuery = useQuery({
-    queryKey: ['config'],
+    queryKey: ["config"],
     queryFn: () => configApi.getConfig().then((r) => r.data),
-  })
+  });
 
   const updateMutation = useMutation({
-    mutationFn: (payload: Record<string, unknown>) => configApi.updateConfig(payload),
+    mutationFn: (payload: Record<string, unknown>) =>
+      configApi.updateConfig(payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['config'] })
-      setSaved(true)
-      setTimeout(() => setSaved(false), 3000)
+      queryClient.invalidateQueries({ queryKey: ["config"] });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
     },
-  })
+  });
 
   const handleSave = () => {
     updateMutation.mutate({
@@ -38,8 +39,8 @@ export function Settings() {
         emailAlerts: settings.emailAlerts,
         slackIntegration: settings.slackIntegration,
       },
-    })
-  }
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -66,16 +67,21 @@ export function Settings() {
       <div className="card p-6">
         <h2 className="text-lg font-semibold text-white mb-2">Platform</h2>
         <p className="text-sm text-slate-400">
-          Configure platform-wide defaults for organization, detection, and notifications.
+          Configure platform-wide defaults for organization, detection, and
+          notifications.
         </p>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="card p-6">
-          <h2 className="text-lg font-semibold text-white mb-4">General Settings</h2>
+          <h2 className="text-lg font-semibold text-white mb-4">
+            General Settings
+          </h2>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm text-slate-400 mb-1">Organization Name</label>
+              <label className="block text-sm text-slate-400 mb-1">
+                Organization Name
+              </label>
               <input
                 type="text"
                 value={settings.organizationName}
@@ -84,7 +90,9 @@ export function Settings() {
               />
             </div>
             <div>
-              <label className="block text-sm text-slate-400 mb-1">Default Timezone</label>
+              <label className="block text-sm text-slate-400 mb-1">
+                Default Timezone
+              </label>
               <select
                 value={settings.timezone}
                 onChange={(e) => settings.setTimezone(e.target.value)}
@@ -104,7 +112,9 @@ export function Settings() {
         </div>
 
         <div className="card p-6">
-          <h2 className="text-lg font-semibold text-white mb-4">Detection Settings</h2>
+          <h2 className="text-lg font-semibold text-white mb-4">
+            Detection Settings
+          </h2>
           <div className="space-y-4">
             <ToggleRow
               label="Auto-block High Threats"
@@ -120,7 +130,9 @@ export function Settings() {
             />
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="text-sm text-slate-400">Confidence Threshold</label>
+                <label className="text-sm text-slate-400">
+                  Confidence Threshold
+                </label>
                 <span className="text-sm font-medium text-white">
                   {settings.confidenceThreshold}%
                 </span>
@@ -130,7 +142,9 @@ export function Settings() {
                 min="0"
                 max="100"
                 value={settings.confidenceThreshold}
-                onChange={(e) => settings.setConfidenceThreshold(Number(e.target.value))}
+                onChange={(e) =>
+                  settings.setConfidenceThreshold(Number(e.target.value))
+                }
                 className="w-full accent-cyan-500"
               />
             </div>
@@ -138,7 +152,9 @@ export function Settings() {
         </div>
 
         <div className="card p-6">
-          <h2 className="text-lg font-semibold text-white mb-4">Notifications</h2>
+          <h2 className="text-lg font-semibold text-white mb-4">
+            Notifications
+          </h2>
           <div className="space-y-4">
             <ToggleRow
               label="Email Alerts"
@@ -161,13 +177,17 @@ export function Settings() {
             {configQuery.isLoading ? (
               <p className="text-sm text-slate-400">Loading configuration…</p>
             ) : configQuery.isError ? (
-              <p className="text-sm text-red-400">Failed to load system configuration.</p>
+              <p className="text-sm text-red-400">
+                Failed to load system configuration.
+              </p>
             ) : configQuery.data ? (
               <pre className="text-xs text-slate-400 overflow-auto max-h-48 rounded-lg bg-slate-900 p-3">
                 {JSON.stringify(configQuery.data, null, 2)}
               </pre>
             ) : (
-              <p className="text-sm text-slate-400">No system configuration loaded.</p>
+              <p className="text-sm text-slate-400">
+                No system configuration loaded.
+              </p>
             )}
           </div>
         </div>
@@ -179,7 +199,7 @@ export function Settings() {
         </button>
       </div>
     </div>
-  )
+  );
 }
 
 function ToggleRow({
@@ -188,10 +208,10 @@ function ToggleRow({
   value,
   onChange,
 }: {
-  label: string
-  description: string
-  value: boolean
-  onChange: (v: boolean) => void
+  label: string;
+  description: string;
+  value: boolean;
+  onChange: (v: boolean) => void;
 }) {
   return (
     <div className="flex items-center justify-between">
@@ -209,15 +229,16 @@ function ToggleRow({
         <span
           aria-hidden="true"
           className={`absolute inset-0 rounded-full transition-colors ${
-            value ? 'bg-cyan-600' : 'bg-slate-600'
+            value ? "bg-cyan-600" : "bg-slate-600"
           }`}
         />
         <span
           aria-hidden="true"
           className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
-            value ? 'translate-x-5' : ''
+            value ? "translate-x-5" : ""
           }`}
-        /></label>
+        />
+      </label>
     </div>
-  )
+  );
 }

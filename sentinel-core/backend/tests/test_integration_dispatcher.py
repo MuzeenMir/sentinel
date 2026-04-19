@@ -8,10 +8,9 @@ Validates:
 - Webhook HMAC signatures
 - Error handling when adapters fail
 """
-import json
+
 import os
 import sys
-import pytest
 from unittest.mock import patch, MagicMock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -34,10 +33,17 @@ from integrations.dispatcher import (
 # Adapter Registry
 # ===================================================================
 
+
 class TestAdapterRegistry:
     def test_all_types_registered(self):
-        expected = {"webhook", "siem_splunk", "siem_elastic",
-                    "soar_xsoar", "ticketing_servicenow", "ticketing_jira"}
+        expected = {
+            "webhook",
+            "siem_splunk",
+            "siem_elastic",
+            "soar_xsoar",
+            "ticketing_servicenow",
+            "ticketing_jira",
+        }
         assert set(ADAPTER_REGISTRY.keys()) == expected
 
     def test_registry_values_are_classes(self):
@@ -50,10 +56,13 @@ class TestAdapterRegistry:
 # IntegrationDispatcher
 # ===================================================================
 
+
 class TestDispatcher:
     def test_register_known_type(self):
         d = IntegrationDispatcher()
-        adapter = d.register({"type": "webhook", "name": "test-hook", "url": "http://x"})
+        adapter = d.register(
+            {"type": "webhook", "name": "test-hook", "url": "http://x"}
+        )
         assert adapter is not None
         assert len(d.get_adapters()) == 1
 
@@ -107,9 +116,12 @@ class TestDispatcher:
 # WebhookAdapter
 # ===================================================================
 
+
 class TestWebhookAdapter:
     def test_send_success(self):
-        adapter = WebhookAdapter({"name": "test", "type": "webhook", "url": "http://hook.test/ep"})
+        adapter = WebhookAdapter(
+            {"name": "test", "type": "webhook", "url": "http://hook.test/ep"}
+        )
         with patch("integrations.dispatcher.requests.post") as mock_post:
             mock_post.return_value = MagicMock(status_code=200)
             mock_post.return_value.raise_for_status = MagicMock()
@@ -117,10 +129,15 @@ class TestWebhookAdapter:
         assert result is True
         mock_post.assert_called_once()
         call_kwargs = mock_post.call_args
-        assert "http://hook.test/ep" in call_kwargs.args or call_kwargs.kwargs.get("url") == "http://hook.test/ep"
+        assert (
+            "http://hook.test/ep" in call_kwargs.args
+            or call_kwargs.kwargs.get("url") == "http://hook.test/ep"
+        )
 
     def test_send_failure(self):
-        adapter = WebhookAdapter({"name": "test", "type": "webhook", "url": "http://hook.test/ep"})
+        adapter = WebhookAdapter(
+            {"name": "test", "type": "webhook", "url": "http://hook.test/ep"}
+        )
         with patch("integrations.dispatcher.requests.post") as mock_post:
             mock_post.side_effect = ConnectionError("refused")
             result = adapter.send({"type": "test"})
@@ -131,12 +148,14 @@ class TestWebhookAdapter:
         assert adapter.send({"type": "test"}) is False
 
     def test_hmac_signature_added_with_secret(self):
-        adapter = WebhookAdapter({
-            "name": "signed",
-            "type": "webhook",
-            "url": "http://hook.test",
-            "secret": "my-secret",
-        })
+        adapter = WebhookAdapter(
+            {
+                "name": "signed",
+                "type": "webhook",
+                "url": "http://hook.test",
+                "secret": "my-secret",
+            }
+        )
         with patch("integrations.dispatcher.requests.post") as mock_post:
             mock_post.return_value = MagicMock(status_code=200)
             mock_post.return_value.raise_for_status = MagicMock()
@@ -151,14 +170,18 @@ class TestWebhookAdapter:
 # SplunkHECAdapter
 # ===================================================================
 
+
 class TestSplunkHECAdapter:
     def test_send_success(self):
-        adapter = SplunkHECAdapter({
-            "name": "splunk", "type": "siem_splunk",
-            "hec_url": "https://splunk.test:8088/services/collector",
-            "hec_token": "tok-123",
-            "index": "main",
-        })
+        adapter = SplunkHECAdapter(
+            {
+                "name": "splunk",
+                "type": "siem_splunk",
+                "hec_url": "https://splunk.test:8088/services/collector",
+                "hec_token": "tok-123",
+                "index": "main",
+            }
+        )
         with patch("integrations.dispatcher.requests.post") as mock_post:
             mock_post.return_value = MagicMock(status_code=200)
             mock_post.return_value.raise_for_status = MagicMock()
@@ -177,21 +200,31 @@ class TestSplunkHECAdapter:
 # ElasticSIEMAdapter
 # ===================================================================
 
+
 class TestElasticSIEMAdapter:
     def test_send_success(self):
-        adapter = ElasticSIEMAdapter({
-            "name": "elastic", "type": "siem_elastic",
-            "elastic_url": "https://elastic.test:9200",
-            "api_key": "key-abc",
-            "index": "sentinel-events",
-        })
+        adapter = ElasticSIEMAdapter(
+            {
+                "name": "elastic",
+                "type": "siem_elastic",
+                "elastic_url": "https://elastic.test:9200",
+                "api_key": "key-abc",
+                "index": "sentinel-events",
+            }
+        )
         with patch("integrations.dispatcher.requests.post") as mock_post:
             mock_post.return_value = MagicMock(status_code=201)
             mock_post.return_value.raise_for_status = MagicMock()
             result = adapter.send({"type": "alert"})
         assert result is True
-        url = mock_post.call_args.args[0] if mock_post.call_args.args else mock_post.call_args.kwargs.get("url", "")
-        assert "sentinel-events/_doc" in str(url) or "sentinel-events/_doc" in str(mock_post.call_args)
+        url = (
+            mock_post.call_args.args[0]
+            if mock_post.call_args.args
+            else mock_post.call_args.kwargs.get("url", "")
+        )
+        assert "sentinel-events/_doc" in str(url) or "sentinel-events/_doc" in str(
+            mock_post.call_args
+        )
 
     def test_send_missing_url(self):
         adapter = ElasticSIEMAdapter({"name": "elastic", "type": "siem_elastic"})
@@ -202,13 +235,17 @@ class TestElasticSIEMAdapter:
 # XSOARAdapter
 # ===================================================================
 
+
 class TestXSOARAdapter:
     def test_send_success(self):
-        adapter = XSOARAdapter({
-            "name": "xsoar", "type": "soar_xsoar",
-            "xsoar_url": "https://xsoar.test",
-            "api_key": "xsoar-key",
-        })
+        adapter = XSOARAdapter(
+            {
+                "name": "xsoar",
+                "type": "soar_xsoar",
+                "xsoar_url": "https://xsoar.test",
+                "api_key": "xsoar-key",
+            }
+        )
         with patch("integrations.dispatcher.requests.post") as mock_post:
             mock_post.return_value = MagicMock(status_code=201)
             mock_post.return_value.raise_for_status = MagicMock()
@@ -224,14 +261,18 @@ class TestXSOARAdapter:
 # ServiceNowAdapter
 # ===================================================================
 
+
 class TestServiceNowAdapter:
     def test_send_success(self):
-        adapter = ServiceNowAdapter({
-            "name": "snow", "type": "ticketing_servicenow",
-            "instance": "mycompany",
-            "username": "admin",
-            "password": "pass",
-        })
+        adapter = ServiceNowAdapter(
+            {
+                "name": "snow",
+                "type": "ticketing_servicenow",
+                "instance": "mycompany",
+                "username": "admin",
+                "password": "pass",
+            }
+        )
         with patch("integrations.dispatcher.requests.post") as mock_post:
             mock_post.return_value = MagicMock(status_code=201)
             mock_post.return_value.raise_for_status = MagicMock()
@@ -249,15 +290,19 @@ class TestServiceNowAdapter:
 # JiraAdapter
 # ===================================================================
 
+
 class TestJiraAdapter:
     def test_send_success(self):
-        adapter = JiraAdapter({
-            "name": "jira", "type": "ticketing_jira",
-            "jira_url": "https://myco.atlassian.net",
-            "email": "bot@co.com",
-            "api_token": "jira-tok",
-            "project_key": "SEC",
-        })
+        adapter = JiraAdapter(
+            {
+                "name": "jira",
+                "type": "ticketing_jira",
+                "jira_url": "https://myco.atlassian.net",
+                "email": "bot@co.com",
+                "api_token": "jira-tok",
+                "project_key": "SEC",
+            }
+        )
         with patch("integrations.dispatcher.requests.post") as mock_post:
             mock_post.return_value = MagicMock(status_code=201)
             mock_post.return_value.raise_for_status = MagicMock()
@@ -273,26 +318,36 @@ class TestJiraAdapter:
 # CEF Formatter
 # ===================================================================
 
+
 class TestFormatCEF:
     def test_basic_format(self):
-        cef = format_cef({"type": "brute_force", "severity": "high", "description": "SSH brute"})
+        cef = format_cef(
+            {"type": "brute_force", "severity": "high", "description": "SSH brute"}
+        )
         assert cef.startswith("CEF:0|SENTINEL|SecurityPlatform|1.0|")
         assert "brute_force" in cef
         assert "|7|" in cef  # high -> 7
 
     def test_severity_mapping(self):
-        for sev, expected in [("low", "3"), ("medium", "5"), ("high", "7"), ("critical", "10")]:
+        for sev, expected in [
+            ("low", "3"),
+            ("medium", "5"),
+            ("high", "7"),
+            ("critical", "10"),
+        ]:
             cef = format_cef({"severity": sev})
             assert f"|{expected}|" in cef
 
     def test_extension_fields(self):
-        cef = format_cef({
-            "type": "scan",
-            "severity": "medium",
-            "source_ip": "10.0.0.1",
-            "dest_ip": "10.0.0.2",
-            "description": "Port scan detected",
-        })
+        cef = format_cef(
+            {
+                "type": "scan",
+                "severity": "medium",
+                "source_ip": "10.0.0.1",
+                "dest_ip": "10.0.0.2",
+                "description": "Port scan detected",
+            }
+        )
         assert "src=10.0.0.1" in cef
         assert "dst=10.0.0.2" in cef
         assert "msg=Port scan detected" in cef
@@ -313,6 +368,7 @@ class TestFormatCEF:
 # LEEF Formatter
 # ===================================================================
 
+
 class TestFormatLEEF:
     def test_basic_format(self):
         leef = format_leef({"type": "brute_force", "severity": "critical"})
@@ -321,15 +377,17 @@ class TestFormatLEEF:
         assert "sev=10" in leef
 
     def test_extension_fields(self):
-        leef = format_leef({
-            "type": "scan",
-            "severity": "low",
-            "source_ip": "192.168.1.1",
-            "dest_ip": "192.168.1.2",
-            "source_port": 12345,
-            "dest_port": 443,
-            "description": "TLS scan",
-        })
+        leef = format_leef(
+            {
+                "type": "scan",
+                "severity": "low",
+                "source_ip": "192.168.1.1",
+                "dest_ip": "192.168.1.2",
+                "source_port": 12345,
+                "dest_port": 443,
+                "description": "TLS scan",
+            }
+        )
         assert "src=192.168.1.1" in leef
         assert "dst=192.168.1.2" in leef
         assert "srcPort=12345" in leef
@@ -337,11 +395,13 @@ class TestFormatLEEF:
         assert "msg=TLS scan" in leef
 
     def test_tab_separated_attributes(self):
-        leef = format_leef({
-            "type": "test",
-            "severity": "medium",
-            "source_ip": "1.2.3.4",
-        })
+        leef = format_leef(
+            {
+                "type": "test",
+                "severity": "medium",
+                "source_ip": "1.2.3.4",
+            }
+        )
         # After the header pipe-delimited section, attrs are tab-separated
         parts = leef.split("|")
         attr_section = parts[-1]

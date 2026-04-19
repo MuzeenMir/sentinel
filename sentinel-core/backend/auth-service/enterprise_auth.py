@@ -20,8 +20,13 @@ from urllib.parse import urlencode
 
 import bcrypt
 import pyotp
-from flask import Blueprint, jsonify, redirect, request, url_for
-from flask_jwt_extended import create_access_token, create_refresh_token, jwt_required, get_jwt_identity
+from flask import Blueprint, jsonify, redirect, request
+from flask_jwt_extended import (
+    create_access_token,
+    create_refresh_token,
+    jwt_required,
+    get_jwt_identity,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +49,9 @@ def _map_role_from_groups(groups: list) -> str:
     return "viewer"
 
 
-def _find_or_create_sso_user(email: str, name: str, groups: list = None, tenant_id=None):
+def _find_or_create_sso_user(
+    email: str, name: str, groups: list = None, tenant_id=None
+):
     """Find existing user by email or create via JIT provisioning."""
     user = _User.query.filter_by(email=email).first()
     if user:
@@ -67,7 +74,9 @@ def _find_or_create_sso_user(email: str, name: str, groups: list = None, tenant_
         role=role,
         status=_UserStatus.ACTIVE,
         tenant_id=tenant_id,
-        password_hash=bcrypt.hashpw(secrets.token_bytes(32), bcrypt.gensalt()).decode("utf-8"),
+        password_hash=bcrypt.hashpw(secrets.token_bytes(32), bcrypt.gensalt()).decode(
+            "utf-8"
+        ),
     )
     _db.session.add(user)
     _db.session.commit()
@@ -211,7 +220,9 @@ def oidc_status():
 saml_bp = Blueprint("saml", __name__, url_prefix="/api/v1/auth/sso/saml")
 
 SAML_IDP_METADATA_URL = os.environ.get("SAML_IDP_METADATA_URL")
-SAML_SP_ENTITY_ID = os.environ.get("SAML_SP_ENTITY_ID", "https://sentinel.local/saml/metadata")
+SAML_SP_ENTITY_ID = os.environ.get(
+    "SAML_SP_ENTITY_ID", "https://sentinel.local/saml/metadata"
+)
 SAML_SP_ACS_URL = os.environ.get("SAML_SP_ACS_URL")
 SAML_SP_CERT = os.environ.get("SAML_SP_CERT", "")
 SAML_SP_KEY = os.environ.get("SAML_SP_KEY", "")
@@ -226,7 +237,8 @@ def _build_saml_settings() -> dict:
         "sp": {
             "entityId": SAML_SP_ENTITY_ID,
             "assertionConsumerService": {
-                "url": SAML_SP_ACS_URL or "https://sentinel.local/api/v1/auth/sso/saml/acs",
+                "url": SAML_SP_ACS_URL
+                or "https://sentinel.local/api/v1/auth/sso/saml/acs",
                 "binding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST",
             },
             "x509cert": SAML_SP_CERT,
@@ -234,7 +246,10 @@ def _build_saml_settings() -> dict:
         },
         "idp": {
             "entityId": "",
-            "singleSignOnService": {"url": "", "binding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect"},
+            "singleSignOnService": {
+                "url": "",
+                "binding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect",
+            },
             "x509cert": "",
         },
         "security": {
@@ -258,7 +273,6 @@ def _get_saml_auth():
         settings = OneLogin_Saml2_IdPMetadataParser.merge_settings(settings, idp_data)
 
     # Prepare request data for python3-saml
-    url_data = request.url.split("?")
     req_data = {
         "https": "on" if request.scheme == "https" else "off",
         "http_host": request.host,
@@ -297,12 +311,18 @@ def saml_acs():
 
         errors = auth.get_errors()
         if errors:
-            logger.error("SAML validation errors: %s (reason: %s)", errors, auth.get_last_error_reason())
-            return jsonify({
-                "error": "SAML validation failed",
-                "details": errors,
-                "reason": auth.get_last_error_reason(),
-            }), 401
+            logger.error(
+                "SAML validation errors: %s (reason: %s)",
+                errors,
+                auth.get_last_error_reason(),
+            )
+            return jsonify(
+                {
+                    "error": "SAML validation failed",
+                    "details": errors,
+                    "reason": auth.get_last_error_reason(),
+                }
+            ), 401
 
         if not auth.is_authenticated():
             return jsonify({"error": "SAML authentication failed"}), 401
@@ -310,8 +330,20 @@ def saml_acs():
         attrs = auth.get_attributes()
         name_id = auth.get_nameid()
 
-        email = attrs.get("email", [None])[0] or attrs.get("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress", [None])[0] or name_id
-        name = attrs.get("displayName", [None])[0] or attrs.get("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name", [""])[0]
+        email = (
+            attrs.get("email", [None])[0]
+            or attrs.get(
+                "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress",
+                [None],
+            )[0]
+            or name_id
+        )
+        name = (
+            attrs.get("displayName", [None])[0]
+            or attrs.get(
+                "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name", [""]
+            )[0]
+        )
         groups = attrs.get(SAML_GROUP_ATTR, [])
 
         if not email:
@@ -327,7 +359,9 @@ def saml_acs():
         return jsonify({"error": "SAML support requires python3-saml"}), 501
     except Exception as exc:
         logger.error("SAML ACS failed: %s", exc)
-        return jsonify({"error": "SAML authentication failed", "details": str(exc)}), 401
+        return jsonify(
+            {"error": "SAML authentication failed", "details": str(exc)}
+        ), 401
 
 
 @saml_bp.route("/metadata", methods=["GET"])
@@ -386,10 +420,12 @@ def mfa_enroll():
 
     provisioning_uri = totp.provisioning_uri(name=user.email, issuer_name="SENTINEL")
 
-    return jsonify({
-        "provisioning_uri": provisioning_uri,
-        "message": "Scan the QR code with your authenticator app, then verify with /api/v1/auth/mfa/verify",
-    }), 200
+    return jsonify(
+        {
+            "provisioning_uri": provisioning_uri,
+            "message": "Scan the QR code with your authenticator app, then verify with /api/v1/auth/mfa/verify",
+        }
+    ), 200
 
 
 @mfa_bp.route("/verify", methods=["POST"])
@@ -412,7 +448,12 @@ def mfa_verify():
     if totp.verify(code, valid_window=1):
         user.mfa_enabled = True
         _db.session.commit()
-        return jsonify({"valid": True, "message": "MFA verification successful, MFA is now enabled"}), 200
+        return jsonify(
+            {
+                "valid": True,
+                "message": "MFA verification successful, MFA is now enabled",
+            }
+        ), 200
     return jsonify({"valid": False, "error": "Invalid or expired TOTP code"}), 401
 
 
@@ -459,10 +500,12 @@ def mfa_backup_codes():
     user.mfa_backup_codes = json.dumps(hashed)
     _db.session.commit()
 
-    return jsonify({
-        "backup_codes": codes,
-        "message": "Store these codes safely. They will not be shown again.",
-    }), 200
+    return jsonify(
+        {
+            "backup_codes": codes,
+            "message": "Store these codes safely. They will not be shown again.",
+        }
+    ), 200
 
 
 @mfa_bp.route("/status", methods=["GET"])
@@ -471,12 +514,14 @@ def mfa_status():
     user = _get_current_user()
     if not user:
         return jsonify({"enabled": False, "method": "totp"}), 200
-    return jsonify({
-        "enabled": bool(user.mfa_enabled),
-        "enrolled": bool(user.mfa_secret),
-        "method": "totp",
-        "has_backup_codes": bool(user.mfa_backup_codes),
-    }), 200
+    return jsonify(
+        {
+            "enabled": bool(user.mfa_enabled),
+            "enrolled": bool(user.mfa_secret),
+            "method": "totp",
+            "has_backup_codes": bool(user.mfa_backup_codes),
+        }
+    ), 200
 
 
 # ── SCIM 2.0 Blueprint ──────────────────────────────────────────────
@@ -491,21 +536,29 @@ def _scim_auth_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         if not SCIM_BEARER_TOKEN:
-            return jsonify({
-                "schemas": ["urn:ietf:params:scim:api:messages:2.0:Error"],
-                "detail": "SCIM not configured (SCIM_BEARER_TOKEN not set)",
-                "status": "501",
-            }), 501
+            return jsonify(
+                {
+                    "schemas": ["urn:ietf:params:scim:api:messages:2.0:Error"],
+                    "detail": "SCIM not configured (SCIM_BEARER_TOKEN not set)",
+                    "status": "501",
+                }
+            ), 501
 
         auth_header = request.headers.get("Authorization", "")
-        if not auth_header.startswith("Bearer ") or auth_header[7:] != SCIM_BEARER_TOKEN:
-            return jsonify({
-                "schemas": ["urn:ietf:params:scim:api:messages:2.0:Error"],
-                "detail": "Invalid or missing SCIM bearer token",
-                "status": "401",
-            }), 401
+        if (
+            not auth_header.startswith("Bearer ")
+            or auth_header[7:] != SCIM_BEARER_TOKEN
+        ):
+            return jsonify(
+                {
+                    "schemas": ["urn:ietf:params:scim:api:messages:2.0:Error"],
+                    "detail": "Invalid or missing SCIM bearer token",
+                    "status": "401",
+                }
+            ), 401
 
         return f(*args, **kwargs)
+
     return decorated
 
 
@@ -532,19 +585,24 @@ def scim_list_users():
     start_index = request.args.get("startIndex", 1, type=int)
     count = request.args.get("count", 100, type=int)
 
-    users = _User.query.filter(
-        _User.status == _UserStatus.ACTIVE
-    ).offset(start_index - 1).limit(count).all()
+    users = (
+        _User.query.filter(_User.status == _UserStatus.ACTIVE)
+        .offset(start_index - 1)
+        .limit(count)
+        .all()
+    )
 
     total = _User.query.filter(_User.status == _UserStatus.ACTIVE).count()
 
-    return jsonify({
-        "schemas": ["urn:ietf:params:scim:api:messages:2.0:ListResponse"],
-        "totalResults": total,
-        "startIndex": start_index,
-        "itemsPerPage": count,
-        "Resources": [_user_to_scim(u) for u in users],
-    }), 200
+    return jsonify(
+        {
+            "schemas": ["urn:ietf:params:scim:api:messages:2.0:ListResponse"],
+            "totalResults": total,
+            "startIndex": start_index,
+            "itemsPerPage": count,
+            "Resources": [_user_to_scim(u) for u in users],
+        }
+    ), 200
 
 
 @scim_bp.route("/Users", methods=["POST"])
@@ -555,19 +613,23 @@ def scim_create_user():
     schemas = data.get("schemas", [])
 
     if "urn:ietf:params:scim:schemas:core:2.0:User" not in schemas:
-        return jsonify({
-            "schemas": ["urn:ietf:params:scim:api:messages:2.0:Error"],
-            "detail": "Invalid schema",
-            "status": "400",
-        }), 400
+        return jsonify(
+            {
+                "schemas": ["urn:ietf:params:scim:api:messages:2.0:Error"],
+                "detail": "Invalid schema",
+                "status": "400",
+            }
+        ), 400
 
     username = data.get("userName")
     if not username:
-        return jsonify({
-            "schemas": ["urn:ietf:params:scim:api:messages:2.0:Error"],
-            "detail": "userName required",
-            "status": "400",
-        }), 400
+        return jsonify(
+            {
+                "schemas": ["urn:ietf:params:scim:api:messages:2.0:Error"],
+                "detail": "userName required",
+                "status": "400",
+            }
+        ), 400
 
     email = None
     emails = data.get("emails", [])
@@ -579,18 +641,22 @@ def scim_create_user():
         (_User.username == username) | (_User.email == email)
     ).first()
     if existing:
-        return jsonify({
-            "schemas": ["urn:ietf:params:scim:api:messages:2.0:Error"],
-            "detail": "User already exists",
-            "status": "409",
-        }), 409
+        return jsonify(
+            {
+                "schemas": ["urn:ietf:params:scim:api:messages:2.0:Error"],
+                "detail": "User already exists",
+                "status": "409",
+            }
+        ), 409
 
     user = _User(
         username=username,
         email=email or f"{username}@scim.provisioned",
         role=_UserRole.VIEWER,
         status=_UserStatus.ACTIVE,
-        password_hash=bcrypt.hashpw(secrets.token_bytes(32), bcrypt.gensalt()).decode("utf-8"),
+        password_hash=bcrypt.hashpw(secrets.token_bytes(32), bcrypt.gensalt()).decode(
+            "utf-8"
+        ),
     )
     _db.session.add(user)
     _db.session.commit()
@@ -609,11 +675,13 @@ def scim_get_user(user_id: str):
         user = None
 
     if not user:
-        return jsonify({
-            "schemas": ["urn:ietf:params:scim:api:messages:2.0:Error"],
-            "detail": "User not found",
-            "status": "404",
-        }), 404
+        return jsonify(
+            {
+                "schemas": ["urn:ietf:params:scim:api:messages:2.0:Error"],
+                "detail": "User not found",
+                "status": "404",
+            }
+        ), 404
 
     return jsonify(_user_to_scim(user)), 200
 
@@ -628,11 +696,13 @@ def scim_update_user(user_id: str):
         user = None
 
     if not user:
-        return jsonify({
-            "schemas": ["urn:ietf:params:scim:api:messages:2.0:Error"],
-            "detail": "User not found",
-            "status": "404",
-        }), 404
+        return jsonify(
+            {
+                "schemas": ["urn:ietf:params:scim:api:messages:2.0:Error"],
+                "detail": "User not found",
+                "status": "404",
+            }
+        ), 404
 
     data = request.get_json() or {}
 
@@ -669,25 +739,28 @@ def scim_delete_user(user_id: str):
 @scim_bp.route("/ServiceProviderConfig", methods=["GET"])
 def scim_service_provider_config():
     """SCIM 2.0 ServiceProviderConfig discovery."""
-    return jsonify({
-        "schemas": ["urn:ietf:params:scim:schemas:core:2.0:ServiceProviderConfig"],
-        "patch": {"supported": False},
-        "bulk": {"supported": False, "maxOperations": 0, "maxPayloadSize": 0},
-        "filter": {"supported": True, "maxResults": 200},
-        "changePassword": {"supported": True},
-        "sort": {"supported": False},
-        "etag": {"supported": False},
-        "authenticationSchemes": [
-            {
-                "type": "oauthbearertoken",
-                "name": "OAuth Bearer Token",
-                "description": "Authentication via OAuth 2.0 Bearer Token",
-            }
-        ],
-    }), 200
+    return jsonify(
+        {
+            "schemas": ["urn:ietf:params:scim:schemas:core:2.0:ServiceProviderConfig"],
+            "patch": {"supported": False},
+            "bulk": {"supported": False, "maxOperations": 0, "maxPayloadSize": 0},
+            "filter": {"supported": True, "maxResults": 200},
+            "changePassword": {"supported": True},
+            "sort": {"supported": False},
+            "etag": {"supported": False},
+            "authenticationSchemes": [
+                {
+                    "type": "oauthbearertoken",
+                    "name": "OAuth Bearer Token",
+                    "description": "Authentication via OAuth 2.0 Bearer Token",
+                }
+            ],
+        }
+    ), 200
 
 
 # ── Registration helper ──────────────────────────────────────────────
+
 
 def register_enterprise_auth(app):
     """Register all enterprise auth blueprints on the Flask app.
@@ -699,6 +772,7 @@ def register_enterprise_auth(app):
 
     # Import from the app module that called us
     from app import db, User, UserRole, UserStatus
+
     _db = db
     _User = User
     _UserRole = UserRole

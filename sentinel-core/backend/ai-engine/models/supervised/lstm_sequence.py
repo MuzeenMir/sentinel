@@ -5,6 +5,7 @@ Processes ordered sequences of network events through a bidirectional LSTM
 with attention to detect multi-step attacks, lateral movement, and other
 time-dependent threat patterns.
 """
+
 import json
 import logging
 import os
@@ -229,9 +230,11 @@ class LSTMSequenceDetector(BaseDetector):
         if features.ndim == 1:
             total = seq_len * input_size
             if len(features) == input_size:
-                features = np.broadcast_to(
-                    features, (seq_len, input_size)
-                ).reshape(1, seq_len, input_size).copy()
+                features = (
+                    np.broadcast_to(features, (seq_len, input_size))
+                    .reshape(1, seq_len, input_size)
+                    .copy()
+                )
             elif len(features) == total:
                 features = features.reshape(1, seq_len, input_size)
             elif len(features) < total:
@@ -347,7 +350,8 @@ class LSTMSequenceDetector(BaseDetector):
                 logger.warning(
                     "LSTM GPU forward failed at chunk [%d:%d]; falling "
                     "back to CPU for the rest of this batch",
-                    start, end,
+                    start,
+                    end,
                 )
                 if self.device.type == "cuda":
                     try:
@@ -363,7 +367,8 @@ class LSTMSequenceDetector(BaseDetector):
                 logger.error(
                     "LSTM batch prediction error on chunk [%d:%d]; "
                     "returning stub verdicts",
-                    start, end,
+                    start,
+                    end,
                 )
                 results.extend(
                     {
@@ -434,9 +439,7 @@ class LSTMSequenceDetector(BaseDetector):
             return probs
 
         except Exception as exc:
-            logger.error(
-                "LSTM forward (device=%s) failed: %s", target_device, exc
-            )
+            logger.error("LSTM forward (device=%s) failed: %s", target_device, exc)
             return None
 
     # ------------------------------------------------------------------

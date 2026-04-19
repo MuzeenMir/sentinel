@@ -1,4 +1,5 @@
 """Payment Card Industry Data Security Standard (PCI DSS) v4.0 compliance framework."""
+
 import logging
 from typing import Any, Dict, List
 
@@ -216,7 +217,6 @@ _PCI_DSS_CONTROLS: List[Dict[str, Any]] = [
 
 
 class PCIDSSFramework(BaseFramework):
-
     @property
     def full_name(self) -> str:
         return "Payment Card Industry Data Security Standard v4.0"
@@ -242,9 +242,7 @@ class PCIDSSFramework(BaseFramework):
             logger.exception("PCI DSS assessment failed")
             raise
 
-    def detailed_gap_analysis(
-        self, current_controls: Dict
-    ) -> List[Dict[str, Any]]:
+    def detailed_gap_analysis(self, current_controls: Dict) -> List[Dict[str, Any]]:
         try:
             return self._default_gap_analysis(current_controls)
         except Exception:

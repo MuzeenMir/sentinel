@@ -10,92 +10,101 @@ Each loader reads raw CSVs, normalises column names, maps attack labels to
 the SENTINEL ThreatCategory enum, engineers the 50-feature vector expected
 by the detection models, and returns NumPy arrays ready for training.
 """
+
 from __future__ import annotations
 
 import logging
-import os
-import re
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.preprocessing import StandardScaler
 
 logger = logging.getLogger(__name__)
 
 # ── SENTINEL label mapping ───────────────────────────────────────────────────
 
 THREAT_CATEGORIES = [
-    "benign", "malware", "dos_attack", "ddos_attack",
-    "brute_force", "port_scan", "sql_injection", "xss",
-    "data_exfiltration", "lateral_movement", "c2_communication",
-    "ransomware", "unknown",
+    "benign",
+    "malware",
+    "dos_attack",
+    "ddos_attack",
+    "brute_force",
+    "port_scan",
+    "sql_injection",
+    "xss",
+    "data_exfiltration",
+    "lateral_movement",
+    "c2_communication",
+    "ransomware",
+    "unknown",
 ]
 
 LABEL_TO_IDX: Dict[str, int] = {c: i for i, c in enumerate(THREAT_CATEGORIES)}
 
 # CIC-IDS2018 label → SENTINEL category
 _CICIDS2018_MAP: Dict[str, str] = {
-    "Benign":               "benign",
-    "Bot":                  "malware",
-    "Brute Force -Web":     "brute_force",
-    "Brute Force -XSS":     "xss",
-    "DDOS attack-HOIC":     "ddos_attack",
+    "Benign": "benign",
+    "Bot": "malware",
+    "Brute Force -Web": "brute_force",
+    "Brute Force -XSS": "xss",
+    "DDOS attack-HOIC": "ddos_attack",
     "DDOS attack-LOIC-UDP": "ddos_attack",
     "DDoS attacks-LOIC-HTTP": "ddos_attack",
-    "DoS attacks-GoldenEye":"dos_attack",
-    "DoS attacks-Hulk":     "dos_attack",
+    "DoS attacks-GoldenEye": "dos_attack",
+    "DoS attacks-Hulk": "dos_attack",
     "DoS attacks-SlowHTTPTest": "dos_attack",
-    "DoS attacks-Slowloris":"dos_attack",
-    "FTP-BruteForce":       "brute_force",
-    "Infilteration":        "lateral_movement",
-    "SQL Injection":        "sql_injection",
-    "SSH-Bruteforce":       "brute_force",
+    "DoS attacks-Slowloris": "dos_attack",
+    "FTP-BruteForce": "brute_force",
+    "Infilteration": "lateral_movement",
+    "SQL Injection": "sql_injection",
+    "SSH-Bruteforce": "brute_force",
 }
 
 # CIC-IDS2017 label → SENTINEL category
 _CICIDS2017_MAP: Dict[str, str] = {
-    "BENIGN":              "benign",
-    "Bot":                 "malware",
-    "DDoS":                "ddos_attack",
-    "DoS GoldenEye":       "dos_attack",
-    "DoS Hulk":            "dos_attack",
-    "DoS Slowhttptest":    "dos_attack",
-    "DoS slowloris":       "dos_attack",
-    "FTP-Patator":         "brute_force",
-    "Heartbleed":          "data_exfiltration",
-    "Infiltration":        "lateral_movement",
-    "PortScan":            "port_scan",
-    "SSH-Patator":         "brute_force",
+    "BENIGN": "benign",
+    "Bot": "malware",
+    "DDoS": "ddos_attack",
+    "DoS GoldenEye": "dos_attack",
+    "DoS Hulk": "dos_attack",
+    "DoS Slowhttptest": "dos_attack",
+    "DoS slowloris": "dos_attack",
+    "FTP-Patator": "brute_force",
+    "Heartbleed": "data_exfiltration",
+    "Infiltration": "lateral_movement",
+    "PortScan": "port_scan",
+    "SSH-Patator": "brute_force",
     "Web Attack \x96 Brute Force": "brute_force",
     "Web Attack – Brute Force": "brute_force",
     "Web Attack \x96 Sql Injection": "sql_injection",
     "Web Attack – Sql Injection": "sql_injection",
-    "Web Attack \x96 XSS":  "xss",
-    "Web Attack – XSS":     "xss",
+    "Web Attack \x96 XSS": "xss",
+    "Web Attack – XSS": "xss",
 }
 
 # UNSW-NB15 attack_cat → SENTINEL category
 _UNSW_MAP: Dict[str, str] = {
-    "Normal":        "benign",
-    "Fuzzers":       "unknown",
-    "Analysis":      "unknown",
-    "Backdoor":      "malware",
-    "Backdoors":     "malware",
-    "DoS":           "dos_attack",
-    "Exploits":      "malware",
-    "Generic":       "unknown",
-    "Reconnaissance":"port_scan",
-    "Shellcode":     "malware",
-    "Worms":         "ransomware",
+    "Normal": "benign",
+    "Fuzzers": "unknown",
+    "Analysis": "unknown",
+    "Backdoor": "malware",
+    "Backdoors": "malware",
+    "DoS": "dos_attack",
+    "Exploits": "malware",
+    "Generic": "unknown",
+    "Reconnaissance": "port_scan",
+    "Shellcode": "malware",
+    "Worms": "ransomware",
 }
 
 N_FEATURES = 50  # expected feature vector size
 
 
 # ── Shared helpers ───────────────────────────────────────────────────────────
+
 
 def _clean_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Strip whitespace from column names and lowercase them."""
@@ -125,6 +134,7 @@ def _pad_or_truncate(X: np.ndarray, n_features: int = N_FEATURES) -> np.ndarray:
 
 
 # ── CIC-IDS2018 loader ──────────────────────────────────────────────────────
+
 
 def load_cicids2018(
     data_dir: str,
@@ -166,19 +176,42 @@ def load_cicids2018(
             if label_col is None:
                 raise KeyError(f"Cannot find label column. Columns: {list(df.columns)}")
             df["_sentinel_label"] = (
-                df[label_col].astype(str).str.strip().map(_CICIDS2018_MAP).fillna("unknown")
+                df[label_col]
+                .astype(str)
+                .str.strip()
+                .map(_CICIDS2018_MAP)
+                .fillna("unknown")
             )
             df["_sentinel_y"] = df["_sentinel_label"].map(LABEL_TO_IDX)
-            drop_cols = [c for c in df.columns if c in (
-                label_col, "_sentinel_label", "timestamp", "flow_id",
-                "src_ip", "src_port", "dst_ip", "dst_port", "protocol",
-            ) or c.startswith("_sentinel")]
+            drop_cols = [
+                c
+                for c in df.columns
+                if c
+                in (
+                    label_col,
+                    "_sentinel_label",
+                    "timestamp",
+                    "flow_id",
+                    "src_ip",
+                    "src_port",
+                    "dst_ip",
+                    "dst_port",
+                    "protocol",
+                )
+                or c.startswith("_sentinel")
+            ]
             feature_cols = [c for c in df.columns if c not in drop_cols]
             feature_names = list(feature_cols[:N_FEATURES])
-            feature_names += [f"pad_{i}" for i in range(N_FEATURES - len(feature_names))]
+            feature_names += [
+                f"pad_{i}" for i in range(N_FEATURES - len(feature_names))
+            ]
         else:
             df["_sentinel_label"] = (
-                df[label_col].astype(str).str.strip().map(_CICIDS2018_MAP).fillna("unknown")
+                df[label_col]
+                .astype(str)
+                .str.strip()
+                .map(_CICIDS2018_MAP)
+                .fillna("unknown")
             )
             df["_sentinel_y"] = df["_sentinel_label"].map(LABEL_TO_IDX)
 
@@ -212,6 +245,7 @@ def load_cicids2018(
 
 
 # ── CIC-IDS2017 loader ──────────────────────────────────────────────────────
+
 
 def load_cicids2017(
     data_dir: str,
@@ -250,11 +284,26 @@ def load_cicids2017(
     )
     df["_sentinel_y"] = df["_sentinel_label"].map(LABEL_TO_IDX)
 
-    drop_cols = [c for c in df.columns if c in (
-        label_col, "timestamp", "flow_id",
-        "source_ip", "source_port", "destination_ip", "destination_port",
-        "src_ip", "src_port", "dst_ip", "dst_port", "protocol",
-    ) or c.startswith("_sentinel")]
+    drop_cols = [
+        c
+        for c in df.columns
+        if c
+        in (
+            label_col,
+            "timestamp",
+            "flow_id",
+            "source_ip",
+            "source_port",
+            "destination_ip",
+            "destination_port",
+            "src_ip",
+            "src_port",
+            "dst_ip",
+            "dst_port",
+            "protocol",
+        )
+        or c.startswith("_sentinel")
+    ]
     feature_cols = [c for c in df.columns if c not in drop_cols]
 
     df_features = df[feature_cols].copy()
@@ -265,7 +314,9 @@ def load_cicids2017(
     y = df["_sentinel_y"].values.astype(np.int64)
 
     if max_rows and len(df_features) > max_rows:
-        idx = np.random.RandomState(42).choice(len(df_features), max_rows, replace=False)
+        idx = np.random.RandomState(42).choice(
+            len(df_features), max_rows, replace=False
+        )
         df_features = df_features.iloc[idx]
         y = y[idx]
 
@@ -279,6 +330,7 @@ def load_cicids2017(
 
 
 # ── UNSW-NB15 loader ────────────────────────────────────────────────────────
+
 
 def load_unsw_nb15(
     data_dir: str,
@@ -296,7 +348,9 @@ def load_unsw_nb15(
         df_test = _clean_columns(pd.read_csv(test_file, low_memory=False))
         df = pd.concat([df_train, df_test], ignore_index=True)
     else:
-        csv_files = sorted(data_path.glob("UNSW-NB15_*.csv")) or sorted(data_path.glob("*.csv"))
+        csv_files = sorted(data_path.glob("UNSW-NB15_*.csv")) or sorted(
+            data_path.glob("*.csv")
+        )
         if not csv_files:
             raise FileNotFoundError(f"No CSV files in {data_path}")
         frames = [_clean_columns(pd.read_csv(f, low_memory=False)) for f in csv_files]
@@ -324,10 +378,22 @@ def load_unsw_nb15(
 
     df["_sentinel_y"] = df["_sentinel_label"].map(LABEL_TO_IDX)
 
-    drop_cols = [c for c in df.columns if c in (
-        label_col, "id", "attack_cat", "attack_category",
-        "srcip", "sport", "dstip", "dsport",
-    ) or c.startswith("_sentinel")]
+    drop_cols = [
+        c
+        for c in df.columns
+        if c
+        in (
+            label_col,
+            "id",
+            "attack_cat",
+            "attack_category",
+            "srcip",
+            "sport",
+            "dstip",
+            "dsport",
+        )
+        or c.startswith("_sentinel")
+    ]
     feature_cols = [c for c in df.columns if c not in drop_cols]
 
     df_features = df[feature_cols].copy()
@@ -344,7 +410,9 @@ def load_unsw_nb15(
     y = df["_sentinel_y"].values.astype(np.int64)
 
     if max_rows and len(df_features) > max_rows:
-        idx = np.random.RandomState(42).choice(len(df_features), max_rows, replace=False)
+        idx = np.random.RandomState(42).choice(
+            len(df_features), max_rows, replace=False
+        )
         df_features = df_features.iloc[idx]
         y = y[idx]
 
@@ -362,7 +430,7 @@ def load_unsw_nb15(
 DATASET_LOADERS = {
     "cicids2018": load_cicids2018,
     "cicids2017": load_cicids2017,
-    "unsw_nb15":  load_unsw_nb15,
+    "unsw_nb15": load_unsw_nb15,
 }
 
 
@@ -392,7 +460,9 @@ def load_dataset(
     """
     loader = DATASET_LOADERS.get(dataset)
     if loader is None:
-        raise ValueError(f"Unknown dataset '{dataset}'. Choose from: {list(DATASET_LOADERS)}")
+        raise ValueError(
+            f"Unknown dataset '{dataset}'. Choose from: {list(DATASET_LOADERS)}"
+        )
 
     cache_file = _cache_path(dataset, max_rows)
     if cache_file.exists():
@@ -407,7 +477,8 @@ def load_dataset(
         logger.info("Saving preprocessed cache to %s", cache_file)
         np.savez_compressed(
             cache_file,
-            X=X, y=y,
+            X=X,
+            y=y,
             feature_names=np.array(feature_names, dtype=object),
         )
 
@@ -418,7 +489,11 @@ def load_dataset(
     n_classes = len(np.unique(y))
 
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=test_size, random_state=random_state, stratify=y,
+        X,
+        y,
+        test_size=test_size,
+        random_state=random_state,
+        stratify=y,
     )
 
     # Fit scaler on training data only to prevent data leakage
@@ -428,7 +503,10 @@ def load_dataset(
 
     logger.info(
         "Dataset split: train=%d  test=%d  features=%d  classes=%d",
-        len(X_train), len(X_test), X_train.shape[1], n_classes,
+        len(X_train),
+        len(X_test),
+        X_train.shape[1],
+        n_classes,
     )
 
     return {
@@ -483,12 +561,19 @@ def load_multiple_datasets(
     n_classes = len(np.unique(y))
 
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=test_size, random_state=random_state, stratify=y,
+        X,
+        y,
+        test_size=test_size,
+        random_state=random_state,
+        stratify=y,
     )
 
     logger.info(
         "Merged %d datasets: train=%d  test=%d  classes=%d",
-        len(datasets), len(X_train), len(X_test), n_classes,
+        len(datasets),
+        len(X_train),
+        len(X_test),
+        n_classes,
     )
 
     return {

@@ -5,6 +5,7 @@ Uses a meta-learner (logistic regression by default) trained on the output
 of base detectors to produce a single unified verdict.  Falls back to
 weighted-average voting when no meta-learner has been trained.
 """
+
 import json
 import logging
 import os
@@ -185,9 +186,7 @@ class StackingEnsemble:
     # Meta-learner training
     # ------------------------------------------------------------------
 
-    def train_meta_learner(
-        self, X: np.ndarray, y: np.ndarray
-    ) -> Dict[str, float]:
+    def train_meta_learner(self, X: np.ndarray, y: np.ndarray) -> Dict[str, float]:
         """
         Train the stacking meta-learner on base-detector outputs.
 
@@ -264,7 +263,7 @@ class StackingEnsemble:
         boost = 0.0
         criticality = float(context.get("asset_criticality", 0))
         if criticality >= 4:
-            boost += (criticality - 3) * 0.05   # +0.05 per step above 3
+            boost += (criticality - 3) * 0.05  # +0.05 per step above 3
         if str(context.get("user_role", "")).lower() in ("admin", "administrator"):
             boost += 0.03
         time_risk = float(context.get("time_risk", 0))
@@ -276,9 +275,7 @@ class StackingEnsemble:
             result["threat_score"] = min(1.0, result.get("threat_score", 0.0) + boost)
         return result
 
-    def _verdicts_to_meta_features(
-        self, verdicts: Dict[str, Dict]
-    ) -> np.ndarray:
+    def _verdicts_to_meta_features(self, verdicts: Dict[str, Dict]) -> np.ndarray:
         feats: List[float] = []
         for name in sorted(self.base_detectors.keys()):
             v = verdicts.get(name, {})
@@ -297,13 +294,13 @@ class StackingEnsemble:
             confidence = float(probs[cls])
             is_threat = cls != 0
         except Exception as exc:
-            logger.error(
-                "Meta-learner failed, falling back to weighted vote: %s", exc
-            )
+            logger.error("Meta-learner failed, falling back to weighted vote: %s", exc)
             return self._predict_weighted(verdicts)
 
         threat_score = confidence if is_threat else 0.0
-        consensus = sum(1 for v in verdicts.values() if v.get("is_threat")) / max(len(verdicts), 1)
+        consensus = sum(1 for v in verdicts.values() if v.get("is_threat")) / max(
+            len(verdicts), 1
+        )
         return {
             "is_threat": is_threat and confidence >= self.threshold,
             "threat_score": float(threat_score),
@@ -339,7 +336,9 @@ class StackingEnsemble:
             threat_ratio = 0.0
 
         is_threat = threat_ratio >= 0.5 and weighted_conf >= self.threshold
-        threat_score = float(weighted_conf) if is_threat else float(weighted_conf * threat_ratio)
+        threat_score = (
+            float(weighted_conf) if is_threat else float(weighted_conf * threat_ratio)
+        )
         consensus = threat_ratio
 
         return {
@@ -361,9 +360,7 @@ class StackingEnsemble:
     def _threat_type_str(tt: Any) -> str:
         return tt.value if hasattr(tt, "value") else str(tt)
 
-    def _resolve_threat_type(
-        self, verdicts: Dict[str, Dict], is_threat: bool
-    ) -> str:
+    def _resolve_threat_type(self, verdicts: Dict[str, Dict], is_threat: bool) -> str:
         if not is_threat:
             return ThreatCategory.BENIGN.value
 

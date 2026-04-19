@@ -1,4 +1,5 @@
 """iptables firewall adapter."""
+
 import logging
 import os
 import shutil
@@ -44,17 +45,17 @@ class IptablesAdapter(BaseVendorAdapter):
 
     # ── public API ────────────────────────────────────────────────
 
-    def translate_rules(
-        self, rules: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
+    def translate_rules(self, rules: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         translated = []
         for rule in rules:
             cmds = self._rule_to_commands(rule, flag="-A")
-            translated.append({
-                "rule_id": rule.get("id"),
-                "commands": cmds,
-                "original_rule": rule,
-            })
+            translated.append(
+                {
+                    "rule_id": rule.get("id"),
+                    "commands": cmds,
+                    "original_rule": rule,
+                }
+            )
         return translated
 
     def apply_rules(self, rules: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -96,12 +97,8 @@ class IptablesAdapter(BaseVendorAdapter):
     # ── internals ─────────────────────────────────────────────────
 
     @staticmethod
-    def _rule_to_commands(
-        rule: Dict[str, Any], flag: str = "-A"
-    ) -> List[str]:
-        chain = _DIRECTION_CHAIN.get(
-            rule.get("direction", "INBOUND"), "INPUT"
-        )
+    def _rule_to_commands(rule: Dict[str, Any], flag: str = "-A") -> List[str]:
+        chain = _DIRECTION_CHAIN.get(rule.get("direction", "INBOUND"), "INPUT")
         target = _ACTION_TARGET.get(rule.get("action", "DENY"), "DROP")
         proto = _PROTO_MAP.get(rule.get("protocol", "any"), "all")
 
@@ -125,12 +122,18 @@ class IptablesAdapter(BaseVendorAdapter):
             parts.extend(["--dport", port_str])
 
         if rule.get("action") == "RATE_LIMIT":
-            parts.extend([
-                "-m", "hashlimit",
-                "--hashlimit-above", "10/sec",
-                "--hashlimit-mode", "srcip",
-                "--hashlimit-name", rule.get("id", "sentinel")[:15],
-            ])
+            parts.extend(
+                [
+                    "-m",
+                    "hashlimit",
+                    "--hashlimit-above",
+                    "10/sec",
+                    "--hashlimit-mode",
+                    "srcip",
+                    "--hashlimit-name",
+                    rule.get("id", "sentinel")[:15],
+                ]
+            )
 
         if target == "LOG":
             prefix = f"SENTINEL:{rule.get('id', 'rule')}:"

@@ -42,6 +42,7 @@ class IntegrationAdapter(ABC):
 
 # ── Webhook ──────────────────────────────────────────────────────────
 
+
 class WebhookAdapter(IntegrationAdapter):
     """Generic HTTP webhook -- POSTs JSON events to a configured URL."""
 
@@ -63,7 +64,10 @@ class WebhookAdapter(IntegrationAdapter):
         if secret:
             import hashlib
             import hmac
-            sig = hmac.new(secret.encode(), json.dumps(payload).encode(), hashlib.sha256).hexdigest()
+
+            sig = hmac.new(
+                secret.encode(), json.dumps(payload).encode(), hashlib.sha256
+            ).hexdigest()
             headers["X-Sentinel-Signature"] = sig
 
         try:
@@ -76,6 +80,7 @@ class WebhookAdapter(IntegrationAdapter):
 
 
 # ── SIEM: Splunk HEC ────────────────────────────────────────────────
+
 
 class SplunkHECAdapter(IntegrationAdapter):
     """Splunk HTTP Event Collector integration."""
@@ -117,6 +122,7 @@ class SplunkHECAdapter(IntegrationAdapter):
 
 # ── SIEM: Elastic ────────────────────────────────────────────────────
 
+
 class ElasticSIEMAdapter(IntegrationAdapter):
     """Elasticsearch / Elastic SIEM integration."""
 
@@ -153,6 +159,7 @@ class ElasticSIEMAdapter(IntegrationAdapter):
 
 
 # ── SOAR: XSOAR ─────────────────────────────────────────────────────
+
 
 class XSOARAdapter(IntegrationAdapter):
     """Palo Alto Cortex XSOAR incident creation."""
@@ -191,6 +198,7 @@ class XSOARAdapter(IntegrationAdapter):
 
 # ── Ticketing: ServiceNow ────────────────────────────────────────────
 
+
 class ServiceNowAdapter(IntegrationAdapter):
     """ServiceNow incident table integration."""
 
@@ -216,7 +224,10 @@ class ServiceNowAdapter(IntegrationAdapter):
                 f"https://{instance}.service-now.com/api/now/table/{table}",
                 json=incident,
                 auth=(username, password),
-                headers={"Content-Type": "application/json", "Accept": "application/json"},
+                headers={
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                },
                 timeout=15,
             )
             resp.raise_for_status()
@@ -227,6 +238,7 @@ class ServiceNowAdapter(IntegrationAdapter):
 
 
 # ── Ticketing: Jira ──────────────────────────────────────────────────
+
 
 class JiraAdapter(IntegrationAdapter):
     """Jira Cloud / Server issue creation."""
@@ -246,7 +258,9 @@ class JiraAdapter(IntegrationAdapter):
                 "summary": f"SENTINEL: {event.get('type', 'security_event')}",
                 "description": json.dumps(event, indent=2),
                 "issuetype": {"name": "Bug"},
-                "priority": {"name": _map_severity_to_jira(event.get("severity", "medium"))},
+                "priority": {
+                    "name": _map_severity_to_jira(event.get("severity", "medium"))
+                },
             }
         }
 
@@ -266,6 +280,7 @@ class JiraAdapter(IntegrationAdapter):
 
 
 # ── CEF Formatter ────────────────────────────────────────────────────
+
 
 def format_cef(event: Dict[str, Any]) -> str:
     """Format a SENTINEL event as CEF (Common Event Format) for SIEM ingestion."""
@@ -338,6 +353,7 @@ class IntegrationDispatcher:
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
+
 def format_leef(event: Dict[str, Any]) -> str:
     """Format a SENTINEL event as LEEF 2.0 (Log Event Extended Format) for IBM QRadar."""
     severity_map = {"low": 3, "medium": 5, "high": 7, "critical": 10}
@@ -367,8 +383,17 @@ def format_leef(event: Dict[str, Any]) -> str:
 def _map_severity_to_xsoar(severity: str) -> int:
     return {"low": 1, "medium": 2, "high": 3, "critical": 4}.get(severity.lower(), 2)
 
+
 def _map_severity_to_snow(severity: str) -> str:
-    return {"low": "3", "medium": "2", "high": "1", "critical": "1"}.get(severity.lower(), "2")
+    return {"low": "3", "medium": "2", "high": "1", "critical": "1"}.get(
+        severity.lower(), "2"
+    )
+
 
 def _map_severity_to_jira(severity: str) -> str:
-    return {"low": "Low", "medium": "Medium", "high": "High", "critical": "Highest"}.get(severity.lower(), "Medium")
+    return {
+        "low": "Low",
+        "medium": "Medium",
+        "high": "High",
+        "critical": "Highest",
+    }.get(severity.lower(), "Medium")

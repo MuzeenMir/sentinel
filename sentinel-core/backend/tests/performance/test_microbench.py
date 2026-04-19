@@ -7,13 +7,13 @@ and measuring inference/decision wall-clock time.
 Usage:
     pytest test_microbench.py -v --tb=short
 """
+
 import importlib.util
 import json
-import os
 import sys
 import time
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
@@ -68,11 +68,13 @@ class TestAIInferenceLatency:
         p95 = latencies[int(len(latencies) * 0.95)]
         mean_lat = sum(latencies) / len(latencies)
 
-        assert p95 < self.THRESHOLD_MS, (
-            f"AI inference p95={p95:.2f}ms exceeds {self.THRESHOLD_MS}ms"
+        assert (
+            p95 < self.THRESHOLD_MS
+        ), f"AI inference p95={p95:.2f}ms exceeds {self.THRESHOLD_MS}ms"
+        print(
+            f"\nAI inference (RF-50 trees): mean={mean_lat:.2f}ms, p95={p95:.2f}ms "
+            f"(threshold={self.THRESHOLD_MS}ms)"
         )
-        print(f"\nAI inference (RF-50 trees): mean={mean_lat:.2f}ms, p95={p95:.2f}ms "
-              f"(threshold={self.THRESHOLD_MS}ms)")
 
 
 # ---------------------------------------------------------------------------
@@ -110,7 +112,7 @@ class TestDRLDecisionLatency:
             for _ in range(self.ITERATIONS):
                 t0 = time.perf_counter()
                 logits = policy_net(state)
-                action = torch.argmax(logits, dim=1).item()
+                torch.argmax(logits, dim=1).item()
                 t1 = time.perf_counter()
                 latencies.append((t1 - t0) * 1000)
 
@@ -118,11 +120,13 @@ class TestDRLDecisionLatency:
         p95 = latencies[int(len(latencies) * 0.95)]
         mean_lat = sum(latencies) / len(latencies)
 
-        assert p95 < self.THRESHOLD_MS, (
-            f"DRL decision p95={p95:.2f}ms exceeds {self.THRESHOLD_MS}ms"
+        assert (
+            p95 < self.THRESHOLD_MS
+        ), f"DRL decision p95={p95:.2f}ms exceeds {self.THRESHOLD_MS}ms"
+        print(
+            f"\nDRL decision: mean={mean_lat:.2f}ms, p95={p95:.2f}ms "
+            f"(threshold={self.THRESHOLD_MS}ms)"
         )
-        print(f"\nDRL decision: mean={mean_lat:.2f}ms, p95={p95:.2f}ms "
-              f"(threshold={self.THRESHOLD_MS}ms)")
 
 
 # ---------------------------------------------------------------------------
@@ -154,11 +158,13 @@ class TestSerializationThroughput:
         elapsed = time.perf_counter() - t0
 
         throughput = self.EVENTS / elapsed
-        assert throughput > self.TARGET_EPS, (
-            f"Serialization {throughput:.0f} events/sec < target {self.TARGET_EPS}"
+        assert (
+            throughput > self.TARGET_EPS
+        ), f"Serialization {throughput:.0f} events/sec < target {self.TARGET_EPS}"
+        print(
+            f"\nSerialization: {throughput:.0f} events/sec "
+            f"(target={self.TARGET_EPS})"
         )
-        print(f"\nSerialization: {throughput:.0f} events/sec "
-              f"(target={self.TARGET_EPS})")
 
 
 # ---------------------------------------------------------------------------
@@ -189,7 +195,7 @@ class TestRedisOperationOverhead:
 
         latencies.sort()
         p95 = latencies[int(len(latencies) * 0.95)]
-        assert p95 < self.THRESHOLD_MS, (
-            f"Redis overhead p95={p95:.3f}ms exceeds {self.THRESHOLD_MS}ms"
-        )
+        assert (
+            p95 < self.THRESHOLD_MS
+        ), f"Redis overhead p95={p95:.3f}ms exceeds {self.THRESHOLD_MS}ms"
         print(f"\nRedis overhead: p95={p95:.3f}ms (threshold={self.THRESHOLD_MS}ms)")

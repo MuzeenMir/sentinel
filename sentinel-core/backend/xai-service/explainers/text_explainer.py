@@ -1,4 +1,5 @@
 """Natural-language explanation generator for AI detections and DRL policy decisions."""
+
 import logging
 from typing import Any, Dict, List
 
@@ -41,7 +42,6 @@ _FEATURE_DESCRIPTIONS: Dict[str, str] = {
 
 
 class TextExplainer:
-
     def explain_detection(
         self,
         features: Dict[str, Any],
@@ -66,7 +66,7 @@ class TextExplainer:
             return {
                 "summary": "Explanation unavailable due to an internal error.",
                 "detailed": "The explanation subsystem encountered an error. "
-                            "Please review raw detection data for analysis.",
+                "Please review raw detection data for analysis.",
             }
 
     def explain_policy_decision(
@@ -77,7 +77,9 @@ class TextExplainer:
     ) -> Dict[str, Any]:
         try:
             action_text = _ACTION_LABELS.get(action, action.lower())
-            summary = self._policy_summary(action, action_text, confidence, state_features)
+            summary = self._policy_summary(
+                action, action_text, confidence, state_features
+            )
             reasoning = self._policy_reasoning(action, state_features, confidence)
             basis = self._policy_basis(action, state_features, confidence)
 
@@ -222,9 +224,7 @@ class TextExplainer:
         state_features: Dict[str, Any],
         confidence: float,
     ) -> str:
-        basis_parts: List[str] = [
-            "Decision informed by the following state features:"
-        ]
+        basis_parts: List[str] = ["Decision informed by the following state features:"]
         for feat, value in sorted(state_features.items()):
             desc = _FEATURE_DESCRIPTIONS.get(feat, feat.replace("_", " "))
             basis_parts.append(f"  - {desc} = {value}")
@@ -238,9 +238,7 @@ class TextExplainer:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _top_contributing_features(
-        features: Dict[str, Any], n: int = 5
-    ) -> List[tuple]:
+    def _top_contributing_features(features: Dict[str, Any], n: int = 5) -> List[tuple]:
         numeric: List[tuple] = []
         for name, value in features.items():
             if isinstance(value, (int, float)):

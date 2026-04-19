@@ -7,7 +7,6 @@ BlocklistManager, and XDPCollectorService with all system-level dependencies
 """
 
 import importlib.util
-import json
 import os
 import sys
 import time
@@ -33,15 +32,19 @@ sys.path.insert(0, _backend_dir)
 # Stub ebpf_lib.schemas.events
 _events_mod = types.ModuleType("ebpf_lib.schemas.events")
 _events_mod.EventType = MagicMock()
-_events_mod.NetworkFlowEvent = type("NetworkFlowEvent", (), {
-    "src_ip": "10.0.0.1",
-    "dst_ip": "10.0.0.2",
-    "src_port": 12345,
-    "dst_port": 80,
-    "protocol": 6,
-    "bytes_sent": 1024,
-    "bytes_recv": 2048,
-})
+_events_mod.NetworkFlowEvent = type(
+    "NetworkFlowEvent",
+    (),
+    {
+        "src_ip": "10.0.0.1",
+        "dst_ip": "10.0.0.2",
+        "src_port": 12345,
+        "dst_port": 80,
+        "protocol": 6,
+        "bytes_sent": 1024,
+        "bytes_recv": 2048,
+    },
+)
 _events_mod.decode_event = MagicMock(return_value=None)
 _events_mod.event_to_json = MagicMock(return_value='{"src_ip":"10.0.0.1"}')
 
@@ -79,8 +82,6 @@ _kafka_mod.Producer = MagicMock(return_value=_mock_kafka_producer)
 sys.modules.setdefault("confluent_kafka", _kafka_mod)
 
 # Stub Redis
-import types as _types
-from functools import wraps as _wraps
 
 
 # Uses the real auth_middleware; _bypass_auth autouse fixture below
@@ -129,7 +130,10 @@ def _bypass_auth():
 
 @pytest.fixture()
 def auth_headers():
-    return {"Authorization": "Bearer test-valid-token", "Content-Type": "application/json"}
+    return {
+        "Authorization": "Bearer test-valid-token",
+        "Content-Type": "application/json",
+    }
 
 
 @pytest.fixture()
@@ -434,9 +438,15 @@ class TestCollectorStats:
         stats = xdp_app.CollectorStats()
         d = stats.to_dict()
         expected_keys = {
-            "flows_exported", "events_published", "events_dropped",
-            "packets_blocked", "bytes_blocked", "uptime_seconds",
-            "events_per_second", "last_event_time", "last_error",
+            "flows_exported",
+            "events_published",
+            "events_dropped",
+            "packets_blocked",
+            "bytes_blocked",
+            "uptime_seconds",
+            "events_per_second",
+            "last_event_time",
+            "last_error",
         }
         assert set(d.keys()) == expected_keys
 

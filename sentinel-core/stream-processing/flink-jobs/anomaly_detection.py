@@ -6,6 +6,7 @@ anomaly scoring (z-score on per-feature running statistics plus
 per-source behavioural tracking), and publishes results to dedicated
 alert and detection topics.
 """
+
 from __future__ import annotations
 
 import logging
@@ -66,11 +67,11 @@ class WelfordAccumulator:
 
 
 class AnomalyDetectionJob(BaseStreamJob):
-
     def __init__(self):
         super().__init__("anomaly-detection")
         self.input_topic = os.environ.get(
-            "KAFKA_INPUT_TOPIC", "sentinel-network-events",
+            "KAFKA_INPUT_TOPIC",
+            "sentinel-network-events",
         )
         self.alerts_topic = "sentinel-alerts"
         self.detections_topic = "sentinel-detections"
@@ -90,7 +91,9 @@ class AnomalyDetectionJob(BaseStreamJob):
         saved = self.load_checkpoint()
         if saved:
             self.stats.n = saved.get("stats_n", 0)
-            self.stats.mean = np.array(saved.get("stats_mean", np.zeros(len(FEATURE_KEYS))))
+            self.stats.mean = np.array(
+                saved.get("stats_mean", np.zeros(len(FEATURE_KEYS)))
+            )
             self.stats.m2 = np.array(saved.get("stats_m2", np.zeros(len(FEATURE_KEYS))))
             self._processed = saved.get("processed", 0)
             logger.info("Restored checkpoint: %d samples processed", self._processed)
@@ -141,7 +144,8 @@ class AnomalyDetectionJob(BaseStreamJob):
 
         src_ip = message.get("src_ip", "unknown")
         src_z = self._src_behaviour_score(
-            src_ip, float(message.get("packet_rate", 0.0)),
+            src_ip,
+            float(message.get("packet_rate", 0.0)),
         )
 
         composite = 0.6 * max_z + 0.25 * mean_z + 0.15 * src_z
@@ -171,10 +175,16 @@ class AnomalyDetectionJob(BaseStreamJob):
             self._emit_alert(message, detection, zscores, composite)
 
         if self._processed % 10_000 == 0:
-            rate = (self._anomalies_detected / self._processed * 100) if self._processed else 0
+            rate = (
+                (self._anomalies_detected / self._processed * 100)
+                if self._processed
+                else 0
+            )
             logger.info(
                 "Processed %d events, %d anomalies (%.2f%%)",
-                self._processed, self._anomalies_detected, rate,
+                self._processed,
+                self._anomalies_detected,
+                rate,
             )
             self._checkpoint()
 
@@ -186,7 +196,9 @@ class AnomalyDetectionJob(BaseStreamJob):
         composite: float,
     ):
         top_features = sorted(
-            zip(FEATURE_KEYS, zscores), key=lambda x: x[1], reverse=True,
+            zip(FEATURE_KEYS, zscores),
+            key=lambda x: x[1],
+            reverse=True,
         )[:3]
 
         if composite > ZSCORE_THRESHOLD * 2:
@@ -216,13 +228,15 @@ class AnomalyDetectionJob(BaseStreamJob):
         self.produce(self.alerts_topic, alert, key=src_ip)
 
     def _checkpoint(self):
-        self.save_checkpoint({
-            "stats_n": self.stats.n,
-            "stats_mean": self.stats.mean.tolist(),
-            "stats_m2": self.stats.m2.tolist(),
-            "processed": self._processed,
-            "anomalies_detected": self._anomalies_detected,
-        })
+        self.save_checkpoint(
+            {
+                "stats_n": self.stats.n,
+                "stats_mean": self.stats.mean.tolist(),
+                "stats_m2": self.stats.m2.tolist(),
+                "processed": self._processed,
+                "anomalies_detected": self._anomalies_detected,
+            }
+        )
 
 
 def main():

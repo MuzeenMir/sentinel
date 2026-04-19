@@ -36,11 +36,13 @@ import types as _types
 
 _TORCH_IS_REAL = False
 
+
 def _install_torch_stub():
     """Inject a minimal torch stub into sys.modules when torch is absent."""
     global _TORCH_IS_REAL
     try:
         import torch
+
         torch.zeros(1)
         _TORCH_IS_REAL = True
         return
@@ -51,18 +53,25 @@ def _install_torch_stub():
     class _Module:
         def __init_subclass__(cls, **kw):
             super().__init_subclass__(**kw)
+
         def __init__(self, *a, **kw):
             pass
+
         def parameters(self):
             return []
+
         def to(self, *a, **kw):
             return self
+
         def eval(self):
             return self
+
         def train(self, mode=True):
             return self
+
         def state_dict(self):
             return {}
+
         def load_state_dict(self, d, **kw):
             pass
 
@@ -76,13 +85,19 @@ def _install_torch_stub():
     _nn.ReLU = lambda *a, **kw: _Module()
     _nn.Softmax = lambda *a, **kw: _Module()
     _nn.LSTM = lambda *a, **kw: _Module()
-    _nn.MSELoss = lambda: (lambda x, y: type("L", (), {"item": lambda s: 0.0, "backward": lambda s: None})())
+    _nn.MSELoss = lambda: (
+        lambda x, y: type(
+            "L", (), {"item": lambda s: 0.0, "backward": lambda s: None}
+        )()
+    )
     _nn_utils = _types.ModuleType("torch.nn.utils")
     _nn_utils.clip_grad_norm_ = lambda *a, **kw: None
     _nn.utils = _nn_utils
 
     _optim = _types.ModuleType("torch.optim")
-    _optim.Adam = lambda *a, **kw: type("O", (), {"zero_grad": lambda s: None, "step": lambda s: None})()
+    _optim.Adam = lambda *a, **kw: type(
+        "O", (), {"zero_grad": lambda s: None, "step": lambda s: None}
+    )()
 
     _dist = _types.ModuleType("torch.distributions")
     _dist.Categorical = lambda *a, **kw: None
@@ -108,15 +123,21 @@ def _install_torch_stub():
     _torch.LongTensor = lambda *a: None
     _torch.save = lambda *a, **kw: None
     _torch.load = lambda *a, **kw: {}
-    _torch.no_grad = lambda: type("C", (), {"__enter__": lambda s: None, "__exit__": lambda s, *a: None})()
+    _torch.no_grad = lambda: type(
+        "C", (), {"__enter__": lambda s: None, "__exit__": lambda s, *a: None}
+    )()
     _torch.exp = lambda x: x
     _torch.clamp = lambda *a, **kw: None
     _torch.min = lambda *a: (None,)
 
     for name, mod in [
-        ("torch", _torch), ("torch.nn", _nn), ("torch.nn.utils", _nn_utils),
-        ("torch.optim", _optim), ("torch.distributions", _dist),
-        ("torch.utils", _utils), ("torch.utils.data", _data),
+        ("torch", _torch),
+        ("torch.nn", _nn),
+        ("torch.nn.utils", _nn_utils),
+        ("torch.optim", _optim),
+        ("torch.distributions", _dist),
+        ("torch.utils", _utils),
+        ("torch.utils.data", _data),
         ("torch.cuda", _cuda),
     ]:
         sys.modules.setdefault(name, mod)
@@ -136,6 +157,7 @@ _redis_patcher.start()
 
 # Use a unique module name so running alongside test_drl_engine doesn't clash.
 import importlib.util as _ilu
+
 _spec = _ilu.spec_from_file_location(
     "sentinel_ai_engine_app",
     os.path.join(_ai_engine_dir, "app.py"),
@@ -156,6 +178,7 @@ import redis as _redis_mod  # noqa: E402
 # ===================================================================
 # Helpers
 # ===================================================================
+
 
 def _make_detector(*, ready=True, version="1.0.0"):
     """Return a MagicMock that satisfies the BaseDetector interface."""
@@ -201,6 +224,7 @@ _BENIGN_RESULT = {
 # Fixtures
 # ===================================================================
 
+
 @pytest.fixture()
 def mock_redis():
     """Reset and return the pre-created Redis mock."""
@@ -229,7 +253,10 @@ def _bypass_auth():
 
 @pytest.fixture()
 def auth_headers():
-    return {"Authorization": "Bearer test-valid-token", "Content-Type": "application/json"}
+    return {
+        "Authorization": "Bearer test-valid-token",
+        "Content-Type": "application/json",
+    }
 
 
 @pytest.fixture()
@@ -318,6 +345,7 @@ def bare_client(mock_redis):
 # Health check
 # ===================================================================
 
+
 class TestHealthCheck:
     def test_healthy_when_all_models_ready(self, client, mock_detectors, mock_ensemble):
         resp = client.get("/health")
@@ -328,7 +356,9 @@ class TestHealthCheck:
         assert data["version"] == "1.0.0"
         assert all(v is True for v in data["models"].values())
 
-    def test_degraded_when_detector_not_ready(self, client, mock_detectors, mock_ensemble):
+    def test_degraded_when_detector_not_ready(
+        self, client, mock_detectors, mock_ensemble
+    ):
         mock_detectors["lstm"].is_ready.return_value = False
         resp = client.get("/health")
         data = resp.get_json()
@@ -346,7 +376,9 @@ class TestHealthCheck:
         finally:
             ai_app.ensemble = original
 
-    def test_health_does_not_require_auth(self, bare_client, mock_detectors, mock_ensemble):
+    def test_health_does_not_require_auth(
+        self, bare_client, mock_detectors, mock_ensemble
+    ):
         """Health endpoint must be public for load-balancer probes."""
         with patch("auth_middleware._verify_token", return_value=None):
             resp = bare_client.get("/health")
@@ -357,12 +389,18 @@ class TestHealthCheck:
 # Model status
 # ===================================================================
 
+
 class TestModelStatus:
     def test_returns_all_model_details(self, client, auth_headers, mock_detectors):
         resp = client.get("/api/v1/models/status", headers=auth_headers)
         assert resp.status_code == 200
         data = resp.get_json()
-        assert set(data["models"].keys()) == {"xgboost", "lstm", "isolation_forest", "autoencoder"}
+        assert set(data["models"].keys()) == {
+            "xgboost",
+            "lstm",
+            "isolation_forest",
+            "autoencoder",
+        }
         for name, info in data["models"].items():
             assert "ready" in info
             assert "version" in info
@@ -385,6 +423,7 @@ class TestModelStatus:
 # Single detection  (/api/v1/detect)
 # ===================================================================
 
+
 class TestDetect:
     @staticmethod
     def _payload(**overrides):
@@ -401,7 +440,9 @@ class TestDetect:
         base.update(overrides)
         return base
 
-    def test_successful_detection(self, client, auth_headers, mock_prediction_service, mock_redis):
+    def test_successful_detection(
+        self, client, auth_headers, mock_prediction_service, mock_redis
+    ):
         resp = client.post("/api/v1/detect", headers=auth_headers, json=self._payload())
         assert resp.status_code == 200
         mock_prediction_service.predict.assert_called_once()
@@ -409,9 +450,13 @@ class TestDetect:
         assert "detection_id" in data
         assert "is_threat" in data
 
-    def test_context_forwarded_to_service(self, client, auth_headers, mock_prediction_service):
+    def test_context_forwarded_to_service(
+        self, client, auth_headers, mock_prediction_service
+    ):
         ctx = {"asset_criticality": 5, "user_role": "admin"}
-        resp = client.post("/api/v1/detect", headers=auth_headers, json=self._payload(context=ctx))
+        resp = client.post(
+            "/api/v1/detect", headers=auth_headers, json=self._payload(context=ctx)
+        )
         assert resp.status_code == 200
         call_args = mock_prediction_service.predict.call_args
         assert call_args[0][1] == ctx
@@ -430,7 +475,9 @@ class TestDetect:
         )
         assert resp.status_code == 400
 
-    def test_prediction_service_exception_returns_500(self, client, auth_headers, mock_prediction_service):
+    def test_prediction_service_exception_returns_500(
+        self, client, auth_headers, mock_prediction_service
+    ):
         mock_prediction_service.predict.side_effect = RuntimeError("model crashed")
         resp = client.post("/api/v1/detect", headers=auth_headers, json=self._payload())
         assert resp.status_code == 500
@@ -440,7 +487,9 @@ class TestDetect:
         resp = bare_client.post("/api/v1/detect", json=self._payload())
         assert resp.status_code == 401
 
-    def test_detection_is_logged_to_redis(self, client, auth_headers, mock_prediction_service, mock_redis):
+    def test_detection_is_logged_to_redis(
+        self, client, auth_headers, mock_prediction_service, mock_redis
+    ):
         client.post("/api/v1/detect", headers=auth_headers, json=self._payload())
         mock_redis.incr.assert_any_call("ai_engine:total_detections")
 
@@ -448,6 +497,7 @@ class TestDetect:
 # ===================================================================
 # Batch detection  (/api/v1/detect/batch)
 # ===================================================================
+
 
 class TestDetectBatch:
     @staticmethod
@@ -465,21 +515,29 @@ class TestDetectBatch:
         }
 
     def test_successful_batch(self, client, auth_headers, mock_prediction_service):
-        resp = client.post("/api/v1/detect/batch", headers=auth_headers, json=self._batch_payload())
+        resp = client.post(
+            "/api/v1/detect/batch", headers=auth_headers, json=self._batch_payload()
+        )
         assert resp.status_code == 200
         data = resp.get_json()
         assert "results" in data
         assert data["total"] == 3
         assert "threats_detected" in data
 
-    def test_threats_detected_count_accurate(self, client, auth_headers, mock_prediction_service):
-        resp = client.post("/api/v1/detect/batch", headers=auth_headers, json=self._batch_payload())
+    def test_threats_detected_count_accurate(
+        self, client, auth_headers, mock_prediction_service
+    ):
+        resp = client.post(
+            "/api/v1/detect/batch", headers=auth_headers, json=self._batch_payload()
+        )
         data = resp.get_json()
         expected = sum(1 for r in data["results"] if r["is_threat"])
         assert data["threats_detected"] == expected
 
     def test_missing_traffic_batch_returns_400(self, client, auth_headers):
-        resp = client.post("/api/v1/detect/batch", headers=auth_headers, json={"foo": "bar"})
+        resp = client.post(
+            "/api/v1/detect/batch", headers=auth_headers, json={"foo": "bar"}
+        )
         assert resp.status_code == 400
         assert "traffic_batch" in resp.get_json()["error"]
 
@@ -507,9 +565,13 @@ class TestDetectBatch:
         assert resp.status_code == 200
         assert resp.get_json()["total"] == 1
 
-    def test_prediction_failure_returns_500(self, client, auth_headers, mock_prediction_service):
+    def test_prediction_failure_returns_500(
+        self, client, auth_headers, mock_prediction_service
+    ):
         mock_prediction_service.predict_batch.side_effect = RuntimeError("boom")
-        resp = client.post("/api/v1/detect/batch", headers=auth_headers, json=self._batch_payload())
+        resp = client.post(
+            "/api/v1/detect/batch", headers=auth_headers, json=self._batch_payload()
+        )
         assert resp.status_code == 500
 
     def test_requires_auth(self, bare_client):
@@ -520,6 +582,7 @@ class TestDetectBatch:
 # ===================================================================
 # Feature extraction  (/api/v1/features/extract)
 # ===================================================================
+
 
 class TestFeatureExtraction:
     @staticmethod
@@ -535,8 +598,12 @@ class TestFeatureExtraction:
         base.update(overrides)
         return base
 
-    def test_extract_all_default_types(self, bare_client, auth_headers, mock_feature_extractors):
-        resp = bare_client.post("/api/v1/features/extract", headers=auth_headers, json=self._payload())
+    def test_extract_all_default_types(
+        self, bare_client, auth_headers, mock_feature_extractors
+    ):
+        resp = bare_client.post(
+            "/api/v1/features/extract", headers=auth_headers, json=self._payload()
+        )
         assert resp.status_code == 200
         data = resp.get_json()
         assert "features" in data
@@ -544,27 +611,43 @@ class TestFeatureExtraction:
         for name in ("statistical", "behavioral", "contextual"):
             mock_feature_extractors[name].extract.assert_called_once()
 
-    def test_extract_specific_types(self, bare_client, auth_headers, mock_feature_extractors):
+    def test_extract_specific_types(
+        self, bare_client, auth_headers, mock_feature_extractors
+    ):
         payload = self._payload(feature_types=["statistical"])
-        resp = bare_client.post("/api/v1/features/extract", headers=auth_headers, json=payload)
+        resp = bare_client.post(
+            "/api/v1/features/extract", headers=auth_headers, json=payload
+        )
         assert resp.status_code == 200
         mock_feature_extractors["statistical"].extract.assert_called_once()
         mock_feature_extractors["behavioral"].extract.assert_not_called()
 
     def test_missing_raw_data_returns_400(self, bare_client, auth_headers):
-        resp = bare_client.post("/api/v1/features/extract", headers=auth_headers, json={"foo": 1})
+        resp = bare_client.post(
+            "/api/v1/features/extract", headers=auth_headers, json={"foo": 1}
+        )
         assert resp.status_code == 400
         assert "raw_data" in resp.get_json()["error"]
 
-    def test_unknown_feature_type_ignored(self, bare_client, auth_headers, mock_feature_extractors):
+    def test_unknown_feature_type_ignored(
+        self, bare_client, auth_headers, mock_feature_extractors
+    ):
         payload = self._payload(feature_types=["nonexistent"])
-        resp = bare_client.post("/api/v1/features/extract", headers=auth_headers, json=payload)
+        resp = bare_client.post(
+            "/api/v1/features/extract", headers=auth_headers, json=payload
+        )
         assert resp.status_code == 200
         assert resp.get_json()["features"] == {}
 
-    def test_extractor_exception_returns_500(self, bare_client, auth_headers, mock_feature_extractors):
-        mock_feature_extractors["statistical"].extract.side_effect = RuntimeError("fail")
-        resp = bare_client.post("/api/v1/features/extract", headers=auth_headers, json=self._payload())
+    def test_extractor_exception_returns_500(
+        self, bare_client, auth_headers, mock_feature_extractors
+    ):
+        mock_feature_extractors["statistical"].extract.side_effect = RuntimeError(
+            "fail"
+        )
+        resp = bare_client.post(
+            "/api/v1/features/extract", headers=auth_headers, json=self._payload()
+        )
         assert resp.status_code == 500
 
     def test_requires_auth(self, bare_client):
@@ -575,6 +658,7 @@ class TestFeatureExtraction:
 # ===================================================================
 # Model reload  (/api/v1/models/reload)
 # ===================================================================
+
 
 class TestModelReload:
     @patch.object(ai_app, "initialize_models", return_value=True)
@@ -602,6 +686,7 @@ class TestModelReload:
 # ===================================================================
 # Statistics  (/api/v1/statistics)
 # ===================================================================
+
 
 class TestStatistics:
     def test_returns_computed_stats(self, client, auth_headers, mock_redis):
@@ -641,29 +726,54 @@ class TestStatistics:
 # Feedback  (/api/v1/feedback, /api/v1/feedback/stats)
 # ===================================================================
 
+
 class TestFeedback:
     def test_submit_correct_detection(self, client, auth_headers, mock_redis):
-        payload = {"detection_id": "det_123", "is_correct": True, "actual_label": "malicious"}
+        payload = {
+            "detection_id": "det_123",
+            "is_correct": True,
+            "actual_label": "malicious",
+        }
         resp = client.post("/api/v1/feedback", headers=auth_headers, json=payload)
         assert resp.status_code == 200
         mock_redis.hset.assert_called_once()
         mock_redis.expire.assert_called_once()
 
     def test_false_positive_increments_counter(self, client, auth_headers, mock_redis):
-        payload = {"detection_id": "det_456", "is_correct": False, "actual_label": "benign"}
+        payload = {
+            "detection_id": "det_456",
+            "is_correct": False,
+            "actual_label": "benign",
+        }
         resp = client.post("/api/v1/feedback", headers=auth_headers, json=payload)
         assert resp.status_code == 200
         mock_redis.incr.assert_any_call("ai_engine:false_positives")
 
-    def test_incorrect_but_not_benign_does_not_increment_fp(self, client, auth_headers, mock_redis):
-        payload = {"detection_id": "det_789", "is_correct": False, "actual_label": "malicious"}
+    def test_incorrect_but_not_benign_does_not_increment_fp(
+        self, client, auth_headers, mock_redis
+    ):
+        payload = {
+            "detection_id": "det_789",
+            "is_correct": False,
+            "actual_label": "malicious",
+        }
         resp = client.post("/api/v1/feedback", headers=auth_headers, json=payload)
         assert resp.status_code == 200
-        fp_calls = [c for c in mock_redis.incr.call_args_list if c[0][0] == "ai_engine:false_positives"]
+        fp_calls = [
+            c
+            for c in mock_redis.incr.call_args_list
+            if c[0][0] == "ai_engine:false_positives"
+        ]
         assert len(fp_calls) == 0
 
-    def test_includes_features_in_stored_feedback(self, client, auth_headers, mock_redis):
-        payload = {"detection_id": "det_feat", "is_correct": True, "features": {"f1": 0.1, "f2": 0.9}}
+    def test_includes_features_in_stored_feedback(
+        self, client, auth_headers, mock_redis
+    ):
+        payload = {
+            "detection_id": "det_feat",
+            "is_correct": True,
+            "features": {"f1": 0.1, "f2": 0.9},
+        }
         resp = client.post("/api/v1/feedback", headers=auth_headers, json=payload)
         assert resp.status_code == 200
         stored_mapping = mock_redis.hset.call_args[1]["mapping"]
@@ -671,10 +781,14 @@ class TestFeedback:
         assert json.loads(stored_mapping["features"]) == {"f1": 0.1, "f2": 0.9}
 
     def test_missing_required_fields_returns_400(self, client, auth_headers):
-        resp = client.post("/api/v1/feedback", headers=auth_headers, json={"detection_id": "x"})
+        resp = client.post(
+            "/api/v1/feedback", headers=auth_headers, json={"detection_id": "x"}
+        )
         assert resp.status_code == 400
 
-        resp = client.post("/api/v1/feedback", headers=auth_headers, json={"is_correct": True})
+        resp = client.post(
+            "/api/v1/feedback", headers=auth_headers, json={"is_correct": True}
+        )
         assert resp.status_code == 400
 
     def test_feedback_stats_below_threshold(self, client, auth_headers, mock_redis):
@@ -694,13 +808,16 @@ class TestFeedback:
         assert data["ready_for_retrain"] is True
 
     def test_requires_auth(self, bare_client):
-        resp = bare_client.post("/api/v1/feedback", json={"detection_id": "x", "is_correct": True})
+        resp = bare_client.post(
+            "/api/v1/feedback", json={"detection_id": "x", "is_correct": True}
+        )
         assert resp.status_code == 401
 
 
 # ===================================================================
 # Ensemble scoring logic  (unit tests on StackingEnsemble)
 # ===================================================================
+
 
 class TestEnsembleScoring:
     """Direct unit tests on the StackingEnsemble aggregation logic."""
@@ -725,7 +842,11 @@ class TestEnsembleScoring:
     def test_unanimous_threat_verdict(self):
         ens, dets = self._make_ensemble()
         for d in dets.values():
-            d.predict.return_value = {"is_threat": True, "confidence": 0.95, "threat_type": "malware"}
+            d.predict.return_value = {
+                "is_threat": True,
+                "confidence": 0.95,
+                "threat_type": "malware",
+            }
         result = ens.predict(np.zeros(50))
         assert result["is_threat"] is True
         assert result["threat_score"] >= 0.5
@@ -734,32 +855,72 @@ class TestEnsembleScoring:
     def test_unanimous_benign_verdict(self):
         ens, dets = self._make_ensemble(threshold=0.5)
         for d in dets.values():
-            d.predict.return_value = {"is_threat": False, "confidence": 0.9, "threat_type": "benign"}
+            d.predict.return_value = {
+                "is_threat": False,
+                "confidence": 0.9,
+                "threat_type": "benign",
+            }
         result = ens.predict(np.zeros(50))
         assert result["is_threat"] is False
 
     def test_split_verdict_weighted_scoring(self):
         ens, dets = self._make_ensemble(threshold=0.5)
-        dets["xgboost"].predict.return_value = {"is_threat": True, "confidence": 0.9, "threat_type": "brute_force"}
-        dets["lstm"].predict.return_value = {"is_threat": True, "confidence": 0.85, "threat_type": "brute_force"}
-        dets["isolation_forest"].predict.return_value = {"is_threat": False, "confidence": 0.8, "threat_type": "benign"}
-        dets["autoencoder"].predict.return_value = {"is_threat": False, "confidence": 0.7, "threat_type": "benign"}
+        dets["xgboost"].predict.return_value = {
+            "is_threat": True,
+            "confidence": 0.9,
+            "threat_type": "brute_force",
+        }
+        dets["lstm"].predict.return_value = {
+            "is_threat": True,
+            "confidence": 0.85,
+            "threat_type": "brute_force",
+        }
+        dets["isolation_forest"].predict.return_value = {
+            "is_threat": False,
+            "confidence": 0.8,
+            "threat_type": "benign",
+        }
+        dets["autoencoder"].predict.return_value = {
+            "is_threat": False,
+            "confidence": 0.7,
+            "threat_type": "benign",
+        }
         result = ens.predict(np.zeros(50))
         assert "is_threat" in result
         assert 0.0 <= result["threat_score"] <= 1.0
 
     def test_threat_type_majority_voting(self):
         ens, dets = self._make_ensemble()
-        dets["xgboost"].predict.return_value = {"is_threat": True, "confidence": 0.9, "threat_type": "dos_attack"}
-        dets["lstm"].predict.return_value = {"is_threat": True, "confidence": 0.8, "threat_type": "dos_attack"}
-        dets["isolation_forest"].predict.return_value = {"is_threat": True, "confidence": 0.7, "threat_type": "port_scan"}
-        dets["autoencoder"].predict.return_value = {"is_threat": True, "confidence": 0.6, "threat_type": "dos_attack"}
+        dets["xgboost"].predict.return_value = {
+            "is_threat": True,
+            "confidence": 0.9,
+            "threat_type": "dos_attack",
+        }
+        dets["lstm"].predict.return_value = {
+            "is_threat": True,
+            "confidence": 0.8,
+            "threat_type": "dos_attack",
+        }
+        dets["isolation_forest"].predict.return_value = {
+            "is_threat": True,
+            "confidence": 0.7,
+            "threat_type": "port_scan",
+        }
+        dets["autoencoder"].predict.return_value = {
+            "is_threat": True,
+            "confidence": 0.6,
+            "threat_type": "dos_attack",
+        }
         result = ens.predict(np.zeros(50))
         assert result["threat_type"] == "dos_attack"
 
     def test_consensus_perfect_agreement(self):
         ens, _ = self._make_ensemble()
-        results = {"a": {"is_threat": True}, "b": {"is_threat": True}, "c": {"is_threat": True}}
+        results = {
+            "a": {"is_threat": True},
+            "b": {"is_threat": True},
+            "c": {"is_threat": True},
+        }
         assert ens._calculate_consensus(results) == 1.0
 
     def test_consensus_total_disagreement(self):
@@ -775,7 +936,11 @@ class TestEnsembleScoring:
     def test_context_increases_score_for_critical_assets(self):
         ens, dets = self._make_ensemble(threshold=0.50)
         for d in dets.values():
-            d.predict.return_value = {"is_threat": True, "confidence": 0.48, "threat_type": "unknown"}
+            d.predict.return_value = {
+                "is_threat": True,
+                "confidence": 0.48,
+                "threat_type": "unknown",
+            }
         context = {"asset_criticality": 5, "time_risk": 0.9}
         result = ens.predict(np.zeros(50), context)
         assert result["threat_score"] >= 0.48
@@ -783,10 +948,16 @@ class TestEnsembleScoring:
     def test_context_admin_role_adds_scrutiny(self):
         ens, dets = self._make_ensemble(threshold=0.50)
         for d in dets.values():
-            d.predict.return_value = {"is_threat": True, "confidence": 0.49, "threat_type": "unknown"}
+            d.predict.return_value = {
+                "is_threat": True,
+                "confidence": 0.49,
+                "threat_type": "unknown",
+            }
 
         result_no_ctx = ens.predict(np.zeros(50))
-        result_admin = ens.predict(np.zeros(50), {"user_role": "admin", "asset_criticality": 4})
+        result_admin = ens.predict(
+            np.zeros(50), {"user_role": "admin", "asset_criticality": 4}
+        )
         assert result_admin["threat_score"] >= result_no_ctx["threat_score"]
 
     def test_no_ready_detectors_returns_default(self):
@@ -801,14 +972,20 @@ class TestEnsembleScoring:
         ens, dets = self._make_ensemble()
         dets["xgboost"].predict.side_effect = RuntimeError("model error")
         for name in ("lstm", "isolation_forest", "autoencoder"):
-            dets[name].predict.return_value = {"is_threat": True, "confidence": 0.9, "threat_type": "dos_attack"}
+            dets[name].predict.return_value = {
+                "is_threat": True,
+                "confidence": 0.9,
+                "threat_type": "dos_attack",
+            }
         result = ens.predict(np.zeros(50))
         assert result["is_threat"] is True
         assert "xgboost" not in result["model_verdicts"]
 
     def test_weight_update_normalises_to_one(self):
         ens, _ = self._make_ensemble()
-        ens.update_weights({"xgboost": 10.0, "lstm": 5.0, "isolation_forest": 3.0, "autoencoder": 2.0})
+        ens.update_weights(
+            {"xgboost": 10.0, "lstm": 5.0, "isolation_forest": 3.0, "autoencoder": 2.0}
+        )
         assert sum(ens.weights.values()) == pytest.approx(1.0, abs=1e-9)
 
     def test_threshold_clamps_to_valid_range(self):
@@ -821,7 +998,11 @@ class TestEnsembleScoring:
     def test_result_includes_model_verdicts(self):
         ens, dets = self._make_ensemble()
         for d in dets.values():
-            d.predict.return_value = {"is_threat": True, "confidence": 0.88, "threat_type": "malware"}
+            d.predict.return_value = {
+                "is_threat": True,
+                "confidence": 0.88,
+                "threat_type": "malware",
+            }
         result = ens.predict(np.zeros(50))
         assert len(result["model_verdicts"]) == 4
         for verdict in result["model_verdicts"].values():
@@ -831,7 +1012,11 @@ class TestEnsembleScoring:
     def test_result_includes_ensemble_details(self):
         ens, dets = self._make_ensemble(threshold=0.6)
         for d in dets.values():
-            d.predict.return_value = {"is_threat": True, "confidence": 0.9, "threat_type": "malware"}
+            d.predict.return_value = {
+                "is_threat": True,
+                "confidence": 0.9,
+                "threat_type": "malware",
+            }
         result = ens.predict(np.zeros(50))
         details = result["ensemble_details"]
         assert details["threshold"] == 0.6
@@ -841,7 +1026,11 @@ class TestEnsembleScoring:
     def test_batch_prediction(self):
         ens, dets = self._make_ensemble()
         for d in dets.values():
-            d.predict.return_value = {"is_threat": True, "confidence": 0.9, "threat_type": "malware"}
+            d.predict.return_value = {
+                "is_threat": True,
+                "confidence": 0.9,
+                "threat_type": "malware",
+            }
         features = np.zeros((5, 50))
         results = ens.predict_batch(features)
         assert len(results) == 5
@@ -852,38 +1041,46 @@ class TestEnsembleScoring:
 # log_detection helper
 # ===================================================================
 
+
 class TestLogDetection:
     def test_threat_increments_both_counters(self, mock_redis):
-        ai_app.log_detection({
-            "detection_id": "det_t1",
-            "is_threat": True,
-            "confidence": 0.9,
-            "threat_type": "malware",
-            "model_verdicts": {},
-        })
+        ai_app.log_detection(
+            {
+                "detection_id": "det_t1",
+                "is_threat": True,
+                "confidence": 0.9,
+                "threat_type": "malware",
+                "model_verdicts": {},
+            }
+        )
         mock_redis.incr.assert_any_call("ai_engine:total_detections")
         mock_redis.incr.assert_any_call("ai_engine:threats_detected")
         mock_redis.hset.assert_called_once()
         mock_redis.expire.assert_called_once()
 
     def test_benign_increments_only_total(self, mock_redis):
-        ai_app.log_detection({
-            "detection_id": "det_b1",
-            "is_threat": False,
-            "confidence": 0.1,
-            "threat_type": "benign",
-            "model_verdicts": {},
-        })
+        ai_app.log_detection(
+            {
+                "detection_id": "det_b1",
+                "is_threat": False,
+                "confidence": 0.1,
+                "threat_type": "benign",
+                "model_verdicts": {},
+            }
+        )
         mock_redis.incr.assert_called_once_with("ai_engine:total_detections")
 
     def test_redis_failure_swallowed(self, mock_redis):
         mock_redis.incr.side_effect = _redis_mod.ConnectionError("down")
-        ai_app.log_detection({"detection_id": "x", "is_threat": False, "model_verdicts": {}})
+        ai_app.log_detection(
+            {"detection_id": "x", "is_threat": False, "model_verdicts": {}}
+        )
 
 
 # ===================================================================
 # Error handlers
 # ===================================================================
+
 
 class TestErrorHandlers:
     def test_404(self, client):

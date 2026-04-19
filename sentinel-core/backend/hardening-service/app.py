@@ -14,7 +14,6 @@ Runtime requirements:
 - Host filesystem mounted at HOST_ROOT (default /host)
 """
 
-import copy
 import json
 import logging
 import os
@@ -32,10 +31,9 @@ from flask_cors import CORS
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from auth_middleware import require_auth, require_role
-from tenant_middleware import require_tenant, get_tenant_id
+from tenant_middleware import require_tenant
 from observability import configure_logging
 from metrics import init_metrics, HARDENING_POSTURE
-from ebpf_lib.schemas.events import PolicyAction
 from ebpf_lib.loader import ProgramLoader
 
 configure_logging(service_name="hardening-service")
@@ -60,8 +58,8 @@ class CheckResult:
     check_id: str
     title: str
     description: str
-    status: str          # "pass", "fail", "error", "not_applicable"
-    severity: str        # "critical", "high", "medium", "low", "info"
+    status: str  # "pass", "fail", "error", "not_applicable"
+    severity: str  # "critical", "high", "medium", "low", "info"
     category: str
     remediation: str
     cis_reference: str = ""
@@ -210,16 +208,18 @@ class CISBenchmarkEngine:
                 result = check_fn()
                 results.append(result)
             except Exception as e:
-                results.append(CheckResult(
-                    check_id=check_id,
-                    title=check_id,
-                    description="Check failed with error",
-                    status="error",
-                    severity="medium",
-                    category="system",
-                    remediation="Investigate the error",
-                    detail=str(e),
-                ))
+                results.append(
+                    CheckResult(
+                        check_id=check_id,
+                        title=check_id,
+                        description="Check failed with error",
+                        status="error",
+                        severity="medium",
+                        category="system",
+                        remediation="Investigate the error",
+                        detail=str(e),
+                    )
+                )
         return results
 
     def run_check(self, check_id: str) -> Optional[CheckResult]:
@@ -249,7 +249,8 @@ class CISBenchmarkEngine:
             title="IP Forwarding disabled",
             description="Ensure IP forwarding is disabled unless this is a router",
             status="pass" if val == "0" else "fail",
-            severity="high", category="network",
+            severity="high",
+            category="network",
             remediation="Set net.ipv4.ip_forward = 0 in /etc/sysctl.conf",
             cis_reference="CIS 3.1.1",
             compliance_frameworks=["NIST CSF", "PCI-DSS"],
@@ -264,7 +265,8 @@ class CISBenchmarkEngine:
             title="Reverse path filtering enabled",
             description="Ensure source route verification is active",
             status="pass" if val == "1" else "fail",
-            severity="high", category="network",
+            severity="high",
+            category="network",
             remediation="Set net.ipv4.conf.all.rp_filter = 1",
             cis_reference="CIS 3.2.7",
             compliance_frameworks=["NIST CSF"],
@@ -279,7 +281,8 @@ class CISBenchmarkEngine:
             title="TCP SYN cookies enabled",
             description="Protect against SYN flood attacks",
             status="pass" if val == "1" else "fail",
-            severity="high", category="network",
+            severity="high",
+            category="network",
             remediation="Set net.ipv4.tcp_syncookies = 1",
             cis_reference="CIS 3.2.8",
             compliance_frameworks=["NIST CSF", "PCI-DSS"],
@@ -294,7 +297,8 @@ class CISBenchmarkEngine:
             title="ICMP redirects disabled",
             description="Ensure ICMP redirects are not accepted",
             status="pass" if val == "0" else "fail",
-            severity="medium", category="network",
+            severity="medium",
+            category="network",
             remediation="Set net.ipv4.conf.all.accept_redirects = 0",
             cis_reference="CIS 3.2.2",
             compliance_frameworks=["NIST CSF"],
@@ -309,7 +313,8 @@ class CISBenchmarkEngine:
             title="ASLR enabled",
             description="Ensure address space layout randomization is enabled",
             status="pass" if val == "2" else "fail",
-            severity="critical", category="kernel",
+            severity="critical",
+            category="kernel",
             remediation="Set kernel.randomize_va_space = 2",
             cis_reference="CIS 1.5.2",
             compliance_frameworks=["NIST CSF", "PCI-DSS"],
@@ -324,7 +329,8 @@ class CISBenchmarkEngine:
             title="Core dumps restricted",
             description="Ensure SUID programs do not dump core",
             status="pass" if val == "0" else "fail",
-            severity="medium", category="kernel",
+            severity="medium",
+            category="kernel",
             remediation="Set fs.suid_dumpable = 0",
             cis_reference="CIS 1.5.1",
             compliance_frameworks=["NIST CSF"],
@@ -354,7 +360,8 @@ class CISBenchmarkEngine:
             title="SSH root login disabled",
             description="Ensure root cannot log in directly via SSH",
             status="pass" if val and val.lower() == "no" else "fail",
-            severity="critical", category="ssh",
+            severity="critical",
+            category="ssh",
             remediation="Set PermitRootLogin no in /etc/ssh/sshd_config",
             cis_reference="CIS 5.2.10",
             compliance_frameworks=["NIST CSF", "PCI-DSS", "HIPAA"],
@@ -370,7 +377,8 @@ class CISBenchmarkEngine:
             title="SSH Protocol 2 only",
             description="Ensure SSH uses protocol version 2",
             status=status,
-            severity="critical", category="ssh",
+            severity="critical",
+            category="ssh",
             remediation="Set Protocol 2 in /etc/ssh/sshd_config",
             cis_reference="CIS 5.2.4",
             compliance_frameworks=["NIST CSF", "PCI-DSS"],
@@ -388,7 +396,8 @@ class CISBenchmarkEngine:
             title="SSH MaxAuthTries <= 4",
             description="Limit authentication attempts",
             status="pass" if ok else "fail",
-            severity="medium", category="ssh",
+            severity="medium",
+            category="ssh",
             remediation="Set MaxAuthTries 4 in /etc/ssh/sshd_config",
             cis_reference="CIS 5.2.7",
             compliance_frameworks=["NIST CSF"],
@@ -402,7 +411,8 @@ class CISBenchmarkEngine:
             title="SSH empty passwords denied",
             description="Ensure empty passwords are not permitted",
             status="pass" if val and val.lower() == "no" else "fail",
-            severity="critical", category="ssh",
+            severity="critical",
+            category="ssh",
             remediation="Set PermitEmptyPasswords no",
             cis_reference="CIS 5.2.11",
             compliance_frameworks=["NIST CSF", "PCI-DSS", "HIPAA"],
@@ -421,7 +431,8 @@ class CISBenchmarkEngine:
             title="SSH idle timeout configured",
             description="Ensure SSH idle sessions time out",
             status="pass" if ok else "fail",
-            severity="medium", category="ssh",
+            severity="medium",
+            category="ssh",
             remediation="Set ClientAliveInterval 300 and ClientAliveCountMax 3",
             cis_reference="CIS 5.2.16",
             compliance_frameworks=["NIST CSF"],
@@ -436,7 +447,8 @@ class CISBenchmarkEngine:
             title="SSH password authentication disabled",
             description="Use key-based authentication only",
             status="pass" if val and val.lower() == "no" else "fail",
-            severity="high", category="ssh",
+            severity="high",
+            category="ssh",
             remediation="Set PasswordAuthentication no in /etc/ssh/sshd_config",
             cis_reference="CIS 5.2.12",
             compliance_frameworks=["NIST CSF", "PCI-DSS"],
@@ -462,7 +474,8 @@ class CISBenchmarkEngine:
             title="Password max age <= 365 days",
             description="Ensure passwords expire within a year",
             status="pass" if ok else "fail",
-            severity="medium", category="authentication",
+            severity="medium",
+            category="authentication",
             remediation="Set PASS_MAX_DAYS 365 in /etc/login.defs",
             cis_reference="CIS 5.4.1.1",
             compliance_frameworks=["NIST CSF", "PCI-DSS"],
@@ -486,7 +499,8 @@ class CISBenchmarkEngine:
             title="Password minimum length >= 14",
             description="Ensure passwords are sufficiently long",
             status="pass" if ok else "fail",
-            severity="medium", category="authentication",
+            severity="medium",
+            category="authentication",
             remediation="Set PASS_MIN_LEN 14 in /etc/login.defs",
             cis_reference="CIS 5.4.1",
             compliance_frameworks=["NIST CSF", "PCI-DSS"],
@@ -511,9 +525,21 @@ class CISBenchmarkEngine:
                 continue
             try:
                 result = subprocess.run(
-                    ["find", root, "-xdev", "-type", "f", "-perm", "-0002",
-                     "-not", "-path", "*/proc/*"],
-                    capture_output=True, text=True, timeout=30,
+                    [
+                        "find",
+                        root,
+                        "-xdev",
+                        "-type",
+                        "f",
+                        "-perm",
+                        "-0002",
+                        "-not",
+                        "-path",
+                        "*/proc/*",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
                 )
                 for line in result.stdout.splitlines():
                     line = line.strip()
@@ -524,7 +550,10 @@ class CISBenchmarkEngine:
 
         if world_writable:
             status = "fail"
-            detail = f"Found {len(world_writable)} world-writable file(s): " + ", ".join(world_writable[:5])
+            detail = (
+                f"Found {len(world_writable)} world-writable file(s): "
+                + ", ".join(world_writable[:5])
+            )
             if len(world_writable) > 5:
                 detail += f" … and {len(world_writable) - 5} more"
         else:
@@ -551,10 +580,19 @@ class CISBenchmarkEngine:
         """CIS 6.1.13 — Ensure SUID/SGID files are reviewed."""
         # Known-good SUID/SGID files on a standard Linux system
         KNOWN_SUID = {
-            "/usr/bin/sudo", "/usr/bin/su", "/usr/bin/passwd", "/usr/bin/chage",
-            "/usr/bin/chfn", "/usr/bin/chsh", "/usr/bin/gpasswd", "/usr/bin/newgrp",
-            "/usr/bin/pkexec", "/usr/bin/mount", "/usr/bin/umount",
-            "/usr/sbin/pam_timestamp_check", "/usr/sbin/unix_chkpwd",
+            "/usr/bin/sudo",
+            "/usr/bin/su",
+            "/usr/bin/passwd",
+            "/usr/bin/chage",
+            "/usr/bin/chfn",
+            "/usr/bin/chsh",
+            "/usr/bin/gpasswd",
+            "/usr/bin/newgrp",
+            "/usr/bin/pkexec",
+            "/usr/bin/mount",
+            "/usr/bin/umount",
+            "/usr/sbin/pam_timestamp_check",
+            "/usr/sbin/unix_chkpwd",
             "/usr/lib/polkit-1/polkit-agent-helper-1",
             "/usr/lib/openssh/ssh-keysign",
         }
@@ -568,16 +606,32 @@ class CISBenchmarkEngine:
                 continue
             try:
                 result = subprocess.run(
-                    ["find", root, "-xdev",
-                     "(", "-perm", "-4000", "-o", "-perm", "-2000", ")", "-type", "f"],
-                    capture_output=True, text=True, timeout=30,
+                    [
+                        "find",
+                        root,
+                        "-xdev",
+                        "(",
+                        "-perm",
+                        "-4000",
+                        "-o",
+                        "-perm",
+                        "-2000",
+                        ")",
+                        "-type",
+                        "f",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
                 )
                 for line in result.stdout.splitlines():
                     line = line.strip()
                     if not line:
                         continue
                     # Normalise host prefix for comparison
-                    normalised = line.replace(HOST_ROOT, "") if HOST_ROOT != "/" else line
+                    normalised = (
+                        line.replace(HOST_ROOT, "") if HOST_ROOT != "/" else line
+                    )
                     all_suid.append(normalised)
                     if normalised not in KNOWN_SUID:
                         unexpected.append(normalised)
@@ -586,10 +640,15 @@ class CISBenchmarkEngine:
 
         if unexpected:
             status = "fail"
-            detail = f"Found {len(unexpected)} unexpected SUID/SGID file(s): " + ", ".join(unexpected[:5])
+            detail = (
+                f"Found {len(unexpected)} unexpected SUID/SGID file(s): "
+                + ", ".join(unexpected[:5])
+            )
         else:
             status = "pass"
-            detail = f"All {len(all_suid)} SUID/SGID file(s) are from the known-good list"
+            detail = (
+                f"All {len(all_suid)} SUID/SGID file(s) are from the known-good list"
+            )
 
         return CheckResult(
             check_id="suid_files",
@@ -623,7 +682,9 @@ class CISBenchmarkEngine:
             try:
                 result = subprocess.run(
                     ["find", root, "-xdev", "-nouser", "-o", "-nogroup"],
-                    capture_output=True, text=True, timeout=30,
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
                 )
                 for line in result.stdout.splitlines():
                     line = line.strip()
@@ -668,7 +729,8 @@ class CISBenchmarkEngine:
             title="Default umask is restrictive",
             description="Ensure default umask is 027 or more restrictive",
             status="pass" if val in ("027", "077", "0027", "0077") else "fail",
-            severity="medium", category="filesystem",
+            severity="medium",
+            category="filesystem",
             remediation="Set UMASK 027 in /etc/login.defs",
             cis_reference="CIS 5.4.4",
             compliance_frameworks=["NIST CSF"],
@@ -681,7 +743,8 @@ class CISBenchmarkEngine:
             title="Root PATH does not contain writable dirs",
             description="Ensure root's PATH does not include world-writable directories",
             status="pass",
-            severity="high", category="authentication",
+            severity="high",
+            category="authentication",
             remediation="Remove world-writable directories from root PATH",
             cis_reference="CIS 6.2.6",
             compliance_frameworks=["NIST CSF"],
@@ -705,7 +768,8 @@ class CISBenchmarkEngine:
             title="Crontab permissions restrictive",
             description="Ensure /etc/crontab is owned by root with restricted perms",
             status="pass" if ok else "fail",
-            severity="medium", category="scheduling",
+            severity="medium",
+            category="scheduling",
             remediation="chmod 600 /etc/crontab && chown root:root /etc/crontab",
             cis_reference="CIS 5.1.2",
             compliance_frameworks=["NIST CSF"],
@@ -740,7 +804,7 @@ class CISBenchmarkEngine:
         new_config = "\n".join(lines) + "\n"
         if _write_host_file("/etc/ssh/sshd_config", new_config, backup=False):
             return True, f"Set {key} = {value}"
-        return False, f"Failed to write sshd_config"
+        return False, "Failed to write sshd_config"
 
     def _write_sysctl(self, key: str, value: str) -> Tuple[bool, str]:
         proc_path = _host_path(f"/proc/sys/{key.replace('.', '/')}")
@@ -837,12 +901,15 @@ class KafkaPublisher:
         self._producer = None
         try:
             from confluent_kafka import Producer
+
             servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
-            self._producer = Producer({
-                "bootstrap.servers": servers,
-                "client.id": "hardening-service",
-                "acks": "all",
-            })
+            self._producer = Producer(
+                {
+                    "bootstrap.servers": servers,
+                    "client.id": "hardening-service",
+                    "acks": "all",
+                }
+            )
         except (ImportError, Exception) as e:
             logger.warning("Kafka publisher not available: %s", e)
 
@@ -898,8 +965,11 @@ class HardeningService:
 
     def harden(self, check_ids: Optional[List[str]] = None) -> Dict[str, Any]:
         if check_ids is None:
-            failed = [r for r in self._last_results
-                      if r.status == "fail" and r.auto_remediable]
+            failed = [
+                r
+                for r in self._last_results
+                if r.status == "fail" and r.auto_remediable
+            ]
             check_ids = [r.check_id for r in failed]
 
         results = {}
@@ -908,12 +978,14 @@ class HardeningService:
             results[check_id] = {"success": ok, "message": msg}
             if ok:
                 self.stats.remediations_applied += 1
-                self.publisher.publish({
-                    "event_type": "remediation_applied",
-                    "timestamp": time.time(),
-                    "check_id": check_id,
-                    "message": msg,
-                })
+                self.publisher.publish(
+                    {
+                        "event_type": "remediation_applied",
+                        "timestamp": time.time(),
+                        "check_id": check_id,
+                        "message": msg,
+                    }
+                )
             logger.info("Remediation %s: %s - %s", check_id, ok, msg)
         return results
 
@@ -929,12 +1001,14 @@ service = HardeningService()
 
 @app.route("/health", methods=["GET"])
 def health():
-    return jsonify({
-        "status": "healthy",
-        "service": "hardening-service",
-        "posture_score": service.stats.to_dict().get("posture_score", 0),
-        "ebpf_enforcing": service.enforcer.is_enforcing(),
-    }), 200
+    return jsonify(
+        {
+            "status": "healthy",
+            "service": "hardening-service",
+            "posture_score": service.stats.to_dict().get("posture_score", 0),
+            "ebpf_enforcing": service.enforcer.is_enforcing(),
+        }
+    ), 200
 
 
 @app.route("/posture", methods=["GET"])
@@ -948,10 +1022,12 @@ def get_posture():
 @require_auth
 @require_tenant
 def list_checks():
-    return jsonify({
-        "check_ids": service.cis.get_check_ids(),
-        "total": len(service.cis.get_check_ids()),
-    }), 200
+    return jsonify(
+        {
+            "check_ids": service.cis.get_check_ids(),
+            "total": len(service.cis.get_check_ids()),
+        }
+    ), 200
 
 
 @app.route("/checks/<check_id>", methods=["GET"])
@@ -969,13 +1045,15 @@ def run_single_check(check_id):
 @require_role("admin", "operator", "security_analyst")
 def run_scan():
     results = service.scan()
-    return jsonify({
-        "checks_run": len(results),
-        "checks_passed": sum(1 for r in results if r.status == "pass"),
-        "checks_failed": sum(1 for r in results if r.status == "fail"),
-        "posture_score": service.stats.to_dict()["posture_score"],
-        "results": [asdict(r) for r in results],
-    }), 200
+    return jsonify(
+        {
+            "checks_run": len(results),
+            "checks_passed": sum(1 for r in results if r.status == "pass"),
+            "checks_failed": sum(1 for r in results if r.status == "fail"),
+            "posture_score": service.stats.to_dict()["posture_score"],
+            "results": [asdict(r) for r in results],
+        }
+    ), 200
 
 
 @app.route("/harden", methods=["POST"])
@@ -985,10 +1063,12 @@ def apply_hardening():
     data = request.get_json() or {}
     check_ids = data.get("check_ids")
     results = service.harden(check_ids)
-    return jsonify({
-        "remediations": results,
-        "total_applied": sum(1 for v in results.values() if v["success"]),
-    }), 200
+    return jsonify(
+        {
+            "remediations": results,
+            "total_applied": sum(1 for v in results.values() if v["success"]),
+        }
+    ), 200
 
 
 @app.route("/rollback", methods=["POST"])
@@ -998,21 +1078,25 @@ def rollback():
     if not os.path.isdir(BACKUP_DIR):
         return jsonify({"error": "No backups available"}), 404
     backups = sorted(Path(BACKUP_DIR).glob("*.bak"), reverse=True)
-    return jsonify({
-        "available_backups": [str(b) for b in backups[:20]],
-        "message": "Use the backup file path to restore manually",
-    }), 200
+    return jsonify(
+        {
+            "available_backups": [str(b) for b in backups[:20]],
+            "message": "Use the backup file path to restore manually",
+        }
+    ), 200
 
 
 @app.route("/enforce", methods=["GET"])
 @require_auth
 @require_role("admin", "operator")
 def get_enforcement():
-    return jsonify({
-        "mode": "enforce" if service.enforcer.is_enforcing() else "audit",
-        "policies": service.enforcer.get_policies(),
-        "active_count": service.enforcer.get_active_count(),
-    }), 200
+    return jsonify(
+        {
+            "mode": "enforce" if service.enforcer.is_enforcing() else "audit",
+            "policies": service.enforcer.get_policies(),
+            "active_count": service.enforcer.get_active_count(),
+        }
+    ), 200
 
 
 @app.route("/enforce/mode", methods=["POST"])
@@ -1040,9 +1124,12 @@ def add_port_enforcement():
 
 import threading
 
+
 def start_service_background() -> None:
     thread = threading.Thread(
-        target=service.start, name="hardening-service", daemon=True,
+        target=service.start,
+        name="hardening-service",
+        daemon=True,
     )
     thread.start()
 

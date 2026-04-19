@@ -3,4 +3,4 @@
 from .feature_extraction_job import FeatureExtractionJob
 from .anomaly_detection_job import AnomalyDetectionJob
 
-__all__ = ['FeatureExtractionJob', 'AnomalyDetectionJob']
+__all__ = ["FeatureExtractionJob", "AnomalyDetectionJob"]

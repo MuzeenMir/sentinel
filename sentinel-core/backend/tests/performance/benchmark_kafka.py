@@ -7,6 +7,7 @@ Target: 50k events/sec sustained ingestion, p99 produce latency < 20ms
 Usage:
     python benchmark_kafka.py --broker localhost:9092 --events 100000 --batch 500
 """
+
 import argparse
 import json
 import os
@@ -60,13 +61,15 @@ def run_benchmark(broker: str, total_events: int, batch_size: int, threads: int)
     producer = Producer(conf)
 
     events = [_create_event(i) for i in range(total_events)]
-    batches = [events[i:i + batch_size] for i in range(0, len(events), batch_size)]
+    batches = [events[i : i + batch_size] for i in range(0, len(events), batch_size)]
 
     all_latencies = []
     t_start = time.perf_counter()
 
     with ThreadPoolExecutor(max_workers=threads) as pool:
-        futures = [pool.submit(_produce_batch, producer, TOPIC, batch) for batch in batches]
+        futures = [
+            pool.submit(_produce_batch, producer, TOPIC, batch) for batch in batches
+        ]
         for f in as_completed(futures):
             all_latencies.extend(f.result())
 
@@ -84,7 +87,8 @@ def run_benchmark(broker: str, total_events: int, batch_size: int, threads: int)
         "latency_p95_ms": round(all_latencies[int(len(all_latencies) * 0.95)], 3),
         "latency_p99_ms": round(all_latencies[int(len(all_latencies) * 0.99)], 3),
         "latency_mean_ms": round(statistics.mean(all_latencies), 3),
-        "pass": all_latencies[int(len(all_latencies) * 0.99)] < 20 and throughput > 50000,
+        "pass": all_latencies[int(len(all_latencies) * 0.99)] < 20
+        and throughput > 50000,
     }
     return results
 
@@ -98,7 +102,9 @@ def main():
     parser.add_argument("--json", action="store_true", help="Output JSON")
     args = parser.parse_args()
 
-    print(f"Kafka benchmark: {args.events} events, batch={args.batch}, threads={args.threads}")
+    print(
+        f"Kafka benchmark: {args.events} events, batch={args.batch}, threads={args.threads}"
+    )
     results = run_benchmark(args.broker, args.events, args.batch, args.threads)
 
     if results is None:

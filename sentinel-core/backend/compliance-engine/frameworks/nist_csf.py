@@ -1,4 +1,5 @@
 """NIST Cybersecurity Framework (CSF) 2.0 compliance framework."""
+
 import logging
 from typing import Any, Dict, List
 
@@ -305,7 +306,6 @@ _NIST_CSF_CONTROLS: List[Dict[str, Any]] = [
 
 
 class NISTCSFFramework(BaseFramework):
-
     @property
     def full_name(self) -> str:
         return "NIST Cybersecurity Framework (CSF) 2.0"
@@ -335,9 +335,7 @@ class NISTCSFFramework(BaseFramework):
             logger.exception("NIST CSF assessment failed")
             raise
 
-    def detailed_gap_analysis(
-        self, current_controls: Dict
-    ) -> List[Dict[str, Any]]:
+    def detailed_gap_analysis(self, current_controls: Dict) -> List[Dict[str, Any]]:
         try:
             return self._default_gap_analysis(current_controls)
         except Exception:

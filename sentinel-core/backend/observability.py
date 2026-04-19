@@ -19,7 +19,6 @@ import json
 import logging
 import os
 import sys
-import time
 import traceback
 from datetime import datetime, timezone
 from functools import wraps
@@ -44,7 +43,9 @@ class _JSONFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         entry = {
-            "timestamp": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
+            "timestamp": datetime.fromtimestamp(
+                record.created, tz=timezone.utc
+            ).isoformat(),
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
@@ -86,6 +87,7 @@ def configure_logging(
         )
     root.addHandler(handler)
 
+
 _tracer = None
 _meter = None
 
@@ -113,8 +115,12 @@ def init_telemetry(app=None, service_name: str | None = None):
         from opentelemetry.sdk.metrics import MeterProvider
         from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
         from opentelemetry.sdk.resources import Resource, SERVICE_NAME as SN
-        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-        from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
+        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
+            OTLPSpanExporter,
+        )
+        from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import (
+            OTLPMetricExporter,
+        )
 
         resource = Resource.create({SN: _SERVICE_NAME})
 
@@ -129,18 +135,25 @@ def init_telemetry(app=None, service_name: str | None = None):
             OTLPMetricExporter(endpoint=_OTEL_ENDPOINT, insecure=True),
             export_interval_millis=30000,
         )
-        meter_provider = MeterProvider(resource=resource, metric_readers=[metric_reader])
+        meter_provider = MeterProvider(
+            resource=resource, metric_readers=[metric_reader]
+        )
         metrics.set_meter_provider(meter_provider)
         _meter = metrics.get_meter(_SERVICE_NAME)
 
         if app is not None:
             try:
                 from opentelemetry.instrumentation.flask import FlaskInstrumentor
+
                 FlaskInstrumentor().instrument_app(app)
             except ImportError:
                 pass
 
-        logger.info("OpenTelemetry initialized: endpoint=%s service=%s", _OTEL_ENDPOINT, _SERVICE_NAME)
+        logger.info(
+            "OpenTelemetry initialized: endpoint=%s service=%s",
+            _OTEL_ENDPOINT,
+            _SERVICE_NAME,
+        )
 
     except ImportError:
         logger.info("OpenTelemetry SDK not installed; telemetry disabled")
@@ -154,6 +167,7 @@ def get_tracer():
         return _tracer
     try:
         from opentelemetry import trace
+
         return trace.get_tracer(_SERVICE_NAME)
     except ImportError:
         return _NoOpTracer()
@@ -165,6 +179,7 @@ def get_meter():
         return _meter
     try:
         from opentelemetry import metrics
+
         return metrics.get_meter(_SERVICE_NAME)
     except ImportError:
         return _NoOpMeter()
@@ -172,6 +187,7 @@ def get_meter():
 
 def traced(name: str | None = None):
     """Decorator to wrap a function in an OTel span."""
+
     def decorator(f):
         @wraps(f)
         def wrapper(*args, **kwargs):
@@ -181,7 +197,9 @@ def traced(name: str | None = None):
                 with tracer.start_as_current_span(span_name):
                     return f(*args, **kwargs)
             return f(*args, **kwargs)
+
         return wrapper
+
     return decorator
 
 
@@ -205,18 +223,33 @@ class _NoOpMeter:
 
 
 class _NoOpSpan:
-    def set_attribute(self, *a, **kw): pass
-    def set_status(self, *a, **kw): pass
-    def end(self): pass
-    def __enter__(self): return self
-    def __exit__(self, *a): pass
+    def set_attribute(self, *a, **kw):
+        pass
+
+    def set_status(self, *a, **kw):
+        pass
+
+    def end(self):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        pass
 
 
 class _NoOpContextManager:
-    def __enter__(self): return _NoOpSpan()
-    def __exit__(self, *a): pass
+    def __enter__(self):
+        return _NoOpSpan()
+
+    def __exit__(self, *a):
+        pass
 
 
 class _NoOpInstrument:
-    def add(self, *a, **kw): pass
-    def record(self, *a, **kw): pass
+    def add(self, *a, **kw):
+        pass
+
+    def record(self, *a, **kw):
+        pass

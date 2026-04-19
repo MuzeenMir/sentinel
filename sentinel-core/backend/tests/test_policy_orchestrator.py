@@ -9,9 +9,7 @@ PolicyValidator interactions are mocked — nothing hits the network.
 import json
 import os
 import sys
-import uuid
-from datetime import datetime
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -82,6 +80,7 @@ def _passthrough_auth(fn):
 def _passthrough_role(*_roles):
     def decorator(fn):
         return fn
+
     return decorator
 
 
@@ -91,25 +90,37 @@ _mock_vendor_factory = MagicMock()
 _mock_policy_validator = MagicMock()
 
 # Default: rule_generator.generate returns one valid rule.
-_mock_rule_generator.generate.return_value = [{
-    "id": "rule_test1",
-    "action": "DENY",
-    "protocol": "TCP",
-    "source_ip": "10.0.0.5/32",
-    "source_cidr": "10.0.0.5/32",
-    "dest_port": 22,
-    "direction": "inbound",
-    "priority": 50,
-    "enabled": True,
-}]
+_mock_rule_generator.generate.return_value = [
+    {
+        "id": "rule_test1",
+        "action": "DENY",
+        "protocol": "TCP",
+        "source_ip": "10.0.0.5/32",
+        "source_cidr": "10.0.0.5/32",
+        "dest_port": 22,
+        "direction": "inbound",
+        "priority": 50,
+        "enabled": True,
+    }
+]
 
 # Default: validator passes.
-_mock_policy_validator.validate.return_value = {"valid": True, "issues": [], "warnings": [], "rules_validated": 1}
+_mock_policy_validator.validate.return_value = {
+    "valid": True,
+    "issues": [],
+    "warnings": [],
+    "rules_validated": 1,
+}
 _mock_policy_validator.is_ready.return_value = True
 
 # Default: vendor factory returns a list.
 _mock_vendor_factory.get_available_vendors.return_value = [
-    {"name": "iptables", "status": "available", "connected": False, "class": "IptablesVendor"}
+    {
+        "name": "iptables",
+        "status": "available",
+        "connected": False,
+        "class": "IptablesVendor",
+    }
 ]
 _mock_vendor = MagicMock()
 _mock_vendor.apply_rules.return_value = {"success": True, "message": "applied"}
@@ -157,7 +168,10 @@ for mod_name in [
 # Make RuleGenerator / VendorFactory / PolicyValidator constructors return
 # our controlled mocks, and PolicyEngine return the real class.
 from policies.policy_engine import PolicyEngine as _RealPolicyEngine  # noqa: E402
-sys.modules["policies.policy_engine"].PolicyEngine = _RealPolicyEngine if hasattr(_RealPolicyEngine, "create_policy") else None
+
+sys.modules["policies.policy_engine"].PolicyEngine = (
+    _RealPolicyEngine if hasattr(_RealPolicyEngine, "create_policy") else None
+)
 
 # We need the *real* PolicyEngine; reimport it directly from the source file.
 import importlib.util
@@ -178,7 +192,9 @@ RealPolicyEngine = _pe_mod.PolicyEngine
 sys.modules["policies.policy_engine"].PolicyEngine = RealPolicyEngine
 sys.modules["policies.rule_generator"].RuleGenerator = lambda: _mock_rule_generator
 sys.modules["vendors.vendor_factory"].VendorFactory = lambda: _mock_vendor_factory
-sys.modules["validation.policy_validator"].PolicyValidator = lambda: _mock_policy_validator
+sys.modules["validation.policy_validator"].PolicyValidator = (
+    lambda: _mock_policy_validator
+)
 
 # Drop cached app module so our patches take effect.
 for key in list(sys.modules):
@@ -208,6 +224,7 @@ orch_app.redis_client = _fake_redis
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(autouse=True)
 def _reset():
     _redis_kv.clear()
@@ -218,23 +235,33 @@ def _reset():
     _mock_vendor.reset_mock()
 
     # Restore sane defaults after reset_mock clears return_value.
-    _mock_rule_generator.generate.return_value = [{
-        "id": "rule_test1",
-        "action": "DENY",
-        "protocol": "TCP",
-        "source_ip": "10.0.0.5/32",
-        "source_cidr": "10.0.0.5/32",
-        "dest_port": 22,
-        "direction": "inbound",
-        "priority": 50,
-        "enabled": True,
-    }]
+    _mock_rule_generator.generate.return_value = [
+        {
+            "id": "rule_test1",
+            "action": "DENY",
+            "protocol": "TCP",
+            "source_ip": "10.0.0.5/32",
+            "source_cidr": "10.0.0.5/32",
+            "dest_port": 22,
+            "direction": "inbound",
+            "priority": 50,
+            "enabled": True,
+        }
+    ]
     _mock_policy_validator.validate.return_value = {
-        "valid": True, "issues": [], "warnings": [], "rules_validated": 1,
+        "valid": True,
+        "issues": [],
+        "warnings": [],
+        "rules_validated": 1,
     }
     _mock_policy_validator.is_ready.return_value = True
     _mock_vendor_factory.get_available_vendors.return_value = [
-        {"name": "iptables", "status": "available", "connected": False, "class": "IptablesVendor"},
+        {
+            "name": "iptables",
+            "status": "available",
+            "connected": False,
+            "class": "IptablesVendor",
+        },
     ]
     _mock_vendor.apply_rules.return_value = {"success": True, "message": "applied"}
     _mock_vendor.remove_rules.return_value = {"success": True}
@@ -283,15 +310,23 @@ def _create_policy_direct(engine=None, **overrides):
         "priority": 100,
     }
     data.update(overrides)
-    rules = [{"id": "r1", "action": "DENY", "protocol": "TCP",
-              "source_ip": "10.0.0.1/32", "source_cidr": "10.0.0.1/32",
-              "dest_port": 443}]
+    rules = [
+        {
+            "id": "r1",
+            "action": "DENY",
+            "protocol": "TCP",
+            "source_ip": "10.0.0.1/32",
+            "source_cidr": "10.0.0.1/32",
+            "dest_port": 443,
+        }
+    ]
     return eng.create_policy(data, rules)
 
 
 # ===================================================================
 # SECTION A — Policy Orchestrator Flask routes
 # ===================================================================
+
 
 class TestHealthCheck:
     def test_returns_200(self, client):
@@ -305,6 +340,7 @@ class TestHealthCheck:
 # -------------------------------------------------------------------
 # Create policy
 # -------------------------------------------------------------------
+
 
 class TestCreatePolicy:
     def test_success(self, client):
@@ -354,9 +390,13 @@ class TestCreatePolicy:
         # Second policy with overlapping rule should conflict.
         # Seed a conflict: put something in the rule index.
         _redis_sets["rule:index:10.0.0.5/32:*:22:TCP"] = {"pol_existing"}
-        _redis_kv["policy:pol_existing"] = json.dumps({
-            "id": "pol_existing", "name": "old", "action": "ALLOW",
-        })
+        _redis_kv["policy:pol_existing"] = json.dumps(
+            {
+                "id": "pol_existing",
+                "name": "old",
+                "action": "ALLOW",
+            }
+        )
 
         resp = _create_policy_via_api(client)
         assert resp.status_code == 409
@@ -364,9 +404,13 @@ class TestCreatePolicy:
 
     def test_conflict_with_force_succeeds(self, client):
         _redis_sets["rule:index:10.0.0.5/32:*:22:TCP"] = {"pol_existing"}
-        _redis_kv["policy:pol_existing"] = json.dumps({
-            "id": "pol_existing", "name": "old", "action": "ALLOW",
-        })
+        _redis_kv["policy:pol_existing"] = json.dumps(
+            {
+                "id": "pol_existing",
+                "name": "old",
+                "action": "ALLOW",
+            }
+        )
 
         payload = {
             "name": "Forced",
@@ -377,11 +421,14 @@ class TestCreatePolicy:
         assert resp.status_code == 201
 
     def test_vendors_applied(self, client):
-        resp = _create_policy_via_api(client, data={
-            "name": "With vendor",
-            "action": "DENY",
-            "vendors": ["iptables"],
-        })
+        resp = _create_policy_via_api(
+            client,
+            data={
+                "name": "With vendor",
+                "action": "DENY",
+                "vendors": ["iptables"],
+            },
+        )
         assert resp.status_code == 201
         body = resp.get_json()
         assert any(r["vendor"] == "iptables" for r in body["policy"]["apply_results"])
@@ -391,6 +438,7 @@ class TestCreatePolicy:
 # -------------------------------------------------------------------
 # Get policies
 # -------------------------------------------------------------------
+
 
 class TestGetPolicies:
     def test_empty(self, client):
@@ -409,6 +457,7 @@ class TestGetPolicies:
 # Get single policy
 # -------------------------------------------------------------------
 
+
 class TestGetSinglePolicy:
     def test_found(self, client):
         create_resp = _create_policy_via_api(client)
@@ -425,6 +474,7 @@ class TestGetSinglePolicy:
 # -------------------------------------------------------------------
 # Update policy
 # -------------------------------------------------------------------
+
 
 class TestUpdatePolicy:
     def test_success(self, client):
@@ -463,6 +513,7 @@ class TestUpdatePolicy:
 # Delete policy
 # -------------------------------------------------------------------
 
+
 class TestDeletePolicy:
     def test_success(self, client):
         pid = _create_policy_via_api(client).get_json()["policy"]["id"]
@@ -475,11 +526,14 @@ class TestDeletePolicy:
         assert resp.status_code == 404
 
     def test_vendor_remove_called(self, client):
-        pid = _create_policy_via_api(client, data={
-            "name": "Vendored",
-            "action": "DENY",
-            "vendors": ["iptables"],
-        }).get_json()["policy"]["id"]
+        pid = _create_policy_via_api(
+            client,
+            data={
+                "name": "Vendored",
+                "action": "DENY",
+                "vendors": ["iptables"],
+            },
+        ).get_json()["policy"]["id"]
         client.delete(f"/api/v1/policies/{pid}")
         _mock_vendor.remove_rules.assert_called()
 
@@ -487,6 +541,7 @@ class TestDeletePolicy:
 # -------------------------------------------------------------------
 # DRL decision apply (/policies/apply)
 # -------------------------------------------------------------------
+
 
 class TestDRLDecisionApply:
     def _drl_payload(self, **overrides):
@@ -541,7 +596,8 @@ class TestDRLDecisionApply:
 
     def test_validation_failure_returns_400(self, client):
         _mock_policy_validator.validate.return_value = {
-            "valid": False, "issues": [{"msg": "bad"}],
+            "valid": False,
+            "issues": [{"msg": "bad"}],
         }
         resp = client.post(
             "/api/v1/policies/apply",
@@ -555,7 +611,8 @@ class TestDRLDecisionApply:
         # Temporarily make test_in_sandbox fail.
         original = orch_app.policy_engine.test_in_sandbox
         orch_app.policy_engine.test_in_sandbox = lambda rules: {
-            "success": False, "issues": [{"issue": "exploded"}],
+            "success": False,
+            "issues": [{"issue": "exploded"}],
         }
         try:
             resp = client.post(
@@ -580,6 +637,7 @@ class TestDRLDecisionApply:
 # -------------------------------------------------------------------
 # Auto-apply policy (/policies/auto-apply) — CRITICAL DRL PATH
 # -------------------------------------------------------------------
+
 
 class TestAutoApplyPolicy:
     def _auto_payload(self, **overrides):
@@ -687,6 +745,7 @@ class TestAutoApplyPolicy:
 # Policy rollback
 # -------------------------------------------------------------------
 
+
 class TestPolicyRollback:
     def test_rollback_success(self, client):
         pid = _create_policy_via_api(client).get_json()["policy"]["id"]
@@ -718,14 +777,17 @@ class TestPolicyRollback:
 # Rule translation
 # -------------------------------------------------------------------
 
+
 class TestRuleTranslation:
     def test_success(self, client):
         resp = client.post(
             "/api/v1/rules/translate",
-            data=json.dumps({
-                "rules": [{"action": "DENY", "source_ip": "1.2.3.4"}],
-                "target_vendor": "iptables",
-            }),
+            data=json.dumps(
+                {
+                    "rules": [{"action": "DENY", "source_ip": "1.2.3.4"}],
+                    "target_vendor": "iptables",
+                }
+            ),
             content_type="application/json",
         )
         assert resp.status_code == 200
@@ -753,10 +815,12 @@ class TestRuleTranslation:
         _mock_vendor_factory.get_vendor.return_value = None
         resp = client.post(
             "/api/v1/rules/translate",
-            data=json.dumps({
-                "rules": [{"action": "DENY"}],
-                "target_vendor": "nonexistent",
-            }),
+            data=json.dumps(
+                {
+                    "rules": [{"action": "DENY"}],
+                    "target_vendor": "nonexistent",
+                }
+            ),
             content_type="application/json",
         )
         assert resp.status_code == 400
@@ -765,6 +829,7 @@ class TestRuleTranslation:
 # -------------------------------------------------------------------
 # Vendor management
 # -------------------------------------------------------------------
+
 
 class TestVendorManagement:
     def test_get_vendors(self, client):
@@ -786,6 +851,7 @@ class TestVendorManagement:
 # Statistics
 # -------------------------------------------------------------------
 
+
 class TestStatistics:
     def test_empty(self, client):
         resp = client.get("/api/v1/statistics")
@@ -795,9 +861,14 @@ class TestStatistics:
 
     def test_reflects_created_policies(self, client):
         _create_policy_via_api(client)
-        _create_policy_via_api(client, data={
-            "name": "Second", "action": "ALLOW", "force": True,
-        })
+        _create_policy_via_api(
+            client,
+            data={
+                "name": "Second",
+                "action": "ALLOW",
+                "force": True,
+            },
+        )
         resp = client.get("/api/v1/statistics")
         body = resp.get_json()
         assert body["total_policies"] >= 2
@@ -807,15 +878,18 @@ class TestStatistics:
 # Validation endpoint
 # -------------------------------------------------------------------
 
+
 class TestValidationEndpoint:
     def test_valid_policy(self, client):
         resp = client.post(
             "/api/v1/validate",
-            data=json.dumps({
-                "name": "Check me",
-                "action": "DENY",
-                "source": {"ip": "1.2.3.4"},
-            }),
+            data=json.dumps(
+                {
+                    "name": "Check me",
+                    "action": "DENY",
+                    "source": {"ip": "1.2.3.4"},
+                }
+            ),
             content_type="application/json",
         )
         assert resp.status_code == 200
@@ -825,7 +899,8 @@ class TestValidationEndpoint:
 
     def test_invalid_policy(self, client):
         _mock_policy_validator.validate.return_value = {
-            "valid": False, "issues": [{"msg": "no action"}],
+            "valid": False,
+            "issues": [{"msg": "no action"}],
         }
         resp = client.post(
             "/api/v1/validate",
@@ -841,6 +916,7 @@ class TestValidationEndpoint:
 # Error handlers
 # -------------------------------------------------------------------
 
+
 class TestErrorHandlers:
     def test_404_for_unknown_route(self, client):
         resp = client.get("/api/v1/nonexistent")
@@ -851,6 +927,7 @@ class TestErrorHandlers:
 # ===================================================================
 # SECTION B — PolicyEngine unit tests (no Flask, direct calls)
 # ===================================================================
+
 
 class TestPolicyEngineCreatePolicy:
     def test_returns_dict_with_id(self):
@@ -925,13 +1002,27 @@ class TestPolicyEngineGetAllPolicies:
 
 class TestPolicyEngineCheckConflicts:
     def test_no_conflicts_for_unique_rules(self):
-        rules = [{"source_ip": "99.99.99.99", "dest_ip": "*", "dest_port": 8080, "protocol": "TCP"}]
+        rules = [
+            {
+                "source_ip": "99.99.99.99",
+                "dest_ip": "*",
+                "dest_port": 8080,
+                "protocol": "TCP",
+            }
+        ]
         conflicts = orch_app.policy_engine.check_conflicts(rules)
         assert conflicts == []
 
     def test_detects_conflict(self):
         policy = _create_policy_direct()
-        rules = [{"source_ip": "10.0.0.1/32", "dest_ip": "*", "dest_port": 443, "protocol": "TCP"}]
+        rules = [
+            {
+                "source_ip": "10.0.0.1/32",
+                "dest_ip": "*",
+                "dest_port": 443,
+                "protocol": "TCP",
+            }
+        ]
         conflicts = orch_app.policy_engine.check_conflicts(rules)
         assert len(conflicts) >= 1
         assert conflicts[0]["policy_id"] == policy["id"]
@@ -942,7 +1033,9 @@ class TestPolicyEngineRollback:
         eng = orch_app.policy_engine
         policy = _create_policy_direct()
         pid = policy["id"]
-        eng.update_policy(pid, {"name": "v2", "action": "ALLOW"}, [{"id": "r2", "action": "ALLOW"}])
+        eng.update_policy(
+            pid, {"name": "v2", "action": "ALLOW"}, [{"id": "r2", "action": "ALLOW"}]
+        )
 
         result = eng.rollback_policy(pid)
         assert result["success"] is True
@@ -962,16 +1055,20 @@ class TestPolicyEngineRollback:
 
 class TestPolicyEngineSandbox:
     def test_passes_valid_rules(self):
-        result = orch_app.policy_engine.test_in_sandbox([
-            {"id": "r1", "action": "DENY"},
-        ])
+        result = orch_app.policy_engine.test_in_sandbox(
+            [
+                {"id": "r1", "action": "DENY"},
+            ]
+        )
         assert result["success"] is True
         assert result["rules_tested"] == 1
 
     def test_fails_rule_without_action(self):
-        result = orch_app.policy_engine.test_in_sandbox([
-            {"id": "r1"},
-        ])
+        result = orch_app.policy_engine.test_in_sandbox(
+            [
+                {"id": "r1"},
+            ]
+        )
         assert result["success"] is False
         assert len(result["issues"]) == 1
 

@@ -1,46 +1,49 @@
-import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Building2, Plus, Trash2, Edit2, X, Check } from 'lucide-react'
-import { tenantApi } from '../services/api'
-import type { Tenant } from '../types'
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Building2, Plus, Trash2, Edit2, X, Check } from "lucide-react";
+import { tenantApi } from "../services/api";
+import type { Tenant } from "../types";
 
-const PLANS = ['free', 'starter', 'professional', 'enterprise']
+const PLANS = ["free", "starter", "professional", "enterprise"];
 
 function statusBadge(status: string) {
   const cls =
-    status === 'active'
-      ? 'bg-green-500/20 text-green-400 border-green-500/30'
-      : status === 'suspended'
-      ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'
-      : 'bg-slate-600/30 text-slate-400 border-slate-600/50'
-  return (
-    <span className={`badge border ${cls}`}>{status}</span>
-  )
+    status === "active"
+      ? "bg-green-500/20 text-green-400 border-green-500/30"
+      : status === "suspended"
+        ? "bg-yellow-500/20 text-yellow-400 border-yellow-500/30"
+        : "bg-slate-600/30 text-slate-400 border-slate-600/50";
+  return <span className={`badge border ${cls}`}>{status}</span>;
 }
 
 interface TenantFormData {
-  name: string
-  plan: string
-  max_users: string
-  max_agents: string
+  name: string;
+  plan: string;
+  max_users: string;
+  max_agents: string;
 }
 
-const emptyForm: TenantFormData = { name: '', plan: 'starter', max_users: '50', max_agents: '10' }
+const emptyForm: TenantFormData = {
+  name: "",
+  plan: "starter",
+  max_users: "50",
+  max_agents: "10",
+};
 
 export function Tenants() {
-  const qc = useQueryClient()
-  const [showCreate, setShowCreate] = useState(false)
-  const [editId, setEditId] = useState<number | null>(null)
-  const [form, setForm] = useState<TenantFormData>(emptyForm)
-  const [editForm, setEditForm] = useState<TenantFormData>(emptyForm)
-  const [error, setError] = useState('')
+  const qc = useQueryClient();
+  const [showCreate, setShowCreate] = useState(false);
+  const [editId, setEditId] = useState<number | null>(null);
+  const [form, setForm] = useState<TenantFormData>(emptyForm);
+  const [editForm, setEditForm] = useState<TenantFormData>(emptyForm);
+  const [error, setError] = useState("");
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['tenants'],
+    queryKey: ["tenants"],
     queryFn: () => tenantApi.list().then((r) => r.data),
-  })
+  });
 
-  const tenants: Tenant[] = data?.tenants ?? []
+  const tenants: Tenant[] = data?.tenants ?? [];
 
   const createMutation = useMutation({
     mutationFn: (d: TenantFormData) =>
@@ -51,16 +54,17 @@ export function Tenants() {
         max_agents: parseInt(d.max_agents) || 10,
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['tenants'] })
-      setShowCreate(false)
-      setForm(emptyForm)
-      setError('')
+      qc.invalidateQueries({ queryKey: ["tenants"] });
+      setShowCreate(false);
+      setForm(emptyForm);
+      setError("");
     },
     onError: (e: unknown) => {
-      const msg = (e as { response?: { data?: { error?: string } } })?.response?.data?.error
-      setError(msg ?? 'Failed to create tenant')
+      const msg = (e as { response?: { data?: { error?: string } } })?.response
+        ?.data?.error;
+      setError(msg ?? "Failed to create tenant");
     },
-  })
+  });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, d }: { id: number; d: TenantFormData }) =>
@@ -71,30 +75,31 @@ export function Tenants() {
         max_agents: parseInt(d.max_agents) || 10,
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['tenants'] })
-      setEditId(null)
-      setError('')
+      qc.invalidateQueries({ queryKey: ["tenants"] });
+      setEditId(null);
+      setError("");
     },
     onError: (e: unknown) => {
-      const msg = (e as { response?: { data?: { error?: string } } })?.response?.data?.error
-      setError(msg ?? 'Failed to update tenant')
+      const msg = (e as { response?: { data?: { error?: string } } })?.response
+        ?.data?.error;
+      setError(msg ?? "Failed to update tenant");
     },
-  })
+  });
 
   const deactivateMutation = useMutation({
     mutationFn: (id: number) => tenantApi.deactivate(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['tenants'] }),
-  })
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["tenants"] }),
+  });
 
   const startEdit = (t: Tenant) => {
-    setEditId(t.id)
+    setEditId(t.id);
     setEditForm({
       name: t.name,
       plan: t.plan,
       max_users: String(t.max_users),
       max_agents: String(t.max_agents),
-    })
-  }
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -104,7 +109,10 @@ export function Tenants() {
           <h1 className="text-2xl font-bold text-white">Tenant Management</h1>
         </div>
         <button
-          onClick={() => { setShowCreate(true); setError('') }}
+          onClick={() => {
+            setShowCreate(true);
+            setError("");
+          }}
           className="btn-primary gap-2"
         >
           <Plus className="h-4 w-4" /> New Tenant
@@ -139,26 +147,36 @@ export function Tenants() {
                 className="select-field w-full"
               >
                 {PLANS.map((p) => (
-                  <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>
+                  <option key={p} value={p}>
+                    {p.charAt(0).toUpperCase() + p.slice(1)}
+                  </option>
                 ))}
               </select>
             </div>
             <div>
-              <label className="block text-sm text-slate-400 mb-1">Max Users</label>
+              <label className="block text-sm text-slate-400 mb-1">
+                Max Users
+              </label>
               <input
                 type="number"
                 value={form.max_users}
-                onChange={(e) => setForm({ ...form, max_users: e.target.value })}
+                onChange={(e) =>
+                  setForm({ ...form, max_users: e.target.value })
+                }
                 className="input-field"
                 min="1"
               />
             </div>
             <div>
-              <label className="block text-sm text-slate-400 mb-1">Max Agents</label>
+              <label className="block text-sm text-slate-400 mb-1">
+                Max Agents
+              </label>
               <input
                 type="number"
                 value={form.max_agents}
-                onChange={(e) => setForm({ ...form, max_agents: e.target.value })}
+                onChange={(e) =>
+                  setForm({ ...form, max_agents: e.target.value })
+                }
                 className="input-field"
                 min="1"
               />
@@ -172,7 +190,13 @@ export function Tenants() {
             >
               <Check className="h-4 w-4" /> Create
             </button>
-            <button onClick={() => { setShowCreate(false); setError('') }} className="btn-secondary gap-2">
+            <button
+              onClick={() => {
+                setShowCreate(false);
+                setError("");
+              }}
+              className="btn-secondary gap-2"
+            >
               <X className="h-4 w-4" /> Cancel
             </button>
           </div>
@@ -205,7 +229,10 @@ export function Tenants() {
               <tbody className="divide-y divide-slate-700/50">
                 {tenants.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="table-cell text-center text-slate-400">
+                    <td
+                      colSpan={7}
+                      className="table-cell text-center text-slate-400"
+                    >
                       No tenants found.
                     </td>
                   </tr>
@@ -217,25 +244,46 @@ export function Tenants() {
                           <td className="table-cell">
                             <input
                               value={editForm.name}
-                              onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                              onChange={(e) =>
+                                setEditForm({
+                                  ...editForm,
+                                  name: e.target.value,
+                                })
+                              }
                               className="input-field text-sm py-1"
                             />
                           </td>
                           <td className="table-cell">
                             <select
                               value={editForm.plan}
-                              onChange={(e) => setEditForm({ ...editForm, plan: e.target.value })}
+                              onChange={(e) =>
+                                setEditForm({
+                                  ...editForm,
+                                  plan: e.target.value,
+                                })
+                              }
                               className="select-field text-sm py-1"
                             >
-                              {PLANS.map((p) => <option key={p} value={p}>{p}</option>)}
+                              {PLANS.map((p) => (
+                                <option key={p} value={p}>
+                                  {p}
+                                </option>
+                              ))}
                             </select>
                           </td>
-                          <td className="table-cell">{statusBadge(t.status)}</td>
+                          <td className="table-cell">
+                            {statusBadge(t.status)}
+                          </td>
                           <td className="table-cell">
                             <input
                               type="number"
                               value={editForm.max_users}
-                              onChange={(e) => setEditForm({ ...editForm, max_users: e.target.value })}
+                              onChange={(e) =>
+                                setEditForm({
+                                  ...editForm,
+                                  max_users: e.target.value,
+                                })
+                              }
                               className="input-field text-sm py-1 w-20"
                             />
                           </td>
@@ -243,7 +291,12 @@ export function Tenants() {
                             <input
                               type="number"
                               value={editForm.max_agents}
-                              onChange={(e) => setEditForm({ ...editForm, max_agents: e.target.value })}
+                              onChange={(e) =>
+                                setEditForm({
+                                  ...editForm,
+                                  max_agents: e.target.value,
+                                })
+                              }
                               className="input-field text-sm py-1 w-20"
                             />
                           </td>
@@ -253,7 +306,12 @@ export function Tenants() {
                           <td className="table-cell">
                             <div className="flex gap-2">
                               <button
-                                onClick={() => updateMutation.mutate({ id: t.id, d: editForm })}
+                                onClick={() =>
+                                  updateMutation.mutate({
+                                    id: t.id,
+                                    d: editForm,
+                                  })
+                                }
                                 disabled={updateMutation.isPending}
                                 className="text-green-400 hover:text-green-300"
                                 title="Save"
@@ -272,15 +330,23 @@ export function Tenants() {
                         </>
                       ) : (
                         <>
-                          <td className="table-cell font-medium text-white">{t.name}</td>
+                          <td className="table-cell font-medium text-white">
+                            {t.name}
+                          </td>
                           <td className="table-cell">
                             <span className="badge bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 capitalize">
                               {t.plan}
                             </span>
                           </td>
-                          <td className="table-cell">{statusBadge(t.status)}</td>
-                          <td className="table-cell text-slate-300">{t.max_users}</td>
-                          <td className="table-cell text-slate-300">{t.max_agents}</td>
+                          <td className="table-cell">
+                            {statusBadge(t.status)}
+                          </td>
+                          <td className="table-cell text-slate-300">
+                            {t.max_users}
+                          </td>
+                          <td className="table-cell text-slate-300">
+                            {t.max_agents}
+                          </td>
                           <td className="table-cell text-slate-400 text-xs">
                             {new Date(t.created_at).toLocaleDateString()}
                           </td>
@@ -296,7 +362,7 @@ export function Tenants() {
                               <button
                                 onClick={() => {
                                   if (confirm(`Deactivate tenant "${t.name}"?`))
-                                    deactivateMutation.mutate(t.id)
+                                    deactivateMutation.mutate(t.id);
                                 }}
                                 className="text-red-400 hover:text-red-300"
                                 title="Deactivate"
@@ -316,5 +382,5 @@ export function Tenants() {
         </div>
       )}
     </div>
-  )
+  );
 }

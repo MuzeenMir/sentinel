@@ -27,7 +27,7 @@ import pickle
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 import numpy as np
 
@@ -42,10 +42,11 @@ logger = logging.getLogger("sentinel.validate_models")
 
 # ── Thresholds ────────────────────────────────────────────────────────────────
 
+
 @dataclass
 class ModelThreshold:
     name: str
-    artefact: str          # relative path inside model_path
+    artefact: str  # relative path inside model_path
     required: bool = True  # if True, gate fails on missing artefact
     min_accuracy: float = 0.90
     min_f1: float = 0.88
@@ -97,6 +98,7 @@ THRESHOLDS: List[ModelThreshold] = [
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 def _load_metrics(model_path: Path, model_name: str) -> Optional[Dict[str, float]]:
     """Load metrics.json written by train_all.py for a given model."""
     candidates = [
@@ -134,6 +136,7 @@ def _evaluate_with_validation_set(
 
         if model_name == "xgboost":
             import xgboost as xgb
+
             artefact = model_path / "xgboost" / "model.json"
             if not artefact.exists():
                 return None
@@ -150,8 +153,12 @@ def _evaluate_with_validation_set(
             is_binary = len(np.unique(y_val)) <= 2
             return {
                 "accuracy": accuracy_score(y_val, y_pred),
-                "f1": f1_score(y_val, y_pred, average="binary" if is_binary else "weighted"),
-                "auc": roc_auc_score(y_val, y_score, multi_class="ovr") if not is_binary else roc_auc_score(y_val, y_score),
+                "f1": f1_score(
+                    y_val, y_pred, average="binary" if is_binary else "weighted"
+                ),
+                "auc": roc_auc_score(y_val, y_score, multi_class="ovr")
+                if not is_binary
+                else roc_auc_score(y_val, y_score),
             }
 
         if model_name == "isolation_forest":
@@ -177,6 +184,7 @@ def _evaluate_with_validation_set(
 
 
 # ── Gate logic ────────────────────────────────────────────────────────────────
+
 
 def validate(model_path: Path, strict: bool = False) -> bool:
     """
@@ -239,14 +247,18 @@ def validate(model_path: Path, strict: bool = False) -> bool:
         }
 
         if ok:
-            logger.info(
-                "PASS %s — acc=%.4f f1=%.4f auc=%.4f", thr.name, acc, f1, auc
-            )
+            logger.info("PASS %s — acc=%.4f f1=%.4f auc=%.4f", thr.name, acc, f1, auc)
             passed.append(thr.name)
         else:
             logger.error(
                 "FAIL %s — acc=%.4f (min %.2f) f1=%.4f (min %.2f) auc=%.4f (min %.2f)",
-                thr.name, acc, thr.min_accuracy, f1, thr.min_f1, auc, thr.min_auc,
+                thr.name,
+                acc,
+                thr.min_accuracy,
+                f1,
+                thr.min_f1,
+                auc,
+                thr.min_auc,
             )
             if thr.required or strict:
                 failed.append(thr.name)
@@ -265,10 +277,14 @@ def validate(model_path: Path, strict: bool = False) -> bool:
     logger.info("Validation report written to %s", report_path)
 
     if missing:
-        logger.error("Gate FAILED — %d required artefact(s) missing: %s", len(missing), missing)
+        logger.error(
+            "Gate FAILED — %d required artefact(s) missing: %s", len(missing), missing
+        )
         return False
     if failed:
-        logger.error("Gate FAILED — %d model(s) below threshold: %s", len(failed), failed)
+        logger.error(
+            "Gate FAILED — %d model(s) below threshold: %s", len(failed), failed
+        )
         return False
 
     logger.info("Gate PASSED — %d model(s) validated: %s", len(passed), passed)
@@ -276,6 +292,7 @@ def validate(model_path: Path, strict: bool = False) -> bool:
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(

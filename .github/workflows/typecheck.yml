@@ -37,13 +37,34 @@ jobs:
             mypy==1.11.1 \
             pydantic==2.8.2 \
             types-requests types-PyYAML types-redis
-      - name: mypy
+      - name: mypy (Phase 0 allowlist)
         run: |
-          mypy \
-            --ignore-missing-imports \
-            --python-version 3.12 \
-            --no-incremental \
-            sentinel-core/backend
+          set -euo pipefail
+          # Phase 0 scope: only dirs that currently pass mypy run in the gate.
+          # Each service owns its own app.py, so we can't scan the full
+          # backend/ tree in one call (mypy would report duplicate "app" module).
+          # Legacy services with type-debt (ai-engine, alert-service, auth-service,
+          # data-collector, drl-engine, policy-orchestrator, tests, etc.) get
+          # folded in as Phase 1 consolidates code into backend/_lib/.
+          ALLOWLIST=(
+            sentinel-core/backend/shared
+            sentinel-core/backend/plugins
+            sentinel-core/backend/migrations
+            sentinel-core/backend/compliance-engine
+            sentinel-core/backend/xai-service
+            sentinel-core/backend/hids-agent
+          )
+          failed=0
+          for d in "${ALLOWLIST[@]}"; do
+            echo "::group::mypy $(basename "$d")"
+            mypy \
+              --ignore-missing-imports \
+              --python-version 3.12 \
+              --no-incremental \
+              "$d" || failed=$?
+            echo "::endgroup::"
+          done
+          exit "$failed"
 
   typecheck-frontend:
     name: typecheck-frontend

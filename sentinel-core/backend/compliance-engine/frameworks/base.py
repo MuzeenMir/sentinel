@@ -1,4 +1,5 @@
 """Abstract base class for all compliance frameworks."""
+
 import logging
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List
@@ -7,7 +8,6 @@ logger = logging.getLogger(__name__)
 
 
 class BaseFramework(ABC):
-
     @property
     @abstractmethod
     def full_name(self) -> str: ...
@@ -43,9 +43,7 @@ class BaseFramework(ABC):
         if not assessment:
             return 0.0
         compliant = sum(1 for a in assessment if a.get("status") == "compliant")
-        partial = sum(
-            1 for a in assessment if a.get("status") == "partially_compliant"
-        )
+        partial = sum(1 for a in assessment if a.get("status") == "partially_compliant")
         return round((compliant + partial * 0.5) / len(assessment) * 100, 2)
 
     def identify_gaps(self, assessment: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -74,18 +72,14 @@ class BaseFramework(ABC):
                             "control_id": a["control_id"],
                             "recommendation": rec,
                             "priority": (
-                                "high"
-                                if a["status"] == "non_compliant"
-                                else "medium"
+                                "high" if a["status"] == "non_compliant" else "medium"
                             ),
                         }
                     )
         return recommendations
 
     @abstractmethod
-    def detailed_gap_analysis(
-        self, current_controls: Dict
-    ) -> List[Dict[str, Any]]: ...
+    def detailed_gap_analysis(self, current_controls: Dict) -> List[Dict[str, Any]]: ...
 
     def prioritize_gaps(self, gaps: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         priority_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
@@ -204,9 +198,7 @@ class BaseFramework(ABC):
             )
         return results
 
-    def _default_gap_analysis(
-        self, current_controls: Dict
-    ) -> List[Dict[str, Any]]:
+    def _default_gap_analysis(self, current_controls: Dict) -> List[Dict[str, Any]]:
         """Generic gap analysis reusable by all concrete frameworks."""
         implemented_ids = set(current_controls.get("implemented", []))
         partial_ids = set(current_controls.get("partial", []))
@@ -230,9 +222,7 @@ class BaseFramework(ABC):
                     "severity": severity,
                     "description": control["description"],
                     "requirements": control.get("requirements", []),
-                    "remediation_steps": [
-                        f"Implement {control['name']}"
-                    ],
+                    "remediation_steps": [f"Implement {control['name']}"],
                 }
             )
         return gaps

@@ -1,4 +1,5 @@
 """nftables firewall adapter."""
+
 import json
 import logging
 import os
@@ -41,23 +42,21 @@ class NftablesAdapter(BaseVendorAdapter):
 
     # ── public API ────────────────────────────────────────────────
 
-    def translate_rules(
-        self, rules: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
+    def translate_rules(self, rules: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         translated = []
         for rule in rules:
-            chain = _CHAIN_MAP.get(
-                rule.get("direction", "INBOUND"), "sentinel_input"
-            )
+            chain = _CHAIN_MAP.get(rule.get("direction", "INBOUND"), "sentinel_input")
             stmt = self._rule_to_statement(rule)
-            translated.append({
-                "rule_id": rule.get("id"),
-                "table": _TABLE,
-                "family": _FAMILY,
-                "chain": chain,
-                "statement": stmt,
-                "command": f"nft add rule {_FAMILY} {_TABLE} {chain} {stmt}",
-            })
+            translated.append(
+                {
+                    "rule_id": rule.get("id"),
+                    "table": _TABLE,
+                    "family": _FAMILY,
+                    "chain": chain,
+                    "statement": stmt,
+                    "command": f"nft add rule {_FAMILY} {_TABLE} {chain} {stmt}",
+                }
+            )
         return translated
 
     def apply_rules(self, rules: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -144,9 +143,7 @@ class NftablesAdapter(BaseVendorAdapter):
         for chain in sorted(chains):
             hook = _HOOK_MAP.get(chain, "input")
             lines.append(f"  chain {chain} {{")
-            lines.append(
-                f"    type filter hook {hook} priority 0; policy accept;"
-            )
+            lines.append(f"    type filter hook {hook} priority 0; policy accept;")
             for stmt in chains[chain]:
                 lines.append(f"    {stmt}")
             lines.append("  }")
@@ -198,8 +195,7 @@ class NftablesAdapter(BaseVendorAdapter):
                 return {
                     "success": False,
                     "message": (
-                        f"Failed to list nftables table: "
-                        f"{proc.stderr.strip()}"
+                        f"Failed to list nftables table: " f"{proc.stderr.strip()}"
                     ),
                 }
 
@@ -223,9 +219,14 @@ class NftablesAdapter(BaseVendorAdapter):
                 try:
                     subprocess.run(
                         [
-                            "nft", "delete", "rule",
-                            _FAMILY, _TABLE, chain,
-                            "handle", str(handle),
+                            "nft",
+                            "delete",
+                            "rule",
+                            _FAMILY,
+                            _TABLE,
+                            chain,
+                            "handle",
+                            str(handle),
                         ],
                         check=True,
                         capture_output=True,
@@ -238,9 +239,7 @@ class NftablesAdapter(BaseVendorAdapter):
             if errors:
                 return {
                     "success": False,
-                    "message": (
-                        f"Partially removed; {len(errors)} error(s)"
-                    ),
+                    "message": (f"Partially removed; {len(errors)} error(s)"),
                     "errors": errors,
                 }
             return {

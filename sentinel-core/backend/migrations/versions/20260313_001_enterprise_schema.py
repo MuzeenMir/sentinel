@@ -55,18 +55,42 @@ def upgrade():
         op.create_table(
             "tenants",
             sa.Column("id", sa.BigInteger, primary_key=True, autoincrement=True),
-            sa.Column("tenant_id", sa.dialects.postgresql.UUID, server_default=sa.text("gen_random_uuid()"), unique=True, nullable=False),
+            sa.Column(
+                "tenant_id",
+                sa.dialects.postgresql.UUID,
+                server_default=sa.text("gen_random_uuid()"),
+                unique=True,
+                nullable=False,
+            ),
             sa.Column("name", sa.String(200), nullable=False, unique=True),
             sa.Column("display_name", sa.String(200)),
             sa.Column("status", sa.String(20), server_default="active", nullable=False),
-            sa.Column("plan", sa.String(50), server_default="professional", nullable=False),
+            sa.Column(
+                "plan", sa.String(50), server_default="professional", nullable=False
+            ),
             sa.Column("settings", sa.dialects.postgresql.JSONB, server_default="{}"),
             sa.Column("data_region", sa.String(50), server_default="us-east-1"),
             sa.Column("retention_days", sa.Integer, server_default="90"),
-            sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP"), nullable=False),
-            sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP"), nullable=False),
-            sa.CheckConstraint("status IN ('active', 'suspended', 'deactivated')", name="ck_tenants_status"),
-            sa.CheckConstraint("plan IN ('basic', 'professional', 'enterprise')", name="ck_tenants_plan"),
+            sa.Column(
+                "created_at",
+                sa.DateTime(timezone=True),
+                server_default=sa.text("CURRENT_TIMESTAMP"),
+                nullable=False,
+            ),
+            sa.Column(
+                "updated_at",
+                sa.DateTime(timezone=True),
+                server_default=sa.text("CURRENT_TIMESTAMP"),
+                nullable=False,
+            ),
+            sa.CheckConstraint(
+                "status IN ('active', 'suspended', 'deactivated')",
+                name="ck_tenants_status",
+            ),
+            sa.CheckConstraint(
+                "plan IN ('basic', 'professional', 'enterprise')",
+                name="ck_tenants_plan",
+            ),
         )
 
     # Default tenant row (safe with init.sql schema — name is UNIQUE there too).
@@ -85,9 +109,15 @@ def upgrade():
     # of these are created by services at runtime and are not guaranteed
     # to be present when db-migrate runs on a fresh volume.
     for table in [
-        "alerts", "threats", "firewall_policies", "network_logs",
-        "compliance_assessments", "audit_logs", "training_data",
-        "rl_agent_states", "system_config",
+        "alerts",
+        "threats",
+        "firewall_policies",
+        "network_logs",
+        "compliance_assessments",
+        "audit_logs",
+        "training_data",
+        "rl_agent_states",
+        "system_config",
     ]:
         if not _has_table(bind, table):
             continue
@@ -97,14 +127,22 @@ def upgrade():
             UPDATE {table} SET tenant_id = (SELECT id FROM tenants WHERE name = 'default')
             WHERE tenant_id IS NULL
         """)
-        op.execute(f'CREATE INDEX IF NOT EXISTS idx_{table}_tenant_id ON {table} (tenant_id)')
+        op.execute(
+            f"CREATE INDEX IF NOT EXISTS idx_{table}_tenant_id ON {table} (tenant_id)"
+        )
 
     # ── Policy decisions (init.sql ships a simpler version) ─────────
     if not _has_table(bind, "policy_decisions"):
         op.create_table(
             "policy_decisions",
             sa.Column("id", sa.BigInteger, primary_key=True, autoincrement=True),
-            sa.Column("decision_id", sa.dialects.postgresql.UUID, server_default=sa.text("gen_random_uuid()"), unique=True, nullable=False),
+            sa.Column(
+                "decision_id",
+                sa.dialects.postgresql.UUID,
+                server_default=sa.text("gen_random_uuid()"),
+                unique=True,
+                nullable=False,
+            ),
             sa.Column("tenant_id", sa.BigInteger, nullable=True),
             sa.Column("threat_id", sa.BigInteger, nullable=True),
             sa.Column("source_ip", sa.dialects.postgresql.INET),
@@ -120,23 +158,42 @@ def upgrade():
             sa.Column("rolled_back", sa.Boolean, server_default="false"),
             sa.Column("rolled_back_at", sa.DateTime(timezone=True)),
             sa.Column("details", sa.dialects.postgresql.JSONB),
-            sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP"), nullable=False),
+            sa.Column(
+                "created_at",
+                sa.DateTime(timezone=True),
+                server_default=sa.text("CURRENT_TIMESTAMP"),
+                nullable=False,
+            ),
             sa.CheckConstraint(
                 "action IN ('ALLOW', 'DENY', 'RATE_LIMIT', 'QUARANTINE', 'MONITOR')",
                 name="ck_policy_decisions_action",
             ),
         )
-        op.execute('CREATE INDEX IF NOT EXISTS idx_policy_decisions_tenant ON policy_decisions (tenant_id)')
-        op.execute('CREATE INDEX IF NOT EXISTS idx_policy_decisions_created ON policy_decisions (created_at DESC)')
-        op.execute('CREATE INDEX IF NOT EXISTS idx_policy_decisions_action ON policy_decisions (action)')
-        op.execute('CREATE INDEX IF NOT EXISTS idx_policy_decisions_source ON policy_decisions (source_ip)')
+        op.execute(
+            "CREATE INDEX IF NOT EXISTS idx_policy_decisions_tenant ON policy_decisions (tenant_id)"
+        )
+        op.execute(
+            "CREATE INDEX IF NOT EXISTS idx_policy_decisions_created ON policy_decisions (created_at DESC)"
+        )
+        op.execute(
+            "CREATE INDEX IF NOT EXISTS idx_policy_decisions_action ON policy_decisions (action)"
+        )
+        op.execute(
+            "CREATE INDEX IF NOT EXISTS idx_policy_decisions_source ON policy_decisions (source_ip)"
+        )
 
     # ── XAI explanations ────────────────────────────────────────────
     if not _has_table(bind, "xai_explanations"):
         op.create_table(
             "xai_explanations",
             sa.Column("id", sa.BigInteger, primary_key=True, autoincrement=True),
-            sa.Column("explanation_id", sa.dialects.postgresql.UUID, server_default=sa.text("gen_random_uuid()"), unique=True, nullable=False),
+            sa.Column(
+                "explanation_id",
+                sa.dialects.postgresql.UUID,
+                server_default=sa.text("gen_random_uuid()"),
+                unique=True,
+                nullable=False,
+            ),
             sa.Column("tenant_id", sa.BigInteger, nullable=True),
             sa.Column("detection_id", sa.String(200)),
             sa.Column("decision_id", sa.BigInteger, nullable=True),
@@ -146,22 +203,39 @@ def upgrade():
             sa.Column("shap_values", sa.dialects.postgresql.JSONB),
             sa.Column("natural_language", sa.Text),
             sa.Column("risk_factors", sa.dialects.postgresql.JSONB),
-            sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP"), nullable=False),
+            sa.Column(
+                "created_at",
+                sa.DateTime(timezone=True),
+                server_default=sa.text("CURRENT_TIMESTAMP"),
+                nullable=False,
+            ),
             sa.CheckConstraint(
                 "explanation_type IN ('detection', 'policy', 'compliance')",
                 name="ck_xai_explanations_type",
             ),
         )
-        op.execute('CREATE INDEX IF NOT EXISTS idx_xai_explanations_tenant ON xai_explanations (tenant_id)')
-        op.execute('CREATE INDEX IF NOT EXISTS idx_xai_explanations_detection ON xai_explanations (detection_id)')
-        op.execute('CREATE INDEX IF NOT EXISTS idx_xai_explanations_created ON xai_explanations (created_at DESC)')
+        op.execute(
+            "CREATE INDEX IF NOT EXISTS idx_xai_explanations_tenant ON xai_explanations (tenant_id)"
+        )
+        op.execute(
+            "CREATE INDEX IF NOT EXISTS idx_xai_explanations_detection ON xai_explanations (detection_id)"
+        )
+        op.execute(
+            "CREATE INDEX IF NOT EXISTS idx_xai_explanations_created ON xai_explanations (created_at DESC)"
+        )
 
     # ── Hardening scan results (persistent) ──────────────────────────
     if not _has_table(bind, "hardening_scans"):
         op.create_table(
             "hardening_scans",
             sa.Column("id", sa.BigInteger, primary_key=True, autoincrement=True),
-            sa.Column("scan_id", sa.dialects.postgresql.UUID, server_default=sa.text("gen_random_uuid()"), unique=True, nullable=False),
+            sa.Column(
+                "scan_id",
+                sa.dialects.postgresql.UUID,
+                server_default=sa.text("gen_random_uuid()"),
+                unique=True,
+                nullable=False,
+            ),
             sa.Column("tenant_id", sa.BigInteger, nullable=True),
             sa.Column("hostname", sa.String(255)),
             sa.Column("checks_run", sa.Integer, nullable=False),
@@ -170,18 +244,35 @@ def upgrade():
             sa.Column("posture_score", sa.Numeric(5, 2)),
             sa.Column("results", sa.dialects.postgresql.JSONB),
             sa.Column("remediations_applied", sa.Integer, server_default="0"),
-            sa.Column("scanned_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP"), nullable=False),
+            sa.Column(
+                "scanned_at",
+                sa.DateTime(timezone=True),
+                server_default=sa.text("CURRENT_TIMESTAMP"),
+                nullable=False,
+            ),
         )
-        op.execute('CREATE INDEX IF NOT EXISTS idx_hardening_scans_tenant ON hardening_scans (tenant_id)')
-        op.execute('CREATE INDEX IF NOT EXISTS idx_hardening_scans_hostname ON hardening_scans (hostname)')
-        op.execute('CREATE INDEX IF NOT EXISTS idx_hardening_scans_scanned ON hardening_scans (scanned_at DESC)')
+        op.execute(
+            "CREATE INDEX IF NOT EXISTS idx_hardening_scans_tenant ON hardening_scans (tenant_id)"
+        )
+        op.execute(
+            "CREATE INDEX IF NOT EXISTS idx_hardening_scans_hostname ON hardening_scans (hostname)"
+        )
+        op.execute(
+            "CREATE INDEX IF NOT EXISTS idx_hardening_scans_scanned ON hardening_scans (scanned_at DESC)"
+        )
 
     # ── HIDS events (persistent, time-series) ────────────────────────
     if not _has_table(bind, "hids_events"):
         op.create_table(
             "hids_events",
             sa.Column("id", sa.BigInteger, primary_key=True, autoincrement=True),
-            sa.Column("event_id", sa.dialects.postgresql.UUID, server_default=sa.text("gen_random_uuid()"), unique=True, nullable=False),
+            sa.Column(
+                "event_id",
+                sa.dialects.postgresql.UUID,
+                server_default=sa.text("gen_random_uuid()"),
+                unique=True,
+                nullable=False,
+            ),
             sa.Column("tenant_id", sa.BigInteger, nullable=True),
             sa.Column("hostname", sa.String(255)),
             sa.Column("event_type", sa.String(50), nullable=False),
@@ -191,20 +282,41 @@ def upgrade():
             sa.Column("comm", sa.String(255)),
             sa.Column("filename", sa.String(1024)),
             sa.Column("details", sa.dialects.postgresql.JSONB),
-            sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP"), nullable=False),
+            sa.Column(
+                "created_at",
+                sa.DateTime(timezone=True),
+                server_default=sa.text("CURRENT_TIMESTAMP"),
+                nullable=False,
+            ),
         )
-        op.execute('CREATE INDEX IF NOT EXISTS idx_hids_events_tenant ON hids_events (tenant_id)')
-        op.execute('CREATE INDEX IF NOT EXISTS idx_hids_events_type ON hids_events (event_type)')
-        op.execute('CREATE INDEX IF NOT EXISTS idx_hids_events_severity ON hids_events (severity)')
-        op.execute('CREATE INDEX IF NOT EXISTS idx_hids_events_created ON hids_events (created_at DESC)')
-        op.execute('CREATE INDEX IF NOT EXISTS idx_hids_events_hostname_time ON hids_events (hostname, created_at DESC)')
+        op.execute(
+            "CREATE INDEX IF NOT EXISTS idx_hids_events_tenant ON hids_events (tenant_id)"
+        )
+        op.execute(
+            "CREATE INDEX IF NOT EXISTS idx_hids_events_type ON hids_events (event_type)"
+        )
+        op.execute(
+            "CREATE INDEX IF NOT EXISTS idx_hids_events_severity ON hids_events (severity)"
+        )
+        op.execute(
+            "CREATE INDEX IF NOT EXISTS idx_hids_events_created ON hids_events (created_at DESC)"
+        )
+        op.execute(
+            "CREATE INDEX IF NOT EXISTS idx_hids_events_hostname_time ON hids_events (hostname, created_at DESC)"
+        )
 
     # ── Integration / webhook registry ───────────────────────────────
     if not _has_table(bind, "integrations"):
         op.create_table(
             "integrations",
             sa.Column("id", sa.BigInteger, primary_key=True, autoincrement=True),
-            sa.Column("integration_id", sa.dialects.postgresql.UUID, server_default=sa.text("gen_random_uuid()"), unique=True, nullable=False),
+            sa.Column(
+                "integration_id",
+                sa.dialects.postgresql.UUID,
+                server_default=sa.text("gen_random_uuid()"),
+                unique=True,
+                nullable=False,
+            ),
             sa.Column("tenant_id", sa.BigInteger, nullable=True),
             sa.Column("name", sa.String(200), nullable=False),
             sa.Column("type", sa.String(50), nullable=False),
@@ -212,23 +324,43 @@ def upgrade():
             sa.Column("is_active", sa.Boolean, server_default="true"),
             sa.Column("last_triggered_at", sa.DateTime(timezone=True)),
             sa.Column("failure_count", sa.Integer, server_default="0"),
-            sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP"), nullable=False),
-            sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP"), nullable=False),
+            sa.Column(
+                "created_at",
+                sa.DateTime(timezone=True),
+                server_default=sa.text("CURRENT_TIMESTAMP"),
+                nullable=False,
+            ),
+            sa.Column(
+                "updated_at",
+                sa.DateTime(timezone=True),
+                server_default=sa.text("CURRENT_TIMESTAMP"),
+                nullable=False,
+            ),
             sa.CheckConstraint(
                 "type IN ('webhook', 'siem_splunk', 'siem_elastic', 'siem_sentinel', "
                 "'soar_xsoar', 'soar_tines', 'ticketing_servicenow', 'ticketing_jira', 'email', 'slack', 'custom')",
                 name="ck_integrations_type",
             ),
         )
-        op.execute('CREATE INDEX IF NOT EXISTS idx_integrations_tenant ON integrations (tenant_id)')
-        op.execute('CREATE INDEX IF NOT EXISTS idx_integrations_type ON integrations (type)')
+        op.execute(
+            "CREATE INDEX IF NOT EXISTS idx_integrations_tenant ON integrations (tenant_id)"
+        )
+        op.execute(
+            "CREATE INDEX IF NOT EXISTS idx_integrations_type ON integrations (type)"
+        )
 
     # ── Model registry ──────────────────────────────────────────────
     if not _has_table(bind, "model_registry"):
         op.create_table(
             "model_registry",
             sa.Column("id", sa.BigInteger, primary_key=True, autoincrement=True),
-            sa.Column("model_id", sa.dialects.postgresql.UUID, server_default=sa.text("gen_random_uuid()"), unique=True, nullable=False),
+            sa.Column(
+                "model_id",
+                sa.dialects.postgresql.UUID,
+                server_default=sa.text("gen_random_uuid()"),
+                unique=True,
+                nullable=False,
+            ),
             sa.Column("name", sa.String(100), nullable=False),
             sa.Column("version", sa.String(50), nullable=False),
             sa.Column("model_type", sa.String(50), nullable=False),
@@ -238,15 +370,26 @@ def upgrade():
             sa.Column("parameters", sa.dialects.postgresql.JSONB),
             sa.Column("status", sa.String(20), server_default="staging"),
             sa.Column("promoted_at", sa.DateTime(timezone=True)),
-            sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP"), nullable=False),
-            sa.UniqueConstraint("name", "version", name="uq_model_registry_name_version"),
+            sa.Column(
+                "created_at",
+                sa.DateTime(timezone=True),
+                server_default=sa.text("CURRENT_TIMESTAMP"),
+                nullable=False,
+            ),
+            sa.UniqueConstraint(
+                "name", "version", name="uq_model_registry_name_version"
+            ),
             sa.CheckConstraint(
                 "status IN ('staging', 'production', 'archived', 'failed')",
                 name="ck_model_registry_status",
             ),
         )
-        op.execute('CREATE INDEX IF NOT EXISTS idx_model_registry_name ON model_registry (name)')
-        op.execute('CREATE INDEX IF NOT EXISTS idx_model_registry_status ON model_registry (status)')
+        op.execute(
+            "CREATE INDEX IF NOT EXISTS idx_model_registry_name ON model_registry (name)"
+        )
+        op.execute(
+            "CREATE INDEX IF NOT EXISTS idx_model_registry_status ON model_registry (status)"
+        )
 
     # ── Data retention configuration per tenant ──────────────────────
     if not _has_table(bind, "data_retention_policies"):
@@ -259,8 +402,15 @@ def upgrade():
             sa.Column("archive_to_s3", sa.Boolean, server_default="false"),
             sa.Column("s3_bucket", sa.String(200)),
             sa.Column("last_purged_at", sa.DateTime(timezone=True)),
-            sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP"), nullable=False),
-            sa.UniqueConstraint("tenant_id", "table_name", name="uq_retention_tenant_table"),
+            sa.Column(
+                "created_at",
+                sa.DateTime(timezone=True),
+                server_default=sa.text("CURRENT_TIMESTAMP"),
+                nullable=False,
+            ),
+            sa.UniqueConstraint(
+                "tenant_id", "table_name", name="uq_retention_tenant_table"
+            ),
         )
 
     op.execute("""
@@ -296,11 +446,25 @@ def upgrade():
 
 
 def downgrade():
-    for table in ["data_retention_policies", "model_registry", "integrations",
-                  "hids_events", "hardening_scans", "xai_explanations"]:
+    for table in [
+        "data_retention_policies",
+        "model_registry",
+        "integrations",
+        "hids_events",
+        "hardening_scans",
+        "xai_explanations",
+    ]:
         op.execute(f"DROP TABLE IF EXISTS {table} CASCADE")
 
-    for table in ["alerts", "threats", "firewall_policies", "network_logs",
-                  "compliance_assessments", "audit_logs", "training_data",
-                  "rl_agent_states", "system_config"]:
+    for table in [
+        "alerts",
+        "threats",
+        "firewall_policies",
+        "network_logs",
+        "compliance_assessments",
+        "audit_logs",
+        "training_data",
+        "rl_agent_states",
+        "system_config",
+    ]:
         op.execute(f"ALTER TABLE IF EXISTS {table} DROP COLUMN IF EXISTS tenant_id")

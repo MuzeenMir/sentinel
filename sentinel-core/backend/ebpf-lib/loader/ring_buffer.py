@@ -38,8 +38,7 @@ class RingBufferReader:
         self._thread: Optional[threading.Thread] = None
         self._bpf_available = os.path.exists("/sys/fs/bpf") and os.getuid() == 0
 
-    def register(self, name: str, map_fd: int,
-                 callback: Callable[[Any], None]) -> None:
+    def register(self, name: str, map_fd: int, callback: Callable[[Any], None]) -> None:
         """Register a ring buffer map for polling.
 
         Args:
@@ -75,9 +74,7 @@ class RingBufferReader:
     def _poll_loop(self) -> None:
         """Main poll loop. Uses ring_buffer__poll when available."""
         if not self._bpf_available:
-            logger.info(
-                "BPF not available; ring buffer reader in standby mode"
-            )
+            logger.info("BPF not available; ring buffer reader in standby mode")
             while self._running:
                 time.sleep(1)
             return
@@ -119,8 +116,8 @@ class RingBufferReader:
         ring_buffer_new = libbpf.ring_buffer__new
         ring_buffer_new.restype = ctypes.c_void_p
         ring_buffer_new.argtypes = [
-            ctypes.c_int,     # map_fd
-            RING_BUFFER_CB,   # sample_cb
+            ctypes.c_int,  # map_fd
+            RING_BUFFER_CB,  # sample_cb
             ctypes.c_void_p,  # ctx
             ctypes.c_void_p,  # opts
         ]
@@ -156,8 +153,10 @@ class RingBufferReader:
         ring_buffer_add = libbpf.ring_buffer__add
         ring_buffer_add.restype = ctypes.c_int
         ring_buffer_add.argtypes = [
-            ctypes.c_void_p, ctypes.c_int,
-            RING_BUFFER_CB, ctypes.c_void_p,
+            ctypes.c_void_p,
+            ctypes.c_int,
+            RING_BUFFER_CB,
+            ctypes.c_void_p,
         ]
         for name, fd in list(self._map_fds.items())[1:]:
             ring_buffer_add(rb, fd, _on_event, None)

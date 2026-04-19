@@ -55,10 +55,18 @@ class DNSTunnelDetectorPlugin(Plugin):
         return "Detects DNS tunnelling via Shannon entropy analysis of query labels"
 
     def init(self, config: Dict[str, Any]) -> None:
-        self._entropy_threshold = config.get("entropy_threshold", _DEFAULT_ENTROPY_THRESHOLD)
-        self._min_label_length = config.get("min_label_length", _DEFAULT_MIN_LABEL_LENGTH)
-        logger.info("[%s] initialised — threshold=%.2f, min_length=%d",
-                     self.name, self._entropy_threshold, self._min_label_length)
+        self._entropy_threshold = config.get(
+            "entropy_threshold", _DEFAULT_ENTROPY_THRESHOLD
+        )
+        self._min_label_length = config.get(
+            "min_label_length", _DEFAULT_MIN_LABEL_LENGTH
+        )
+        logger.info(
+            "[%s] initialised — threshold=%.2f, min_length=%d",
+            self.name,
+            self._entropy_threshold,
+            self._min_label_length,
+        )
 
     def start(self) -> None:
         self._running = True
@@ -66,15 +74,21 @@ class DNSTunnelDetectorPlugin(Plugin):
 
     def stop(self) -> None:
         self._running = False
-        logger.info("[%s] stopped — analysed=%d alerts=%d",
-                     self.name, self._queries_analysed, self._alerts_raised)
+        logger.info(
+            "[%s] stopped — analysed=%d alerts=%d",
+            self.name,
+            self._queries_analysed,
+            self._alerts_raised,
+        )
 
     def health_check(self) -> bool:
         return self._running
 
     # ── detection logic ───────────────────────────────────────────────
 
-    def analyse_query(self, query_name: str, source_ip: str = "") -> Dict[str, Any] | None:
+    def analyse_query(
+        self, query_name: str, source_ip: str = ""
+    ) -> Dict[str, Any] | None:
         """Analyse a single DNS query name.
 
         Returns a detection dict if tunnelling is suspected, else ``None``.
@@ -121,6 +135,5 @@ class DNSTunnelDetectorPlugin(Plugin):
         freq = Counter(data)
         length = len(data)
         return -sum(
-            (count / length) * math.log2(count / length)
-            for count in freq.values()
+            (count / length) * math.log2(count / length) for count in freq.values()
         )

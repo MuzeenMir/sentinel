@@ -1,4 +1,5 @@
 """Immutable Redis-backed audit trail for AI explanation records."""
+
 import json
 import logging
 import uuid
@@ -15,7 +16,6 @@ _TRAIL_TTL_DAYS = 365
 
 
 class AuditTrail:
-
     def __init__(self, redis_client: Any) -> None:
         self._redis = redis_client
 
@@ -51,7 +51,9 @@ class AuditTrail:
 
             logger.debug(
                 "Recorded %s explanation %s for entity %s",
-                explanation_type, record_id, entity_id,
+                explanation_type,
+                record_id,
+                entity_id,
             )
         except Exception:
             logger.exception(

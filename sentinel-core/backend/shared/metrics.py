@@ -11,8 +11,7 @@ plus custom SENTINEL counters.
 import time
 import uuid
 import logging
-from functools import wraps
-from typing import Optional
+from typing import Any
 
 from flask import Flask, Response, request, g
 
@@ -29,6 +28,7 @@ try:
         CollectorRegistry,
         REGISTRY,
     )
+
     PROMETHEUS_AVAILABLE = True
 except ImportError:
     PROMETHEUS_AVAILABLE = False
@@ -39,9 +39,11 @@ def setup_metrics(app: Flask, service_name: str = "sentinel") -> None:
     """Instrument a Flask app with Prometheus metrics and correlation IDs."""
 
     if not PROMETHEUS_AVAILABLE:
+
         @app.route("/metrics")
         def metrics_stub():
             return Response("prometheus_client not installed", status=501)
+
         _setup_correlation_ids(app, service_name)
         return
 
@@ -124,7 +126,8 @@ class StructuredLogger:
     def _log(self, level: int, msg: str, **kwargs) -> None:
         import json
         from flask import has_request_context
-        extra = {"service": self._service}
+
+        extra: dict[str, Any] = {"service": self._service}
         if has_request_context():
             extra["correlation_id"] = getattr(g, "correlation_id", None)
         extra.update(kwargs)

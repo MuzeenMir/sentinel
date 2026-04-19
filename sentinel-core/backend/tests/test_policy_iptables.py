@@ -27,17 +27,20 @@ from firewall_adapters.base import FirewallRule, FirewallAction  # type: ignore[
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 def _iptables_available() -> bool:
     try:
-        return subprocess.run(
-            ["iptables", "--version"], capture_output=True
-        ).returncode == 0
+        return (
+            subprocess.run(["iptables", "--version"], capture_output=True).returncode
+            == 0
+        )
     except FileNotFoundError:
         return False
 
 
 def _is_root() -> bool:
     import os
+
     return os.geteuid() == 0
 
 
@@ -51,6 +54,7 @@ TEST_SOURCE_IP = "198.51.100.99"  # TEST-NET-3 (RFC 5737) — safe for testing
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
+
 @pytest.fixture
 def adapter():
     """Create a fresh IptablesAdapter; clean up the test rule after the test."""
@@ -58,13 +62,21 @@ def adapter():
     yield adp
     # Best-effort cleanup
     subprocess.run(
-        ["iptables", "-D", IptablesAdapter.CHAIN_NAME,
-         "-s", TEST_SOURCE_IP, "-j", "DROP"],
+        [
+            "iptables",
+            "-D",
+            IptablesAdapter.CHAIN_NAME,
+            "-s",
+            TEST_SOURCE_IP,
+            "-j",
+            "DROP",
+        ],
         capture_output=True,
     )
 
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
+
 
 class TestIptablesAdapterUnit:
     """Unit tests that do NOT require root or iptables installed."""
@@ -120,9 +132,9 @@ class TestIptablesAdapterIntegration:
             ["iptables", "-L", IptablesAdapter.CHAIN_NAME, "-n"],
             capture_output=True,
         )
-        assert result.returncode == 0, (
-            f"SENTINEL chain not found:\n{result.stderr.decode()}"
-        )
+        assert (
+            result.returncode == 0
+        ), f"SENTINEL chain not found:\n{result.stderr.decode()}"
 
     def test_add_deny_rule(self, adapter):
         rule = FirewallRule(
@@ -135,8 +147,15 @@ class TestIptablesAdapterIntegration:
 
         # Confirm the rule appears in the chain
         check = subprocess.run(
-            ["iptables", "-C", IptablesAdapter.CHAIN_NAME,
-             "-s", TEST_SOURCE_IP, "-j", "DROP"],
+            [
+                "iptables",
+                "-C",
+                IptablesAdapter.CHAIN_NAME,
+                "-s",
+                TEST_SOURCE_IP,
+                "-j",
+                "DROP",
+            ],
             capture_output=True,
         )
         assert check.returncode == 0, "Rule was not inserted into iptables"
@@ -152,8 +171,15 @@ class TestIptablesAdapterIntegration:
         assert remove_result["success"], f"remove_rule failed: {remove_result}"
 
         check = subprocess.run(
-            ["iptables", "-C", IptablesAdapter.CHAIN_NAME,
-             "-s", TEST_SOURCE_IP, "-j", "DROP"],
+            [
+                "iptables",
+                "-C",
+                IptablesAdapter.CHAIN_NAME,
+                "-s",
+                TEST_SOURCE_IP,
+                "-j",
+                "DROP",
+            ],
             capture_output=True,
         )
         assert check.returncode != 0, "Rule still present after removal"

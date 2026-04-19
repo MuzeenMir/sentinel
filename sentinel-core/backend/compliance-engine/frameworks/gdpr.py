@@ -1,4 +1,5 @@
 """EU General Data Protection Regulation (GDPR) compliance framework."""
+
 import logging
 from typing import Any, Dict, List
 
@@ -271,7 +272,6 @@ _GDPR_CONTROLS: List[Dict[str, Any]] = [
 
 
 class GDPRFramework(BaseFramework):
-
     @property
     def full_name(self) -> str:
         return "General Data Protection Regulation (EU) 2016/679"
@@ -297,9 +297,7 @@ class GDPRFramework(BaseFramework):
             logger.exception("GDPR assessment failed")
             raise
 
-    def detailed_gap_analysis(
-        self, current_controls: Dict
-    ) -> List[Dict[str, Any]]:
+    def detailed_gap_analysis(self, current_controls: Dict) -> List[Dict[str, Any]]:
         try:
             return self._default_gap_analysis(current_controls)
         except Exception:

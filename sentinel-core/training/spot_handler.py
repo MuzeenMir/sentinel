@@ -10,13 +10,13 @@ On non-AWS systems the metadata probe silently fails and monitoring
 becomes a no-op — the process still benefits from SIGTERM/SIGINT
 handling installed by ``install_signal_handlers()``.
 """
+
 from __future__ import annotations
 
 import logging
 import signal
 import sys
 import threading
-import time
 from typing import Callable, Optional
 
 import requests
@@ -77,7 +77,9 @@ class SpotInterruptionHandler:
         """Begin background monitoring (or no-op on non-AWS)."""
         self._is_aws = self._probe_imds()
         if self._is_aws:
-            logger.info("AWS environment detected — monitoring Spot interruption notices")
+            logger.info(
+                "AWS environment detected — monitoring Spot interruption notices"
+            )
             self._thread = threading.Thread(
                 target=self._monitor_loop,
                 daemon=True,
@@ -135,7 +137,9 @@ class SpotInterruptionHandler:
             headers["X-aws-ec2-metadata-token"] = self._imds_token
         try:
             resp = requests.get(
-                _SPOT_ACTION_URL, headers=headers, timeout=_IMDS_TIMEOUT,
+                _SPOT_ACTION_URL,
+                headers=headers,
+                timeout=_IMDS_TIMEOUT,
             )
             if resp.status_code == 200:
                 return resp.json()
@@ -159,7 +163,8 @@ class SpotInterruptionHandler:
             if action is not None:
                 logger.warning(
                     "Spot interruption notice: action=%s time=%s",
-                    action.get("action"), action.get("time"),
+                    action.get("action"),
+                    action.get("time"),
                 )
                 self._on_interruption()
                 return

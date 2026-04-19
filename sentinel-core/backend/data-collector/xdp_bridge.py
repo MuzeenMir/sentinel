@@ -11,7 +11,7 @@ This allows the XDP-based collector to:
 
 from typing import Any, Dict, Optional
 
-from .collector import CIMNormalizer, DataSourceType, producer, redis_client, logger  # type: ignore
+from .collector import CIMNormalizer, DataSourceType, producer, logger  # type: ignore
 
 
 NORMALIZED_TOPIC = "normalized_traffic"
@@ -81,4 +81,3 @@ def build_raw_packet_from_l2_l3_l4(
     if dest_port is not None:
         raw["dest_port"] = dest_port
     return raw
-

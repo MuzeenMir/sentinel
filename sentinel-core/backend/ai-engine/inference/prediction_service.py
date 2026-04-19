@@ -4,6 +4,7 @@ End-to-end prediction service: raw traffic → features → ensemble → result.
 Orchestrates feature extraction, ensemble inference, severity mapping,
 result formatting, and optional Redis caching of predictions.
 """
+
 import json
 import logging
 import time
@@ -109,18 +110,13 @@ class PredictionService:
         self, traffic_batch: List[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
         """Run prediction on every sample in *traffic_batch*."""
-        return [
-            self.predict(sample, sample.get("context"))
-            for sample in traffic_batch
-        ]
+        return [self.predict(sample, sample.get("context")) for sample in traffic_batch]
 
     # ------------------------------------------------------------------
     # Internals
     # ------------------------------------------------------------------
 
-    def _extract_features(
-        self, data: Dict[str, Any]
-    ) -> Dict[str, Dict[str, float]]:
+    def _extract_features(self, data: Dict[str, Any]) -> Dict[str, Dict[str, float]]:
         groups: Dict[str, Dict[str, float]] = {}
         for name, extractor in self.feature_extractors.items():
             try:
@@ -131,9 +127,7 @@ class PredictionService:
         return groups
 
     @staticmethod
-    def _features_to_vector(
-        feature_groups: Dict[str, Dict[str, float]]
-    ) -> np.ndarray:
+    def _features_to_vector(feature_groups: Dict[str, Dict[str, float]]) -> np.ndarray:
         """Flatten all feature groups into a single ordered float32 vector."""
         values: List[float] = []
         for group_name in sorted(feature_groups):

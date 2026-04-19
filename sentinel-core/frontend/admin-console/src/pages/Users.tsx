@@ -1,68 +1,75 @@
-import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Users as UsersIcon } from 'lucide-react'
-import { usersApi } from '../services/api'
-import { useAuthStore } from '../store/authStore'
-import type { User } from '../types'
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Users as UsersIcon } from "lucide-react";
+import { usersApi } from "../services/api";
+import { useAuthStore } from "../store/authStore";
+import type { User } from "../types";
 
-const ROLES = ['admin', 'security_analyst', 'analyst', 'auditor', 'viewer']
-const STATUSES = ['active', 'inactive', 'suspended']
+const ROLES = ["admin", "security_analyst", "analyst", "auditor", "viewer"];
+const STATUSES = ["active", "inactive", "suspended"];
 
 const ROLE_PERMISSIONS: Record<string, string> = {
-  admin: 'Full access — manage users, policies, settings, and all data.',
-  security_analyst: 'Investigate threats, triage alerts, and manage policies.',
-  analyst: 'Investigate threats and triage alerts.',
-  auditor: 'Read-only access to audit logs, compliance, and reports.',
-  viewer: 'Read-only access to dashboards and reports.',
-}
+  admin: "Full access — manage users, policies, settings, and all data.",
+  security_analyst: "Investigate threats, triage alerts, and manage policies.",
+  analyst: "Investigate threats and triage alerts.",
+  auditor: "Read-only access to audit logs, compliance, and reports.",
+  viewer: "Read-only access to dashboards and reports.",
+};
 
 export function Users() {
-  const queryClient = useQueryClient()
-  const currentUser = useAuthStore((s) => s.user)
-  const [roleFilter, setRoleFilter] = useState('')
-  const [editingId, setEditingId] = useState<number | null>(null)
-  const [editRole, setEditRole] = useState('')
-  const [editStatus, setEditStatus] = useState('')
+  const queryClient = useQueryClient();
+  const currentUser = useAuthStore((s) => s.user);
+  const [roleFilter, setRoleFilter] = useState("");
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editRole, setEditRole] = useState("");
+  const [editStatus, setEditStatus] = useState("");
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['users', roleFilter],
+    queryKey: ["users", roleFilter],
     queryFn: () =>
-      usersApi.getUsers(roleFilter ? { role: roleFilter } : undefined).then((r) => r.data),
-  })
+      usersApi
+        .getUsers(roleFilter ? { role: roleFilter } : undefined)
+        .then((r) => r.data),
+  });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, payload }: { id: number; payload: { role?: string; status?: string } }) =>
-      usersApi.updateUser(id, payload),
+    mutationFn: ({
+      id,
+      payload,
+    }: {
+      id: number;
+      payload: { role?: string; status?: string };
+    }) => usersApi.updateUser(id, payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['users'] })
-      setEditingId(null)
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      setEditingId(null);
     },
-  })
+  });
 
-  const users: User[] = data?.users ?? data ?? []
+  const users: User[] = data?.users ?? data ?? [];
 
   const openEdit = (user: User) => {
-    setEditingId(user.id)
-    setEditRole(user.role)
-    setEditStatus(user.status)
-  }
+    setEditingId(user.id);
+    setEditRole(user.role);
+    setEditStatus(user.status);
+  };
 
   const cancelEdit = () => {
-    setEditingId(null)
-    setEditRole('')
-    setEditStatus('')
-  }
+    setEditingId(null);
+    setEditRole("");
+    setEditStatus("");
+  };
 
   const saveEdit = (user: User) => {
-    const payload: { role?: string; status?: string } = {}
-    if (editRole !== user.role) payload.role = editRole
-    if (editStatus !== user.status) payload.status = editStatus
+    const payload: { role?: string; status?: string } = {};
+    if (editRole !== user.role) payload.role = editRole;
+    if (editStatus !== user.status) payload.status = editStatus;
     if (!payload.role && !payload.status) {
-      setEditingId(null)
-      return
+      setEditingId(null);
+      return;
     }
-    updateMutation.mutate({ id: user.id, payload })
-  }
+    updateMutation.mutate({ id: user.id, payload });
+  };
 
   return (
     <div className="space-y-6">
@@ -74,7 +81,9 @@ export function Users() {
       </div>
 
       <div className="card p-6">
-        <h2 className="text-lg font-semibold text-white mb-3">Role Permissions</h2>
+        <h2 className="text-lg font-semibold text-white mb-3">
+          Role Permissions
+        </h2>
         <ul className="space-y-2 text-sm">
           {Object.entries(ROLE_PERMISSIONS).map(([role, desc]) => (
             <li key={role} className="flex gap-3">
@@ -131,15 +140,21 @@ export function Users() {
               </thead>
               <tbody className="divide-y divide-slate-700/50">
                 {users.map((user) => {
-                  const isSelf = currentUser?.id === user.id
-                  const isEditing = editingId === user.id
+                  const isSelf = currentUser?.id === user.id;
+                  const isEditing = editingId === user.id;
                   return (
                     <tr key={user.id} className="hover:bg-slate-800/30">
                       <td className="table-cell font-medium text-white">
                         <span>{user.username}</span>
-                        {isSelf && <span className="ml-2 text-xs text-cyan-400">(you)</span>}
+                        {isSelf && (
+                          <span className="ml-2 text-xs text-cyan-400">
+                            (you)
+                          </span>
+                        )}
                       </td>
-                      <td className="table-cell text-slate-300">{user.email}</td>
+                      <td className="table-cell text-slate-300">
+                        {user.email}
+                      </td>
                       <td className="table-cell">
                         {isEditing ? (
                           <select
@@ -175,9 +190,9 @@ export function Users() {
                         ) : (
                           <span
                             className={`badge border ${
-                              user.status === 'active'
-                                ? 'bg-green-500/20 text-green-400 border-green-500/30'
-                                : 'bg-slate-500/20 text-slate-400 border-slate-500/30'
+                              user.status === "active"
+                                ? "bg-green-500/20 text-green-400 border-green-500/30"
+                                : "bg-slate-500/20 text-slate-400 border-slate-500/30"
                             }`}
                           >
                             {user.status}
@@ -188,7 +203,9 @@ export function Users() {
                         {new Date(user.created_at).toLocaleDateString()}
                       </td>
                       <td className="table-cell text-xs text-slate-400">
-                        {user.last_login ? new Date(user.last_login).toLocaleString() : 'Never'}
+                        {user.last_login
+                          ? new Date(user.last_login).toLocaleString()
+                          : "Never"}
                       </td>
                       <td className="table-cell">
                         {isSelf ? (
@@ -218,7 +235,7 @@ export function Users() {
                         )}
                       </td>
                     </tr>
-                  )
+                  );
                 })}
               </tbody>
             </table>
@@ -226,5 +243,5 @@ export function Users() {
         </div>
       )}
     </div>
-  )
+  );
 }

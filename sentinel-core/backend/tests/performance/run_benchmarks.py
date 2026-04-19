@@ -7,6 +7,7 @@ Runs all performance benchmarks and produces a JSON report.
 Usage:
     python run_benchmarks.py [--k6-path k6] [--output report.json]
 """
+
 import argparse
 import json
 import os
@@ -27,10 +28,19 @@ PERFORMANCE_TARGETS = {
 
 
 def _run_k6(script: str, k6_path: str, env: dict) -> dict | None:
-    cmd = [k6_path, "run", "--quiet", "--out", "json=/dev/null", str(SCRIPT_DIR / script)]
+    cmd = [
+        k6_path,
+        "run",
+        "--quiet",
+        "--out",
+        "json=/dev/null",
+        str(SCRIPT_DIR / script),
+    ]
     full_env = {**os.environ, **env}
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300, env=full_env)
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=300, env=full_env
+        )
         output = result.stdout + result.stderr
         metrics = {}
         for line in output.splitlines():
@@ -72,8 +82,9 @@ def _run_python_bench(script: str, extra_args: list[str]) -> dict | None:
         return {"error": str(e)}
 
 
-def run_all(k6_path: str, base_url: str, auth_url: str,
-            kafka_broker: str, xdp_url: str) -> dict:
+def run_all(
+    k6_path: str, base_url: str, auth_url: str, kafka_broker: str, xdp_url: str
+) -> dict:
     report = {
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "targets": PERFORMANCE_TARGETS,
@@ -90,7 +101,10 @@ def run_all(k6_path: str, base_url: str, auth_url: str,
     report["results"]["ai_engine"] = _run_k6("k6_ai_engine.js", k6_path, ai_env)
 
     print("[3/5] DRL Engine benchmark...")
-    drl_env = {**k6_env, "BASE_URL": os.getenv("DRL_ENGINE_URL", "http://localhost:5005")}
+    drl_env = {
+        **k6_env,
+        "BASE_URL": os.getenv("DRL_ENGINE_URL", "http://localhost:5005"),
+    }
     report["results"]["drl_engine"] = _run_k6("k6_drl_engine.js", k6_path, drl_env)
 
     print("[4/5] Kafka throughput benchmark...")
@@ -108,8 +122,9 @@ def run_all(k6_path: str, base_url: str, auth_url: str,
     for name, result in report["results"].items():
         if result and not result.get("skip") and not result.get("error"):
             total += 1
-            if result.get("pass") or result.get("metrics", {}).get("p95_ms", 999) < \
-                    PERFORMANCE_TARGETS.get(name, {}).get("target", 999):
+            if result.get("pass") or result.get("metrics", {}).get(
+                "p95_ms", 999
+            ) < PERFORMANCE_TARGETS.get(name, {}).get("target", 999):
                 passed += 1
 
     report["summary"] = {
@@ -123,10 +138,18 @@ def run_all(k6_path: str, base_url: str, auth_url: str,
 def main():
     parser = argparse.ArgumentParser(description="SENTINEL benchmark runner")
     parser.add_argument("--k6-path", default=os.getenv("K6_PATH", "k6"))
-    parser.add_argument("--base-url", default=os.getenv("BASE_URL", "http://localhost:8080"))
-    parser.add_argument("--auth-url", default=os.getenv("AUTH_URL", "http://localhost:5000"))
-    parser.add_argument("--kafka-broker", default=os.getenv("KAFKA_BROKER", "localhost:9092"))
-    parser.add_argument("--xdp-url", default=os.getenv("XDP_URL", "http://localhost:5010"))
+    parser.add_argument(
+        "--base-url", default=os.getenv("BASE_URL", "http://localhost:8080")
+    )
+    parser.add_argument(
+        "--auth-url", default=os.getenv("AUTH_URL", "http://localhost:5000")
+    )
+    parser.add_argument(
+        "--kafka-broker", default=os.getenv("KAFKA_BROKER", "localhost:9092")
+    )
+    parser.add_argument(
+        "--xdp-url", default=os.getenv("XDP_URL", "http://localhost:5010")
+    )
     parser.add_argument("--output", default="benchmark_report.json")
     args = parser.parse_args()
 
@@ -142,12 +165,20 @@ def main():
         json.dump(report, f, indent=2)
     print(f"\nReport saved to {args.output}")
 
-    print(f"\nResults: {report['summary']['passed']}/{report['summary']['total']} passed")
+    print(
+        f"\nResults: {report['summary']['passed']}/{report['summary']['total']} passed"
+    )
     for name, result in report["results"].items():
         if result:
-            status = "SKIP" if result.get("skip") else ("PASS" if result.get("pass") else "FAIL")
+            status = (
+                "SKIP"
+                if result.get("skip")
+                else ("PASS" if result.get("pass") else "FAIL")
+            )
             target = PERFORMANCE_TARGETS.get(name, {})
-            print(f"  {name:20s} {status:6s}  target={target.get('target','?')} {target.get('unit','')}")
+            print(
+                f"  {name:20s} {status:6s}  target={target.get('target','?')} {target.get('unit','')}"
+            )
 
 
 if __name__ == "__main__":

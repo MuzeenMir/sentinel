@@ -1,4 +1,5 @@
 """Compliance-formatted report generator for AI explanations."""
+
 import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -8,7 +9,12 @@ logger = logging.getLogger(__name__)
 _FRAMEWORK_SECTIONS: Dict[str, Dict[str, Any]] = {
     "GDPR": {
         "title": "GDPR Article 22 — Automated Decision-Making Transparency Report",
-        "articles": ["Article 13(2)(f)", "Article 14(2)(g)", "Article 15(1)(h)", "Article 22"],
+        "articles": [
+            "Article 13(2)(f)",
+            "Article 14(2)(g)",
+            "Article 15(1)(h)",
+            "Article 22",
+        ],
         "requirements": [
             "Meaningful information about the logic involved in automated decisions",
             "Significance and envisaged consequences of automated processing",
@@ -51,7 +57,6 @@ _FRAMEWORK_SECTIONS: Dict[str, Dict[str, Any]] = {
 
 
 class ComplianceReportGenerator:
-
     def generate(
         self,
         explanations: List[Dict[str, Any]],
@@ -103,9 +108,7 @@ class ComplianceReportGenerator:
     # General (framework-agnostic)
     # ------------------------------------------------------------------
 
-    def _general_report(
-        self, explanations: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+    def _general_report(self, explanations: List[Dict[str, Any]]) -> Dict[str, Any]:
         by_type = self._group_by_type(explanations)
         stats = self._compute_stats(explanations)
 
@@ -200,40 +203,42 @@ class ComplianceReportGenerator:
 
         detection_exps = by_type.get("detection", [])
         if detection_exps:
-            sections.append({
-                "title": "Threat Detection Explanations",
-                "description": (
-                    "Automated explanations for AI-based threat detection decisions, "
-                    "including feature contributions and model-level breakdowns."
-                ),
-                "count": len(detection_exps),
-                "sample_ids": [
-                    e.get("entity_id", "") for e in detection_exps[:10]
-                ],
-            })
+            sections.append(
+                {
+                    "title": "Threat Detection Explanations",
+                    "description": (
+                        "Automated explanations for AI-based threat detection decisions, "
+                        "including feature contributions and model-level breakdowns."
+                    ),
+                    "count": len(detection_exps),
+                    "sample_ids": [e.get("entity_id", "") for e in detection_exps[:10]],
+                }
+            )
 
         policy_exps = by_type.get("policy", [])
         if policy_exps:
-            sections.append({
-                "title": "Policy Decision Explanations",
-                "description": (
-                    "Automated explanations for Deep Reinforcement Learning policy "
-                    "decisions, including action rationale and contributing state features."
-                ),
-                "count": len(policy_exps),
-                "sample_ids": [
-                    e.get("entity_id", "") for e in policy_exps[:10]
-                ],
-            })
+            sections.append(
+                {
+                    "title": "Policy Decision Explanations",
+                    "description": (
+                        "Automated explanations for Deep Reinforcement Learning policy "
+                        "decisions, including action rationale and contributing state features."
+                    ),
+                    "count": len(policy_exps),
+                    "sample_ids": [e.get("entity_id", "") for e in policy_exps[:10]],
+                }
+            )
 
         for etype, exps in by_type.items():
             if etype in ("detection", "policy"):
                 continue
-            sections.append({
-                "title": f"{etype.replace('_', ' ').title()} Explanations",
-                "description": f"Explanations categorised as '{etype}'.",
-                "count": len(exps),
-                "sample_ids": [e.get("entity_id", "") for e in exps[:10]],
-            })
+            sections.append(
+                {
+                    "title": f"{etype.replace('_', ' ').title()} Explanations",
+                    "description": f"Explanations categorised as '{etype}'.",
+                    "count": len(exps),
+                    "sample_ids": [e.get("entity_id", "") for e in exps[:10]],
+                }
+            )
 
         return sections

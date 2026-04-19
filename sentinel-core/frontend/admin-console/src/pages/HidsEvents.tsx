@@ -1,25 +1,25 @@
-import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { Eye, Filter } from 'lucide-react'
-import { hidsApi } from '../services/api'
-import type { HIDSEvent } from '../types'
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Eye, Filter } from "lucide-react";
+import { hidsApi } from "../services/api";
+import type { HIDSEvent } from "../types";
 
 function severityBadge(severity: string) {
   const map: Record<string, string> = {
-    critical: 'badge-critical',
-    high: 'badge-high',
-    medium: 'badge-medium',
-    low: 'badge-low',
-  }
-  return map[severity] ?? 'badge-info'
+    critical: "badge-critical",
+    high: "badge-high",
+    medium: "badge-medium",
+    low: "badge-low",
+  };
+  return map[severity] ?? "badge-info";
 }
 
 export function HidsEvents() {
-  const [eventType, setEventType] = useState('')
-  const [page, setPage] = useState(1)
+  const [eventType, setEventType] = useState("");
+  const [page, setPage] = useState(1);
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['hids-events', eventType, page],
+    queryKey: ["hids-events", eventType, page],
     queryFn: () =>
       hidsApi
         .getEvents({
@@ -28,9 +28,9 @@ export function HidsEvents() {
           per_page: 50,
         })
         .then((r) => r.data),
-  })
+  });
 
-  const events: HIDSEvent[] = data?.events ?? data ?? []
+  const events: HIDSEvent[] = data?.events ?? data ?? [];
 
   return (
     <div className="space-y-6">
@@ -46,8 +46,8 @@ export function HidsEvents() {
         <select
           value={eventType}
           onChange={(e) => {
-            setEventType(e.target.value)
-            setPage(1)
+            setEventType(e.target.value);
+            setPage(1);
           }}
           className="select-field"
         >
@@ -94,10 +94,16 @@ export function HidsEvents() {
                       </span>
                     </td>
                     <td className="table-cell">
-                      <span className={severityBadge(event.severity)}>{event.severity}</span>
+                      <span className={severityBadge(event.severity)}>
+                        {event.severity}
+                      </span>
                     </td>
-                    <td className="table-cell font-mono text-xs">{event.source}</td>
-                    <td className="table-cell max-w-xs truncate">{event.description}</td>
+                    <td className="table-cell font-mono text-xs">
+                      {event.source}
+                    </td>
+                    <td className="table-cell max-w-xs truncate">
+                      {event.description}
+                    </td>
                     <td className="table-cell text-slate-400 text-xs whitespace-nowrap">
                       {new Date(event.timestamp).toLocaleString()}
                     </td>
@@ -127,5 +133,5 @@ export function HidsEvents() {
         </div>
       )}
     </div>
-  )
+  );
 }

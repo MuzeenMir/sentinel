@@ -6,6 +6,7 @@ state snapshots, periodically submits them to the DRL engine for
 policy decisions, and forwards accepted actions to the policy
 orchestrator's auto-apply endpoint.
 """
+
 from __future__ import annotations
 
 import logging
@@ -109,8 +110,13 @@ class NetworkStateAggregator:
             )[:10]
 
             state_vec = self._state_vector(
-                event_n, alert_n, det_n, severities,
-                anomaly_scores, unique_srcs, total_bytes,
+                event_n,
+                alert_n,
+                det_n,
+                severities,
+                anomaly_scores,
+                unique_srcs,
+                total_bytes,
             )
 
             return {
@@ -123,8 +129,12 @@ class NetworkStateAggregator:
                 "alert_severities": dict(severities),
                 "detection_count": det_n,
                 "anomaly_count": len(anomaly_scores),
-                "mean_anomaly_score": float(np.mean(anomaly_scores)) if anomaly_scores else 0.0,
-                "max_anomaly_score": float(np.max(anomaly_scores)) if anomaly_scores else 0.0,
+                "mean_anomaly_score": float(np.mean(anomaly_scores))
+                if anomaly_scores
+                else 0.0,
+                "max_anomaly_score": float(np.max(anomaly_scores))
+                if anomaly_scores
+                else 0.0,
                 "unique_sources": len(unique_srcs),
                 "total_bytes": total_bytes,
                 "byte_rate": total_bytes / max(self._window, 1),
@@ -138,8 +148,13 @@ class NetworkStateAggregator:
 
     @staticmethod
     def _state_vector(
-        event_n, alert_n, det_n, severities,
-        anomaly_scores, unique_srcs, total_bytes,
+        event_n,
+        alert_n,
+        det_n,
+        severities,
+        anomaly_scores,
+        unique_srcs,
+        total_bytes,
     ) -> List[float]:
         return [
             min(event_n / 10_000, 1.0),
@@ -166,12 +181,12 @@ class NetworkStateAggregator:
 
 
 class DRLFeedJob(BaseStreamJob):
-
     def __init__(self):
         super().__init__("drl-feed")
         self.drl_url = os.environ.get("DRL_ENGINE_URL", "http://drl-engine:5005")
         self.policy_url = os.environ.get(
-            "POLICY_SERVICE_URL", "http://policy-orchestrator:5004",
+            "POLICY_SERVICE_URL",
+            "http://policy-orchestrator:5004",
         )
         self.service_token = os.environ.get("INTERNAL_SERVICE_TOKEN", "")
         self.aggregator = NetworkStateAggregator()
@@ -179,10 +194,12 @@ class DRLFeedJob(BaseStreamJob):
         self._processed = 0
 
         self._session = requests.Session()
-        self._session.headers.update({
-            "Content-Type": "application/json",
-            "User-Agent": "sentinel-drl-feed/1.0",
-        })
+        self._session.headers.update(
+            {
+                "Content-Type": "application/json",
+                "User-Agent": "sentinel-drl-feed/1.0",
+            }
+        )
         if self.service_token:
             self._session.headers["Authorization"] = f"Bearer {self.service_token}"
 
@@ -198,7 +215,8 @@ class DRLFeedJob(BaseStreamJob):
         self._decision_thread.start()
         logger.info(
             "DRL feed active: consuming %s, decision interval %.0f s",
-            INPUT_TOPICS, DECISION_INTERVAL,
+            INPUT_TOPICS,
+            DECISION_INTERVAL,
         )
 
     # ── Message routing ───────────────────────────────────────────────────
@@ -295,7 +313,8 @@ class DRLFeedJob(BaseStreamJob):
             resp.raise_for_status()
             logger.info(
                 "Forwarded %d DRL actions to policy orchestrator (snapshot=%s)",
-                len(actions), snapshot["snapshot_id"][:8],
+                len(actions),
+                snapshot["snapshot_id"][:8],
             )
         except requests.ConnectionError:
             logger.warning("Policy orchestrator unreachable at %s", url)

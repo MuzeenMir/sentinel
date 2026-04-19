@@ -146,9 +146,7 @@ def _apply_policy(anomaly: Dict[str, Any], decision: Dict[str, Any]) -> bool:
                 resp.json().get("policy_id", "?"),
             )
             return True
-        logger.warning(
-            "Policy orchestrator returned HTTP %s", resp.status_code
-        )
+        logger.warning("Policy orchestrator returned HTTP %s", resp.status_code)
     except requests.exceptions.RequestException as exc:
         logger.error("Policy orchestrator unreachable: %s", exc)
 
@@ -180,6 +178,7 @@ def process_anomaly(anomaly: Dict[str, Any]) -> None:
 
 
 # ── Flink mode ────────────────────────────────────────────────────────────────
+
 
 class DRLFeedJob:
     """PyFlink streaming job: sentinel-anomalies → DRL Engine → Policy Orchestrator."""
@@ -238,7 +237,6 @@ class DRLFeedJob:
         # For Flink mode we use a DataStream map to call the HTTP endpoints.
         # The Table API is used for source; convert to DataStream for side-effects.
         from pyflink.datastream.functions import MapFunction
-        from pyflink.table import DataTypes
 
         class DRLProcessFunction(MapFunction):
             def map(self, row):

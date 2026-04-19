@@ -1,4 +1,5 @@
 """Abstract base class for firewall vendor adapters."""
+
 import abc
 from typing import Any, Dict, List
 
@@ -44,9 +45,7 @@ class BaseVendorAdapter(abc.ABC):
         """
 
     @abc.abstractmethod
-    def translate_rules(
-        self, rules: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
+    def translate_rules(self, rules: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
         Translate generic SENTINEL rules to the vendor-specific
         representation *without* applying them.

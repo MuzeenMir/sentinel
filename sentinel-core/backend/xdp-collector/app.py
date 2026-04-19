@@ -15,8 +15,6 @@ Runtime requirements:
 import json
 import logging
 import os
-import socket
-import struct
 import sys
 import threading
 import time
@@ -29,13 +27,11 @@ from flask_cors import CORS
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from auth_middleware import require_auth, require_role
-from tenant_middleware import require_tenant, get_tenant_id
+from tenant_middleware import require_tenant
 from observability import configure_logging
 from metrics import init_metrics, XDP_PACKETS
 from ebpf_lib.schemas.events import (
-    EventType,
     NetworkFlowEvent,
-    decode_event,
     event_to_json,
 )
 from ebpf_lib.loader import ProgramLoader, RingBufferReader
@@ -56,6 +52,7 @@ app.config["KAFKA_TOPIC"] = os.environ.get("KAFKA_TOPIC", "sentinel-network-even
 @dataclass
 class CollectorStats:
     """Runtime statistics for the XDP collector."""
+
     flows_exported: int = 0
     events_published: int = 0
     events_dropped: int = 0
@@ -74,9 +71,7 @@ class CollectorStats:
             "packets_blocked": self.packets_blocked,
             "bytes_blocked": self.bytes_blocked,
             "uptime_seconds": round(uptime, 1),
-            "events_per_second": round(
-                self.events_published / max(uptime, 1), 2
-            ),
+            "events_per_second": round(self.events_published / max(uptime, 1), 2),
             "last_event_time": self.last_event_time,
             "last_error": self.last_error,
         }
@@ -93,16 +88,19 @@ class KafkaPublisher:
     def _init_producer(self) -> None:
         try:
             from confluent_kafka import Producer
+
             servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
-            self._producer = Producer({
-                "bootstrap.servers": servers,
-                "client.id": "xdp-collector",
-                "acks": "all",
-                "retries": 3,
-                "retry.backoff.ms": 100,
-                "linger.ms": 5,
-                "batch.num.messages": 100,
-            })
+            self._producer = Producer(
+                {
+                    "bootstrap.servers": servers,
+                    "client.id": "xdp-collector",
+                    "acks": "all",
+                    "retries": 3,
+                    "retry.backoff.ms": 100,
+                    "linger.ms": 5,
+                    "batch.num.messages": 100,
+                }
+            )
             logger.info("Kafka producer initialized: %s", servers)
         except ImportError:
             logger.warning("confluent_kafka not installed; Kafka publishing disabled")
@@ -138,6 +136,7 @@ class BlocklistManager:
     def _init_redis(self) -> None:
         try:
             import redis
+
             url = os.environ.get("REDIS_URL", "redis://localhost:6379")
             self._redis = redis.from_url(url)
             self._redis.ping()
@@ -196,7 +195,8 @@ class XDPCollectorService:
             )
             logger.info(
                 "XDP program loaded: %s (sha256=%s)",
-                info.name, info.sha256,
+                info.name,
+                info.sha256,
             )
 
             if info.fd >= 0:
@@ -204,14 +204,14 @@ class XDPCollectorService:
                 flow_events_fd = info.map_fds.get("flow_events", -1)
                 if flow_events_fd >= 0:
                     self._reader.register(
-                        "flow_events", flow_events_fd, self._on_flow_event,
+                        "flow_events",
+                        flow_events_fd,
+                        self._on_flow_event,
                     )
                     self._reader.start()
                     logger.info("Ring buffer reader started")
             else:
-                logger.info(
-                    "XDP loaded in dry-run mode (no kernel attachment)"
-                )
+                logger.info("XDP loaded in dry-run mode (no kernel attachment)")
 
         except FileNotFoundError:
             logger.warning(
@@ -259,17 +259,18 @@ collector = XDPCollectorService()
 
 @app.route("/health", methods=["GET"])
 def health():
-    loaded = (
-        collector._loader is not None
-        and collector._loader.is_loaded("xdp/xdp_flow")
+    loaded = collector._loader is not None and collector._loader.is_loaded(
+        "xdp/xdp_flow"
     )
-    return jsonify({
-        "status": "healthy",
-        "service": "xdp-collector",
-        "xdp_enabled": collector.enabled,
-        "xdp_loaded": loaded,
-        "interface": collector.interface,
-    }), 200
+    return jsonify(
+        {
+            "status": "healthy",
+            "service": "xdp-collector",
+            "xdp_enabled": collector.enabled,
+            "xdp_loaded": loaded,
+            "interface": collector.interface,
+        }
+    ), 200
 
 
 @app.route("/stats", methods=["GET"])
@@ -283,12 +284,14 @@ def stats():
 @require_auth
 @require_tenant
 def get_config():
-    return jsonify({
-        "interface": collector.interface,
-        "enabled": collector.enabled,
-        "kafka_topic": app.config["KAFKA_TOPIC"],
-        "blocklist_size": len(collector.blocklist.get_all()),
-    }), 200
+    return jsonify(
+        {
+            "interface": collector.interface,
+            "enabled": collector.enabled,
+            "kafka_topic": app.config["KAFKA_TOPIC"],
+            "blocklist_size": len(collector.blocklist.get_all()),
+        }
+    ), 200
 
 
 @app.route("/blocklist", methods=["GET"])
@@ -325,7 +328,9 @@ def update_blocklist():
 
 def start_collector_background() -> None:
     thread = threading.Thread(
-        target=collector.start, name="xdp-collector", daemon=True,
+        target=collector.start,
+        name="xdp-collector",
+        daemon=True,
     )
     thread.start()
 

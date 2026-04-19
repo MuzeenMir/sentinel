@@ -20,8 +20,7 @@ from __future__ import annotations
 
 import logging
 import time
-from functools import wraps
-from typing import Any, Optional
+from typing import Any
 
 from flask import Flask, Response, g, request
 
@@ -38,6 +37,7 @@ try:
         CONTENT_TYPE_LATEST,
         REGISTRY,
     )
+
     _PROM_AVAILABLE = True
 except ImportError:
     logger.info("prometheus_client not installed; Prometheus metrics disabled")
@@ -107,10 +107,13 @@ if _PROM_AVAILABLE:
         ["service", "version"],
     )
 else:
+
     class _Noop:
         """No-op metric stub that silently swallows all calls."""
+
         def labels(self, *a: Any, **kw: Any) -> "_Noop":
             return self
+
         def inc(self, *a: Any, **kw: Any) -> None: ...
         def dec(self, *a: Any, **kw: Any) -> None: ...
         def set(self, *a: Any, **kw: Any) -> None: ...
@@ -119,22 +122,24 @@ else:
             return _NoopTimer()
 
     class _NoopTimer:
-        def __enter__(self) -> "_NoopTimer": return self
+        def __enter__(self) -> "_NoopTimer":
+            return self
+
         def __exit__(self, *a: Any) -> None: ...
 
     _noop = _Noop()
-    HTTP_REQUESTS = _noop      # type: ignore[assignment]
-    HTTP_DURATION = _noop      # type: ignore[assignment]
-    THREATS_DETECTED = _noop   # type: ignore[assignment]
+    HTTP_REQUESTS = _noop  # type: ignore[assignment]
+    HTTP_DURATION = _noop  # type: ignore[assignment]
+    THREATS_DETECTED = _noop  # type: ignore[assignment]
     DETECTION_LATENCY = _noop  # type: ignore[assignment]
-    EBPF_EVENTS = _noop        # type: ignore[assignment]
+    EBPF_EVENTS = _noop  # type: ignore[assignment]
     HARDENING_POSTURE = _noop  # type: ignore[assignment]
-    XDP_PACKETS = _noop        # type: ignore[assignment]
-    FIM_ALERTS = _noop         # type: ignore[assignment]
-    ALERTS_CREATED = _noop     # type: ignore[assignment]
-    POLICIES_APPLIED = _noop   # type: ignore[assignment]
-    DRL_DECISIONS = _noop      # type: ignore[assignment]
-    SERVICE_INFO = _noop       # type: ignore[assignment]
+    XDP_PACKETS = _noop  # type: ignore[assignment]
+    FIM_ALERTS = _noop  # type: ignore[assignment]
+    ALERTS_CREATED = _noop  # type: ignore[assignment]
+    POLICIES_APPLIED = _noop  # type: ignore[assignment]
+    DRL_DECISIONS = _noop  # type: ignore[assignment]
+    SERVICE_INFO = _noop  # type: ignore[assignment]
 
 
 # ---------------------------------------------------------------------------

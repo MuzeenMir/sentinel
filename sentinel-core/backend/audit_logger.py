@@ -64,13 +64,15 @@ def _get_redis():
     """Get Redis client from Flask app context, or return None."""
     try:
         from flask import current_app
-        if hasattr(current_app, 'extensions') and 'redis' in current_app.extensions:
-            return current_app.extensions['redis']
+
+        if hasattr(current_app, "extensions") and "redis" in current_app.extensions:
+            return current_app.extensions["redis"]
     except RuntimeError:
         pass
     # Fallback: try module-level import
     try:
         import redis as _redis
+
         url = os.environ.get("REDIS_URL", "redis://localhost:6379")
         return _redis.from_url(url)
     except Exception:
@@ -218,6 +220,7 @@ def verify_integrity(record: Dict[str, Any]) -> bool:
 def _in_request_context() -> bool:
     try:
         from flask import has_request_context
+
         return has_request_context()
     except Exception:
         return False

@@ -1,37 +1,42 @@
-import { useState, type FormEvent } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
-import { Shield, Eye, EyeOff } from 'lucide-react'
-import { useAuthStore } from '../store/authStore'
+import { useState, type FormEvent } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
+import { Shield, Eye, EyeOff } from "lucide-react";
+import { useAuthStore } from "../store/authStore";
 
 export function Login() {
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
-  const { login, isLoading, error, clearError } = useAuthStore()
-  const navigate = useNavigate()
-  const location = useLocation()
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const { login, isLoading, error, clearError } = useAuthStore();
+  const navigate = useNavigate();
+  const location = useLocation();
 
   const from =
-    (location.state as { from?: { pathname: string } } | null)?.from?.pathname ?? '/'
+    (location.state as { from?: { pathname: string } } | null)?.from
+      ?.pathname ?? "/";
 
   const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault()
-    clearError()
+    e.preventDefault();
+    clearError();
     try {
-      await login(username, password)
-      navigate(from, { replace: true })
+      await login(username, password);
+      navigate(from, { replace: true });
     } catch {
       /* error state is handled by the store */
     }
-  }
+  };
 
   return (
     <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <Shield className="mx-auto h-12 w-12 text-cyan-400" />
-          <h1 className="mt-4 text-3xl font-bold tracking-wider text-white">SENTINEL</h1>
-          <p className="mt-2 text-sm text-slate-400">AI-Powered Security Platform</p>
+          <h1 className="mt-4 text-3xl font-bold tracking-wider text-white">
+            SENTINEL
+          </h1>
+          <p className="mt-2 text-sm text-slate-400">
+            AI-Powered Security Platform
+          </p>
         </div>
 
         <div className="card p-8">
@@ -71,7 +76,7 @@ export function Login() {
               <div className="relative">
                 <input
                   id="password"
-                  type={showPassword ? 'text' : 'password'}
+                  type={showPassword ? "text" : "password"}
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -93,12 +98,16 @@ export function Login() {
               </div>
             </div>
 
-            <button type="submit" disabled={isLoading} className="btn-primary w-full py-2.5">
-              {isLoading ? 'Signing in…' : 'Sign in'}
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="btn-primary w-full py-2.5"
+            >
+              {isLoading ? "Signing in…" : "Sign in"}
             </button>
           </form>
         </div>
       </div>
     </div>
-  )
+  );
 }

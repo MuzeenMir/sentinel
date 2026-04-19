@@ -66,11 +66,17 @@ class SecretsManager:
         self._vault_mount = vault_mount
         self._vault_client = None
 
-        self._aws_region = aws_region or os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
+        self._aws_region = aws_region or os.environ.get(
+            "AWS_DEFAULT_REGION", "us-east-1"
+        )
         self._aws_client = None
 
         self._initialized = True
-        logger.info("SecretsManager initialized: backend=%s cache_ttl=%ds", self._backend, cache_ttl)
+        logger.info(
+            "SecretsManager initialized: backend=%s cache_ttl=%ds",
+            self._backend,
+            cache_ttl,
+        )
 
     def get_secret(self, name: str) -> str:
         """Retrieve a secret by *name*, returning a cached value when valid."""
@@ -99,14 +105,22 @@ class SecretsManager:
             try:
                 return self._fetch_aws(name)
             except Exception:
-                logger.warning("AWS Secrets Manager unavailable for '%s'; falling back to env", name, exc_info=True)
+                logger.warning(
+                    "AWS Secrets Manager unavailable for '%s'; falling back to env",
+                    name,
+                    exc_info=True,
+                )
                 return self._fetch_env(name)
 
         if self._backend == "vault":
             try:
                 return self._fetch_vault(name)
             except Exception:
-                logger.warning("Vault unavailable for '%s'; falling back to env", name, exc_info=True)
+                logger.warning(
+                    "Vault unavailable for '%s'; falling back to env",
+                    name,
+                    exc_info=True,
+                )
                 return self._fetch_env(name)
 
         return self._fetch_env(name)
@@ -121,7 +135,10 @@ class SecretsManager:
     def _get_aws_client(self):
         if self._aws_client is None:
             import boto3  # noqa: delayed import — optional dependency
-            self._aws_client = boto3.client("secretsmanager", region_name=self._aws_region)
+
+            self._aws_client = boto3.client(
+                "secretsmanager", region_name=self._aws_region
+            )
         return self._aws_client
 
     def _fetch_aws(self, name: str) -> str:
@@ -139,7 +156,10 @@ class SecretsManager:
     def _get_vault_client(self):
         if self._vault_client is None:
             import hvac  # noqa: delayed import — optional dependency
-            self._vault_client = hvac.Client(url=self._vault_addr, token=self._vault_token)
+
+            self._vault_client = hvac.Client(
+                url=self._vault_addr, token=self._vault_token
+            )
             if not self._vault_client.is_authenticated():
                 self._vault_client = None
                 raise RuntimeError("Vault authentication failed")

@@ -27,7 +27,6 @@ import threading
 import time
 from collections import deque
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any, Deque, Dict, List, Optional, Set
 
 from flask import Flask, jsonify, request
@@ -36,18 +35,15 @@ from flask_cors import CORS
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from auth_middleware import require_auth, require_role
-from tenant_middleware import require_tenant, get_tenant_id
+from tenant_middleware import require_tenant
 from observability import configure_logging
 from metrics import init_metrics, EBPF_EVENTS, FIM_ALERTS as FIM_ALERTS_METRIC
 from ebpf_lib.schemas.events import (
-    EventType,
     ProcessExecEvent,
     FileAccessEvent,
     NetConnectEvent,
     PrivEscalationEvent,
     ModuleLoadEvent,
-    decode_event,
-    event_to_json,
 )
 from ebpf_lib.loader import ProgramLoader, RingBufferReader
 
@@ -78,10 +74,7 @@ DEFAULT_FIM_PATHS = [
 
 KAFKA_TOPIC = os.environ.get("KAFKA_TOPIC", "sentinel-host-events")
 FIM_PATHS_ENV = os.environ.get("FIM_PATHS", "")
-FIM_PATHS = (
-    FIM_PATHS_ENV.split(",") if FIM_PATHS_ENV
-    else DEFAULT_FIM_PATHS
-)
+FIM_PATHS = FIM_PATHS_ENV.split(",") if FIM_PATHS_ENV else DEFAULT_FIM_PATHS
 FIM_CHECK_INTERVAL = int(os.environ.get("FIM_CHECK_INTERVAL", "60"))
 MAX_RECENT_EVENTS = 1000
 HOST_ROOT = os.environ.get("HOST_ROOT", "/host")
@@ -106,8 +99,10 @@ class HIDSStats:
     def to_dict(self) -> Dict[str, Any]:
         uptime = time.time() - self.start_time
         total = (
-            self.process_exec_events + self.file_access_events
-            + self.net_connect_events + self.priv_escalation_events
+            self.process_exec_events
+            + self.file_access_events
+            + self.net_connect_events
+            + self.priv_escalation_events
             + self.module_load_events
         )
         return {
@@ -259,14 +254,17 @@ class KafkaPublisher:
     def _init(self) -> None:
         try:
             from confluent_kafka import Producer
+
             servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
-            self._producer = Producer({
-                "bootstrap.servers": servers,
-                "client.id": "hids-agent",
-                "acks": "all",
-                "retries": 3,
-                "linger.ms": 5,
-            })
+            self._producer = Producer(
+                {
+                    "bootstrap.servers": servers,
+                    "client.id": "hids-agent",
+                    "acks": "all",
+                    "retries": 3,
+                    "linger.ms": 5,
+                }
+            )
             logger.info("Kafka producer initialized: %s", servers)
         except ImportError:
             logger.warning("confluent_kafka not installed")
@@ -333,13 +331,17 @@ class HIDSAgentService:
                 ("tracepoint/process_exec", "tracepoint", "sched/sched_process_exec"),
                 ("tracepoint/file_access", "tracepoint", "syscalls/sys_enter_openat"),
                 ("tracepoint/net_connect", "kprobe", "tcp_v4_connect"),
-                ("tracepoint/priv_escalation", "tracepoint", "syscalls/sys_enter_setuid"),
+                (
+                    "tracepoint/priv_escalation",
+                    "tracepoint",
+                    "syscalls/sys_enter_setuid",
+                ),
             ]
 
             loaded_any = False
             for name, prog_type, target in programs:
                 try:
-                    info = self._loader.load(name, prog_type, target)
+                    self._loader.load(name, prog_type, target)
                     logger.info("Loaded eBPF program: %s", name)
                     loaded_any = True
                 except FileNotFoundError:
@@ -391,7 +393,8 @@ class HIDSAgentService:
 
                     logger.warning(
                         "FIM ALERT: %s %s on %s",
-                        change["type"], change["path"],
+                        change["type"],
+                        change["path"],
                         change.get("current_hash", "N/A")[:16],
                     )
             except Exception as e:
@@ -447,16 +450,15 @@ hids = HIDSAgentService()
 
 @app.route("/health", methods=["GET"])
 def health():
-    ebpf_loaded = (
-        hids._loader is not None
-        and len(hids._loader.get_loaded()) > 0
-    )
-    return jsonify({
-        "status": "healthy",
-        "service": "hids-agent",
-        "ebpf_programs_loaded": ebpf_loaded,
-        "fim_paths_monitored": len(FIM_PATHS),
-    }), 200
+    ebpf_loaded = hids._loader is not None and len(hids._loader.get_loaded()) > 0
+    return jsonify(
+        {
+            "status": "healthy",
+            "service": "hids-agent",
+            "ebpf_programs_loaded": ebpf_loaded,
+            "fim_paths_monitored": len(FIM_PATHS),
+        }
+    ), 200
 
 
 @app.route("/status", methods=["GET"])
@@ -464,16 +466,21 @@ def health():
 @require_tenant
 def status():
     loaded_progs = (
-        {k: {"sha256": v.sha256, "type": v.prog_type}
-         for k, v in hids._loader.get_loaded().items()}
-        if hids._loader else {}
+        {
+            k: {"sha256": v.sha256, "type": v.prog_type}
+            for k, v in hids._loader.get_loaded().items()
+        }
+        if hids._loader
+        else {}
     )
-    return jsonify({
-        "stats": hids.stats.to_dict(),
-        "ebpf_programs": loaded_progs,
-        "fim_paths": FIM_PATHS,
-        "recent_events_count": len(hids.recent_events),
-    }), 200
+    return jsonify(
+        {
+            "stats": hids.stats.to_dict(),
+            "ebpf_programs": loaded_progs,
+            "fim_paths": FIM_PATHS,
+            "recent_events_count": len(hids.recent_events),
+        }
+    ), 200
 
 
 @app.route("/events", methods=["GET"])
@@ -492,10 +499,12 @@ def get_events():
 @require_auth
 @require_tenant
 def get_baselines():
-    return jsonify({
-        "file_hashes": hids.fim.get_baselines(),
-        "allowed_execs": hids.rules.get_allowed_execs(),
-    }), 200
+    return jsonify(
+        {
+            "file_hashes": hids.fim.get_baselines(),
+            "allowed_execs": hids.rules.get_allowed_execs(),
+        }
+    ), 200
 
 
 @app.route("/baselines/rebuild", methods=["POST"])
@@ -503,10 +512,12 @@ def get_baselines():
 @require_role("admin", "operator")
 def rebuild_baselines():
     baselines = hids.fim.build_baseline()
-    return jsonify({
-        "status": "ok",
-        "files_baselined": len(baselines),
-    }), 200
+    return jsonify(
+        {
+            "status": "ok",
+            "files_baselined": len(baselines),
+        }
+    ), 200
 
 
 @app.route("/baselines/execs", methods=["POST"])
@@ -536,7 +547,9 @@ def get_fim_alerts():
 
 def start_hids_background() -> None:
     thread = threading.Thread(
-        target=hids.start, name="hids-agent", daemon=True,
+        target=hids.start,
+        name="hids-agent",
+        daemon=True,
     )
     thread.start()
 

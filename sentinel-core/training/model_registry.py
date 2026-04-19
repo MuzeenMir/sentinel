@@ -81,24 +81,35 @@ class ModelRegistry:
                 self._models[name] = {}
                 for ver_key, ver_data in versions.items():
                     self._models[name][ver_key] = ModelVersion(**ver_data)
-            logger.info("Loaded %d models from %s", sum(len(v) for v in self._models.values()), self._local_path)
+            logger.info(
+                "Loaded %d models from %s",
+                sum(len(v) for v in self._models.values()),
+                self._local_path,
+            )
         except Exception as exc:
             logger.warning("Could not load registry from %s: %s", self._local_path, exc)
 
     def _load_from_db(self) -> None:
         try:
             import psycopg2
+
             conn = psycopg2.connect(self._db_url)
             cur = conn.cursor()
-            cur.execute("SELECT name, version, model_type, framework, artifact_path, metrics, parameters, status, promoted_at FROM model_registry")
+            cur.execute(
+                "SELECT name, version, model_type, framework, artifact_path, metrics, parameters, status, promoted_at FROM model_registry"
+            )
             for row in cur.fetchall():
                 name, version = row[0], row[1]
                 if name not in self._models:
                     self._models[name] = {}
                 self._models[name][version] = ModelVersion(
-                    name=name, version=version, model_type=row[2],
-                    framework=row[3] or "", artifact_path=row[4] or "",
-                    metrics=row[5] or {}, parameters=row[6] or {},
+                    name=name,
+                    version=version,
+                    model_type=row[2],
+                    framework=row[3] or "",
+                    artifact_path=row[4] or "",
+                    metrics=row[5] or {},
+                    parameters=row[6] or {},
                     status=row[7] or "staging",
                 )
             conn.close()
@@ -131,9 +142,13 @@ class ModelRegistry:
     ) -> ModelVersion:
         """Register a new model version."""
         mv = ModelVersion(
-            name=name, version=version, model_type=model_type,
-            framework=framework, artifact_path=artifact_path,
-            metrics=metrics or {}, parameters=parameters or {},
+            name=name,
+            version=version,
+            model_type=model_type,
+            framework=framework,
+            artifact_path=artifact_path,
+            metrics=metrics or {},
+            parameters=parameters or {},
         )
         if name not in self._models:
             self._models[name] = {}
@@ -142,7 +157,9 @@ class ModelRegistry:
         logger.info("Registered model %s v%s (status=%s)", name, version, mv.status)
         return mv
 
-    def promote(self, name: str, version: str, target_status: str = "production") -> bool:
+    def promote(
+        self, name: str, version: str, target_status: str = "production"
+    ) -> bool:
         """Promote a model version to the target status.
 
         When promoting to production, the previous production version is
@@ -200,17 +217,20 @@ class DriftDetector:
     def set_baseline(self, predictions: List[float]) -> None:
         """Set the baseline prediction distribution from training/validation data."""
         import statistics
+
         self._baseline_mean = statistics.mean(predictions)
-        self._baseline_std = statistics.stdev(predictions) if len(predictions) > 1 else 0.01
+        self._baseline_std = (
+            statistics.stdev(predictions) if len(predictions) > 1 else 0.01
+        )
 
     def record(self, prediction: float, actual: Optional[int] = None) -> None:
         self._predictions.append(prediction)
         if actual is not None:
             self._actuals.append(actual)
         if len(self._predictions) > self._window_size:
-            self._predictions = self._predictions[-self._window_size:]
+            self._predictions = self._predictions[-self._window_size :]
         if len(self._actuals) > self._window_size:
-            self._actuals = self._actuals[-self._window_size:]
+            self._actuals = self._actuals[-self._window_size :]
 
     def check_drift(self) -> Dict[str, Any]:
         """Check for prediction distribution drift."""
@@ -218,10 +238,13 @@ class DriftDetector:
             return {"drift_detected": False, "reason": "insufficient_data"}
 
         import statistics
+
         current_mean = statistics.mean(self._predictions)
         shift = abs(current_mean - self._baseline_mean)
         normalized_shift = shift / max(self._baseline_std, 0.001)
-        drift_detected = normalized_shift > (self._drift_threshold / max(self._baseline_std, 0.001))
+        drift_detected = normalized_shift > (
+            self._drift_threshold / max(self._baseline_std, 0.001)
+        )
 
         result = {
             "drift_detected": drift_detected,
@@ -234,7 +257,11 @@ class DriftDetector:
         }
 
         if drift_detected:
-            logger.warning("Model drift detected: shift=%.4f threshold=%.4f", shift, self._drift_threshold)
+            logger.warning(
+                "Model drift detected: shift=%.4f threshold=%.4f",
+                shift,
+                self._drift_threshold,
+            )
 
         return result
 
@@ -247,7 +274,9 @@ class RetrainingPipeline:
     logic and hooks.
     """
 
-    def __init__(self, registry: ModelRegistry, train_script: str = "training/train_all.py"):
+    def __init__(
+        self, registry: ModelRegistry, train_script: str = "training/train_all.py"
+    ):
         self._registry = registry
         self._train_script = train_script
         self._last_retrain: Optional[float] = None
@@ -256,11 +285,16 @@ class RetrainingPipeline:
     def should_retrain(self, drift_result: Dict[str, Any]) -> bool:
         if not drift_result.get("drift_detected"):
             return False
-        if self._last_retrain and (time.time() - self._last_retrain) < self._min_retrain_interval:
+        if (
+            self._last_retrain
+            and (time.time() - self._last_retrain) < self._min_retrain_interval
+        ):
             return False
         return True
 
-    def trigger_retrain(self, model_name: str, reason: str = "drift_detected") -> Dict[str, Any]:
+    def trigger_retrain(
+        self, model_name: str, reason: str = "drift_detected"
+    ) -> Dict[str, Any]:
         """Trigger a retraining job. Returns job metadata."""
         self._last_retrain = time.time()
         job = {
@@ -274,22 +308,38 @@ class RetrainingPipeline:
         logger.info("Retraining triggered for %s: %s", model_name, job["job_id"])
         return job
 
-    def on_training_complete(self, model_name: str, version: str, metrics: Dict[str, Any], artifact_path: str) -> ModelVersion:
+    def on_training_complete(
+        self, model_name: str, version: str, metrics: Dict[str, Any], artifact_path: str
+    ) -> ModelVersion:
         """Called when training completes -- register the new version as staging."""
         mv = self._registry.register(
-            name=model_name, version=version, model_type=model_name,
-            artifact_path=artifact_path, metrics=metrics,
+            name=model_name,
+            version=version,
+            model_type=model_name,
+            artifact_path=artifact_path,
+            metrics=metrics,
         )
         prod = self._registry.get_production_model(model_name)
         if prod and self._is_improvement(prod.metrics, metrics):
             self._registry.promote(model_name, version, "production")
-            logger.info("Auto-promoted %s v%s to production (improvement over v%s)", model_name, version, prod.version)
+            logger.info(
+                "Auto-promoted %s v%s to production (improvement over v%s)",
+                model_name,
+                version,
+                prod.version,
+            )
         else:
-            logger.info("Model %s v%s registered as staging (no improvement)", model_name, version)
+            logger.info(
+                "Model %s v%s registered as staging (no improvement)",
+                model_name,
+                version,
+            )
         return mv
 
     @staticmethod
-    def _is_improvement(old_metrics: Dict[str, Any], new_metrics: Dict[str, Any]) -> bool:
+    def _is_improvement(
+        old_metrics: Dict[str, Any], new_metrics: Dict[str, Any]
+    ) -> bool:
         old_f1 = old_metrics.get("f1", 0)
         new_f1 = new_metrics.get("f1", 0)
         old_fpr = old_metrics.get("false_positive_rate", 1)

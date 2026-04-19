@@ -1,4 +1,5 @@
 """US Health Insurance Portability and Accountability Act (HIPAA) Security Rule framework."""
+
 import logging
 from typing import Any, Dict, List
 
@@ -232,7 +233,6 @@ _HIPAA_CONTROLS: List[Dict[str, Any]] = [
 
 
 class HIPAAFramework(BaseFramework):
-
     @property
     def full_name(self) -> str:
         return "Health Insurance Portability and Accountability Act — Security Rule"
@@ -258,9 +258,7 @@ class HIPAAFramework(BaseFramework):
             logger.exception("HIPAA assessment failed")
             raise
 
-    def detailed_gap_analysis(
-        self, current_controls: Dict
-    ) -> List[Dict[str, Any]]:
+    def detailed_gap_analysis(self, current_controls: Dict) -> List[Dict[str, Any]]:
         try:
             return self._default_gap_analysis(current_controls)
         except Exception:

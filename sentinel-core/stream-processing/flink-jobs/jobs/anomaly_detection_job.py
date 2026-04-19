@@ -10,7 +10,6 @@ Outputs detected anomalies to sentinel-anomalies Kafka topic for
 consumption by the AI Engine and Alert Service.
 """
 
-import json
 import logging
 import os
 import sys
@@ -45,7 +44,11 @@ class AnomalyDetector:
 
     def detect_network(self, record: Dict[str, Any]) -> List[Dict[str, Any]]:
         anomalies = []
-        for fn in (self._detect_syn_flood, self._detect_port_scan, self._detect_large_payload):
+        for fn in (
+            self._detect_syn_flood,
+            self._detect_port_scan,
+            self._detect_large_payload,
+        ):
             result = fn(record)
             if result:
                 anomalies.append(result)
@@ -59,41 +62,47 @@ class AnomalyDetector:
             pid = record.get("pid", 0)
             self.host_priv_counts[pid] += 1
             if self.host_priv_counts[pid] >= self.thresholds["priv_escalation_burst"]:
-                anomalies.append({
-                    "type": "priv_escalation_burst",
-                    "severity": "critical",
-                    "pid": pid,
-                    "uid": record.get("uid"),
-                    "target_uid": record.get("target_uid"),
-                    "comm": record.get("comm", ""),
-                    "count": self.host_priv_counts[pid],
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "description": f"Repeated privilege escalation from PID {pid}",
-                })
+                anomalies.append(
+                    {
+                        "type": "priv_escalation_burst",
+                        "severity": "critical",
+                        "pid": pid,
+                        "uid": record.get("uid"),
+                        "target_uid": record.get("target_uid"),
+                        "comm": record.get("comm", ""),
+                        "count": self.host_priv_counts[pid],
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "description": f"Repeated privilege escalation from PID {pid}",
+                    }
+                )
 
         elif event_type == "module_load":
             uid = record.get("uid", 0)
             self.host_module_counts[uid] += 1
             if self.host_module_counts[uid] >= self.thresholds["module_load_burst"]:
-                anomalies.append({
-                    "type": "module_load_burst",
-                    "severity": "high",
-                    "uid": uid,
-                    "module": record.get("name", ""),
-                    "count": self.host_module_counts[uid],
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "description": f"Burst of kernel module loads by UID {uid}",
-                })
+                anomalies.append(
+                    {
+                        "type": "module_load_burst",
+                        "severity": "high",
+                        "uid": uid,
+                        "module": record.get("name", ""),
+                        "count": self.host_module_counts[uid],
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "description": f"Burst of kernel module loads by UID {uid}",
+                    }
+                )
 
         elif event_type == "fim_alert":
-            anomalies.append({
-                "type": "file_integrity_violation",
-                "severity": "high",
-                "path": record.get("path", ""),
-                "change_type": record.get("change_type", ""),
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "description": f"File integrity violation: {record.get('path')} {record.get('change_type')}",
-            })
+            anomalies.append(
+                {
+                    "type": "file_integrity_violation",
+                    "severity": "high",
+                    "path": record.get("path", ""),
+                    "change_type": record.get("change_type", ""),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "description": f"File integrity violation: {record.get('path')} {record.get('change_type')}",
+                }
+            )
 
         return anomalies
 
@@ -196,7 +205,9 @@ class AnomalyDetectionJob:
             self.env.enable_checkpointing(config.checkpoint_interval_ms)
 
             settings = EnvironmentSettings.new_instance().in_streaming_mode().build()
-            self.t_env = StreamTableEnvironment.create(self.env, environment_settings=settings)
+            self.t_env = StreamTableEnvironment.create(
+                self.env, environment_settings=settings
+            )
 
             logger.info("Flink environment initialized for anomaly detection")
         except ImportError as e:
@@ -368,29 +379,79 @@ class AnomalyDetectionJob:
         logger.info("Development mode: Simulating anomaly detection")
 
         test_network_records = [
-            {"src_ip": "192.168.1.100", "dest_ip": "10.0.0.1", "dest_port": 443,
-             "transport": "TCP", "tcp_flags": 0x10, "bytes": 500},
-            *[{"src_ip": "192.168.1.200", "dest_ip": "10.0.0.1", "dest_port": 80,
-               "transport": "TCP", "tcp_flags": 0x02, "bytes": 40}
-              for _ in range(150)],
-            *[{"src_ip": "192.168.1.150", "dest_ip": "10.0.0.1", "dest_port": port,
-               "transport": "TCP", "tcp_flags": 0x02, "bytes": 40}
-              for port in range(1, 100)],
-            {"src_ip": "192.168.1.100", "dest_ip": "10.0.0.1", "dest_port": 443,
-             "transport": "TCP", "tcp_flags": 0x18, "bytes": 50000},
+            {
+                "src_ip": "192.168.1.100",
+                "dest_ip": "10.0.0.1",
+                "dest_port": 443,
+                "transport": "TCP",
+                "tcp_flags": 0x10,
+                "bytes": 500,
+            },
+            *[
+                {
+                    "src_ip": "192.168.1.200",
+                    "dest_ip": "10.0.0.1",
+                    "dest_port": 80,
+                    "transport": "TCP",
+                    "tcp_flags": 0x02,
+                    "bytes": 40,
+                }
+                for _ in range(150)
+            ],
+            *[
+                {
+                    "src_ip": "192.168.1.150",
+                    "dest_ip": "10.0.0.1",
+                    "dest_port": port,
+                    "transport": "TCP",
+                    "tcp_flags": 0x02,
+                    "bytes": 40,
+                }
+                for port in range(1, 100)
+            ],
+            {
+                "src_ip": "192.168.1.100",
+                "dest_ip": "10.0.0.1",
+                "dest_port": 443,
+                "transport": "TCP",
+                "tcp_flags": 0x18,
+                "bytes": 50000,
+            },
         ]
 
         test_host_records = [
-            {"event_type": "priv_escalation", "pid": 4444, "uid": 1000,
-             "target_uid": 0, "comm": "sudo"},
-            {"event_type": "priv_escalation", "pid": 4444, "uid": 1000,
-             "target_uid": 0, "comm": "sudo"},
-            {"event_type": "priv_escalation", "pid": 4444, "uid": 1000,
-             "target_uid": 0, "comm": "sudo"},
-            {"event_type": "module_load", "pid": 1, "uid": 0,
-             "name": "suspicious_module"},
-            {"event_type": "fim_alert", "path": "/etc/shadow",
-             "change_type": "modified"},
+            {
+                "event_type": "priv_escalation",
+                "pid": 4444,
+                "uid": 1000,
+                "target_uid": 0,
+                "comm": "sudo",
+            },
+            {
+                "event_type": "priv_escalation",
+                "pid": 4444,
+                "uid": 1000,
+                "target_uid": 0,
+                "comm": "sudo",
+            },
+            {
+                "event_type": "priv_escalation",
+                "pid": 4444,
+                "uid": 1000,
+                "target_uid": 0,
+                "comm": "sudo",
+            },
+            {
+                "event_type": "module_load",
+                "pid": 1,
+                "uid": 0,
+                "name": "suspicious_module",
+            },
+            {
+                "event_type": "fim_alert",
+                "path": "/etc/shadow",
+                "change_type": "modified",
+            },
         ]
 
         all_anomalies = []
@@ -407,7 +468,12 @@ class AnomalyDetectionJob:
 
         logger.info("Detected %d unique anomalies:", len(unique_anomalies))
         for anomaly in unique_anomalies.values():
-            logger.info("  - %s [%s]: %s", anomaly["type"], anomaly["severity"], anomaly["description"])
+            logger.info(
+                "  - %s [%s]: %s",
+                anomaly["type"],
+                anomaly["severity"],
+                anomaly["description"],
+            )
 
         return list(unique_anomalies.values())
 

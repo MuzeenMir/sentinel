@@ -5,6 +5,7 @@ Trains a candidate model in a staging directory, evaluates it against the
 current production artefact, and promotes only when the improvement exceeds
 the configured threshold — all with automatic backups.
 """
+
 import json
 import logging
 import os
@@ -121,7 +122,9 @@ class RetrainingPipeline:
                 job.status = "promoted"
                 logger.info(
                     "XGBoost model promoted: F1 %.4f → %.4f (+%.4f)",
-                    old_f1, new_f1, improvement,
+                    old_f1,
+                    new_f1,
+                    improvement,
                 )
             else:
                 self._save_to_staging(new_model, new_scaler, job.new_metrics)
@@ -130,7 +133,10 @@ class RetrainingPipeline:
                 logger.info(
                     "XGBoost model staged (not promoted): F1 %.4f → %.4f "
                     "(+%.4f < threshold %.4f)",
-                    old_f1, new_f1, improvement, self.improvement_threshold,
+                    old_f1,
+                    new_f1,
+                    improvement,
+                    self.improvement_threshold,
                 )
 
         except Exception as exc:
@@ -197,8 +203,10 @@ class RetrainingPipeline:
 
     @staticmethod
     def _train_new_model(
-        X_train: np.ndarray, y_train: np.ndarray,
-        X_val: np.ndarray, y_val: np.ndarray,
+        X_train: np.ndarray,
+        y_train: np.ndarray,
+        X_val: np.ndarray,
+        y_val: np.ndarray,
     ) -> tuple:
         scaler = StandardScaler()
         X_train_s = scaler.fit_transform(X_train)

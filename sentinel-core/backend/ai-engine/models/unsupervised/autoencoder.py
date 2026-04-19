@@ -5,6 +5,7 @@ Learns to reconstruct normal traffic patterns.  Anomalies (attacks) produce
 high reconstruction error because they deviate from the learned distribution
 of benign traffic.
 """
+
 import json
 import logging
 import os
@@ -319,7 +320,9 @@ class AutoencoderDetector(BaseDetector):
 
         logger.info(
             "Calibrated threshold=%.6f  detection_rate=%.4f  fpr=%.4f",
-            self._threshold, detection_rate, actual_fpr,
+            self._threshold,
+            detection_rate,
+            actual_fpr,
         )
 
         self._metrics["calibrated_threshold"] = self._threshold
@@ -341,10 +344,12 @@ class AutoencoderDetector(BaseDetector):
         """
         # Sweep candidates from the benign distribution; concentrate the
         # candidates in the upper tail where the decision actually lives.
-        q = np.concatenate([
-            np.linspace(0.50, 0.95, 46),
-            np.linspace(0.951, 1.0, 50),
-        ])
+        q = np.concatenate(
+            [
+                np.linspace(0.50, 0.95, 46),
+                np.linspace(0.951, 1.0, 50),
+            ]
+        )
         candidates = np.quantile(benign_errors, q)
         # Deduplicate and sort so downstream sweeps are monotone.
         candidates = np.unique(candidates)
@@ -369,9 +374,7 @@ class AutoencoderDetector(BaseDetector):
             # No candidate hit the FPR cap (e.g. the benign tail is so
             # thin that even the max sample exceeds the cap). Use the
             # classic percentile as a last resort.
-            best_threshold = float(
-                np.percentile(benign_errors, (1.0 - fpr_cap) * 100)
-            )
+            best_threshold = float(np.percentile(benign_errors, (1.0 - fpr_cap) * 100))
 
         return best_threshold
 
@@ -525,8 +528,15 @@ class AutoencoderDetector(BaseDetector):
             epochs_done = epoch + 1
 
             if epochs_done % 5 == 0 or epochs_done == 1:
-                logger.info("  Epoch %d/%d  loss=%.6f  best=%.6f  patience=%d/%d",
-                            epochs_done, max_epochs, avg_loss, best_loss, patience_ctr, es_patience)
+                logger.info(
+                    "  Epoch %d/%d  loss=%.6f  best=%.6f  patience=%d/%d",
+                    epochs_done,
+                    max_epochs,
+                    avg_loss,
+                    best_loss,
+                    patience_ctr,
+                    es_patience,
+                )
 
             if avg_loss < best_loss:
                 best_loss = avg_loss
@@ -534,7 +544,11 @@ class AutoencoderDetector(BaseDetector):
             else:
                 patience_ctr += 1
                 if patience_ctr >= es_patience:
-                    logger.info("Early stopping at epoch %d (patience=%d)", epochs_done, es_patience)
+                    logger.info(
+                        "Early stopping at epoch %d (patience=%d)",
+                        epochs_done,
+                        es_patience,
+                    )
                     break
 
         self.model.eval()
@@ -554,9 +568,7 @@ class AutoencoderDetector(BaseDetector):
         # training samples don't distort the diagnostic numbers written
         # to the training report (previously: mean=0.25, std=202 because
         # a few rows had reconstruction errors in the thousands).
-        trimmed = errors[
-            errors <= np.percentile(errors, 99.5)
-        ]
+        trimmed = errors[errors <= np.percentile(errors, 99.5)]
         self._metrics = {
             "n_samples": len(X),
             "n_features": X.shape[1],

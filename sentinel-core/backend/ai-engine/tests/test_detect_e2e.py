@@ -1,7 +1,6 @@
 """End-to-end validation: AI engine loads trained models and /api/v1/detect returns valid result."""
-import os
+
 import pytest
-from pathlib import Path
 
 # Ensure MODEL_PATH is set before app import (conftest sets it)
 from app import app, initialize_models

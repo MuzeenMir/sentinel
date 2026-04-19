@@ -4,9 +4,9 @@ Unit tests for the SENTINEL Auth Service.
 Uses an in-memory SQLite database and mocked Redis to avoid
 external dependencies.
 """
+
 import os
 import sys
-import json
 import pytest
 from unittest.mock import patch, MagicMock
 from datetime import datetime, timedelta
@@ -25,10 +25,16 @@ sys.path.insert(0, os.path.join(_backend_root, "auth-service"))
 
 _mock_redis = MagicMock()
 
-with patch("redis.ConnectionPool.from_url", return_value=MagicMock()), \
-     patch("redis.Redis", return_value=_mock_redis), \
-     patch.dict("sys.modules", {"enterprise_auth": MagicMock(register_enterprise_auth=MagicMock())}):
+with (
+    patch("redis.ConnectionPool.from_url", return_value=MagicMock()),
+    patch("redis.Redis", return_value=_mock_redis),
+    patch.dict(
+        "sys.modules",
+        {"enterprise_auth": MagicMock(register_enterprise_auth=MagicMock())},
+    ),
+):
     import importlib
+
     spec = importlib.util.spec_from_file_location(
         "auth_app",
         os.path.join(_backend_root, "auth-service", "app.py"),
@@ -66,21 +72,32 @@ def client():
     return app.test_client()
 
 
-def _register(client, username="testuser", email="test@example.com",
-              password=VALID_PASSWORD, role="viewer"):
-    return client.post("/api/v1/auth/register", json={
-        "username": username,
-        "email": email,
-        "password": password,
-        "role": role,
-    })
+def _register(
+    client,
+    username="testuser",
+    email="test@example.com",
+    password=VALID_PASSWORD,
+    role="viewer",
+):
+    return client.post(
+        "/api/v1/auth/register",
+        json={
+            "username": username,
+            "email": email,
+            "password": password,
+            "role": role,
+        },
+    )
 
 
 def _login(client, username="testuser", password=VALID_PASSWORD):
-    return client.post("/api/v1/auth/login", json={
-        "username": username,
-        "password": password,
-    })
+    return client.post(
+        "/api/v1/auth/login",
+        json={
+            "username": username,
+            "password": password,
+        },
+    )
 
 
 def _auth_header(token):
@@ -208,10 +225,14 @@ class TestChangePassword:
         _register(client)
         login_resp = _login(client)
         token = login_resp.json["access_token"]
-        resp = client.put("/api/v1/auth/change-password", headers=_auth_header(token), json={
-            "current_password": VALID_PASSWORD,
-            "new_password": "NewPass@5678",
-        })
+        resp = client.put(
+            "/api/v1/auth/change-password",
+            headers=_auth_header(token),
+            json={
+                "current_password": VALID_PASSWORD,
+                "new_password": "NewPass@5678",
+            },
+        )
         assert resp.status_code == 200
 
         # Verify can login with new password
@@ -222,17 +243,23 @@ class TestChangePassword:
         _register(client)
         login_resp = _login(client)
         token = login_resp.json["access_token"]
-        resp = client.put("/api/v1/auth/change-password", headers=_auth_header(token), json={
-            "current_password": "WrongPass@1",
-            "new_password": "NewPass@5678",
-        })
+        resp = client.put(
+            "/api/v1/auth/change-password",
+            headers=_auth_header(token),
+            json={
+                "current_password": "WrongPass@1",
+                "new_password": "NewPass@5678",
+            },
+        )
         assert resp.status_code == 401
 
     def test_missing_fields(self, client):
         _register(client)
         login_resp = _login(client)
         token = login_resp.json["access_token"]
-        resp = client.put("/api/v1/auth/change-password", headers=_auth_header(token), json={})
+        resp = client.put(
+            "/api/v1/auth/change-password", headers=_auth_header(token), json={}
+        )
         assert resp.status_code == 400
 
 

@@ -2,19 +2,19 @@
 
 declare global {
   interface ImportMetaEnv {
-    readonly VITE_API_URL?: string
-    readonly VITE_APP_ENV?: string
-    readonly VITE_APP_NAME?: string
-    readonly VITE_SUPPORT_EMAIL?: string
+    readonly VITE_API_URL?: string;
+    readonly VITE_APP_ENV?: string;
+    readonly VITE_APP_NAME?: string;
+    readonly VITE_SUPPORT_EMAIL?: string;
   }
   interface Window {
     __SENTINEL__?: {
-      apiUrl?: string
-      env?: string
-      appName?: string
-      supportEmail?: string
-    }
+      apiUrl?: string;
+      env?: string;
+      appName?: string;
+      supportEmail?: string;
+    };
   }
 }
 
-export {}
+export {};

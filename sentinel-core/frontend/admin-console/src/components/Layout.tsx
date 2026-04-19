@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { NavLink, useNavigate, useLocation, Link } from 'react-router-dom'
+import { useState } from "react";
+import { NavLink, useNavigate, useLocation, Link } from "react-router-dom";
 import {
   LayoutDashboard,
   Shield,
@@ -19,39 +19,41 @@ import {
   Building2,
   ShieldCheck,
   Plug,
-} from 'lucide-react'
-import { useAuthStore } from '../store/authStore'
+} from "lucide-react";
+import { useAuthStore } from "../store/authStore";
 
 const navigation = [
-  { name: 'Dashboard', to: '/', icon: LayoutDashboard },
-  { name: 'Threats', to: '/threats', icon: Shield },
-  { name: 'Alerts', to: '/alerts', icon: Bell },
-  { name: 'Policies', to: '/policies', icon: FileText },
-  { name: 'Compliance', to: '/compliance', icon: CheckCircle },
-  { name: 'Hardening', to: '/hardening', icon: Lock },
-  { name: 'HIDS', to: '/hids', icon: Eye },
-  { name: 'Users', to: '/users', icon: Users },
-  { name: 'Audit Log', to: '/audit', icon: ClipboardList },
-  { name: 'Tenants', to: '/tenants', icon: Building2 },
-  { name: 'MFA Setup', to: '/mfa-setup', icon: ShieldCheck },
-  { name: 'SIEM / Integrations', to: '/siem', icon: Plug },
-  { name: 'Settings', to: '/settings', icon: Settings },
-]
+  { name: "Dashboard", to: "/", icon: LayoutDashboard },
+  { name: "Threats", to: "/threats", icon: Shield },
+  { name: "Alerts", to: "/alerts", icon: Bell },
+  { name: "Policies", to: "/policies", icon: FileText },
+  { name: "Compliance", to: "/compliance", icon: CheckCircle },
+  { name: "Hardening", to: "/hardening", icon: Lock },
+  { name: "HIDS", to: "/hids", icon: Eye },
+  { name: "Users", to: "/users", icon: Users },
+  { name: "Audit Log", to: "/audit", icon: ClipboardList },
+  { name: "Tenants", to: "/tenants", icon: Building2 },
+  { name: "MFA Setup", to: "/mfa-setup", icon: ShieldCheck },
+  { name: "SIEM / Integrations", to: "/siem", icon: Plug },
+  { name: "Settings", to: "/settings", icon: Settings },
+];
 
 export function Layout({ children }: { children: React.ReactNode }) {
-  const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [userMenuOpen, setUserMenuOpen] = useState(false)
-  const { user, logout } = useAuthStore()
-  const navigate = useNavigate()
-  const location = useLocation()
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const { user, logout } = useAuthStore();
+  const navigate = useNavigate();
+  const location = useLocation();
   const activeNav = navigation.find((n) =>
-    n.to === '/' ? location.pathname === '/' : location.pathname.startsWith(n.to),
-  )
+    n.to === "/"
+      ? location.pathname === "/"
+      : location.pathname.startsWith(n.to),
+  );
 
   const handleLogout = async () => {
-    await logout()
-    navigate('/login')
-  }
+    await logout();
+    navigate("/login");
+  };
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-950">
@@ -64,13 +66,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       <aside
         className={`fixed inset-y-0 left-0 z-40 w-64 transform bg-slate-900 border-r border-slate-800 transition-transform duration-200 lg:static lg:translate-x-0 ${
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+          sidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
         <div className="flex h-16 items-center gap-3 px-6 border-b border-slate-800">
           <Shield className="h-8 w-8 text-cyan-400" />
           <div>
-            <h1 className="text-lg font-bold tracking-wider text-white">SENTINEL</h1>
+            <h1 className="text-lg font-bold tracking-wider text-white">
+              SENTINEL
+            </h1>
             <p className="text-[10px] text-slate-500 uppercase tracking-widest">
               Security Platform
             </p>
@@ -88,13 +92,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <NavLink
               key={item.to}
               to={item.to}
-              end={item.to === '/'}
+              end={item.to === "/"}
               onClick={() => setSidebarOpen(false)}
               className={({ isActive }) =>
                 `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                   isActive
-                    ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20'
-                    : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                    ? "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20"
+                    : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
                 }`
               }
             >
@@ -116,7 +120,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
           <div className="flex flex-1 items-center gap-3">
             {activeNav && (
-              <span className="text-sm font-semibold text-slate-200">{activeNav.name}</span>
+              <span className="text-sm font-semibold text-slate-200">
+                {activeNav.name}
+              </span>
             )}
             <div className="relative max-w-md flex-1">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
@@ -144,9 +150,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
               onClick={() => setUserMenuOpen(!userMenuOpen)}
             >
               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-cyan-600 text-xs font-bold text-white">
-                {user?.username?.charAt(0).toUpperCase() ?? 'U'}
+                {user?.username?.charAt(0).toUpperCase() ?? "U"}
               </div>
-              <span className="hidden sm:inline">{user?.username ?? 'User'}</span>
+              <span className="hidden sm:inline">
+                {user?.username ?? "User"}
+              </span>
               <ChevronDown className="h-4 w-4" />
             </button>
 
@@ -161,7 +169,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   className="absolute right-0 z-50 mt-2 w-48 rounded-lg border border-slate-700 bg-slate-800 py-1 shadow-xl"
                 >
                   <div className="px-4 py-2 border-b border-slate-700">
-                    <p className="text-sm font-medium text-white">{user?.username}</p>
+                    <p className="text-sm font-medium text-white">
+                      {user?.username}
+                    </p>
                     <p className="text-xs text-slate-400">{user?.role}</p>
                   </div>
                   <Link
@@ -187,8 +197,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto bg-slate-950 p-6">{children}</main>
+        <main className="flex-1 overflow-y-auto bg-slate-950 p-6">
+          {children}
+        </main>
       </div>
     </div>
-  )
+  );
 }

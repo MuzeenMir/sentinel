@@ -6,13 +6,11 @@ external dependencies (Redis, SHAP, explainer modules) mocked out.
 """
 
 import importlib.util
-import json
 import os
 import sys
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
-import numpy as np
 import pytest
 
 # ---------------------------------------------------------------------------
@@ -28,8 +26,6 @@ sys.path.insert(0, _backend_dir)
 # Pre-import mocks — Redis and domain components are stubbed before the
 # module-level code in app.py executes.
 # ---------------------------------------------------------------------------
-import types as _types
-from functools import wraps as _wraps
 
 
 # Uses the real auth_middleware; _bypass_auth fixture patches per-test.
@@ -131,11 +127,23 @@ def shap_explainer():
     _mock_shap_explainer.is_ready.return_value = True
     _mock_shap_explainer.explain_detection.return_value = {
         "feature_importance": [
-            {"feature": "byte_rate", "shap_value": 0.42, "direction": "increases_threat"},
-            {"feature": "syn_ratio", "shap_value": 0.31, "direction": "increases_threat"},
+            {
+                "feature": "byte_rate",
+                "shap_value": 0.42,
+                "direction": "increases_threat",
+            },
+            {
+                "feature": "syn_ratio",
+                "shap_value": 0.31,
+                "direction": "increases_threat",
+            },
         ],
         "top_factors": [
-            {"feature": "byte_rate", "shap_value": 0.42, "direction": "increases_threat"},
+            {
+                "feature": "byte_rate",
+                "shap_value": 0.42,
+                "direction": "increases_threat",
+            },
         ],
         "method": "SHAP",
     }
@@ -204,11 +212,16 @@ def _bypass_auth():
 
 @pytest.fixture()
 def auth_headers():
-    return {"Authorization": "Bearer test-valid-token", "Content-Type": "application/json"}
+    return {
+        "Authorization": "Bearer test-valid-token",
+        "Content-Type": "application/json",
+    }
 
 
 @pytest.fixture()
-def client(mock_redis, shap_explainer, text_explainer, audit_trail, compliance_reporter):
+def client(
+    mock_redis, shap_explainer, text_explainer, audit_trail, compliance_reporter
+):
     xai_app.app.config["TESTING"] = True
     with xai_app.app.test_client() as c:
         yield c
@@ -286,7 +299,9 @@ class TestExplainDetection:
         base.update(overrides)
         return base
 
-    def test_successful_explanation(self, client, auth_headers, shap_explainer, text_explainer):
+    def test_successful_explanation(
+        self, client, auth_headers, shap_explainer, text_explainer
+    ):
         resp = client.post(
             "/api/v1/explain/detection", headers=auth_headers, json=self._payload()
         )
@@ -301,12 +316,16 @@ class TestExplainDetection:
     def test_calls_shap_and_text_explainers(
         self, client, auth_headers, shap_explainer, text_explainer
     ):
-        client.post("/api/v1/explain/detection", headers=auth_headers, json=self._payload())
+        client.post(
+            "/api/v1/explain/detection", headers=auth_headers, json=self._payload()
+        )
         shap_explainer.explain_detection.assert_called_once()
         text_explainer.explain_detection.assert_called_once()
 
     def test_records_audit_trail(self, client, auth_headers, audit_trail):
-        client.post("/api/v1/explain/detection", headers=auth_headers, json=self._payload())
+        client.post(
+            "/api/v1/explain/detection", headers=auth_headers, json=self._payload()
+        )
         audit_trail.record_explanation.assert_called_once()
         call_args = audit_trail.record_explanation.call_args
         assert call_args[0][0] == "detection"
@@ -370,13 +389,17 @@ class TestExplainDetection:
     def test_defaults_detection_id_to_unknown(self, client, auth_headers):
         payload = self._payload()
         del payload["detection_id"]
-        resp = client.post("/api/v1/explain/detection", headers=auth_headers, json=payload)
+        resp = client.post(
+            "/api/v1/explain/detection", headers=auth_headers, json=payload
+        )
         assert resp.status_code == 200
         assert resp.get_json()["detection_id"] == "unknown"
 
     def test_empty_features_still_succeeds(self, client, auth_headers):
         payload = self._payload(features={}, model_verdicts={})
-        resp = client.post("/api/v1/explain/detection", headers=auth_headers, json=payload)
+        resp = client.post(
+            "/api/v1/explain/detection", headers=auth_headers, json=payload
+        )
         assert resp.status_code == 200
 
     def test_shap_failure_returns_500(self, client, auth_headers, shap_explainer):
@@ -430,7 +453,9 @@ class TestExplainPolicy:
         assert "key_factors" in data
 
     def test_calls_text_explainer(self, client, auth_headers, text_explainer):
-        client.post("/api/v1/explain/policy", headers=auth_headers, json=self._payload())
+        client.post(
+            "/api/v1/explain/policy", headers=auth_headers, json=self._payload()
+        )
         text_explainer.explain_policy_decision.assert_called_once_with(
             "DENY",
             self._payload()["state_features"],
@@ -438,7 +463,9 @@ class TestExplainPolicy:
         )
 
     def test_records_audit_trail(self, client, auth_headers, audit_trail):
-        client.post("/api/v1/explain/policy", headers=auth_headers, json=self._payload())
+        client.post(
+            "/api/v1/explain/policy", headers=auth_headers, json=self._payload()
+        )
         audit_trail.record_explanation.assert_called_once()
         call_args = audit_trail.record_explanation.call_args
         assert call_args[0][0] == "policy"
@@ -508,7 +535,9 @@ class TestExplainPolicy:
         assert resp.status_code == 200
         assert resp.get_json()["action"] == "MONITOR"
 
-    def test_text_explainer_failure_returns_500(self, client, auth_headers, text_explainer):
+    def test_text_explainer_failure_returns_500(
+        self, client, auth_headers, text_explainer
+    ):
         text_explainer.explain_policy_decision.side_effect = RuntimeError("NLG failed")
         resp = client.post(
             "/api/v1/explain/policy", headers=auth_headers, json=self._payload()
@@ -550,8 +579,12 @@ class TestAuditTrail:
         assert data["total"] == 1
         assert data["trails"][0]["entity_id"] == "det_001"
 
-    def test_get_trail_calls_get_trail_with_params(self, client, auth_headers, audit_trail):
-        client.get("/api/v1/audit-trail?type=detection&id=det_001", headers=auth_headers)
+    def test_get_trail_calls_get_trail_with_params(
+        self, client, auth_headers, audit_trail
+    ):
+        client.get(
+            "/api/v1/audit-trail?type=detection&id=det_001", headers=auth_headers
+        )
         audit_trail.get_trail.assert_called_once_with("detection", "det_001")
 
     def test_get_recent_trails_without_id(self, client, auth_headers, audit_trail):
@@ -608,7 +641,9 @@ class TestComplianceReport:
         base.update(overrides)
         return base
 
-    def test_successful_report_generation(self, client, auth_headers, compliance_reporter):
+    def test_successful_report_generation(
+        self, client, auth_headers, compliance_reporter
+    ):
         resp = client.post(
             "/api/v1/report/compliance", headers=auth_headers, json=self._payload()
         )
@@ -627,21 +662,27 @@ class TestComplianceReport:
             ("policy", "drl_001"): [trail_drl],
         }.get((t, eid), [])
 
-        client.post("/api/v1/report/compliance", headers=auth_headers, json=self._payload())
+        client.post(
+            "/api/v1/report/compliance", headers=auth_headers, json=self._payload()
+        )
 
         assert audit_trail.get_trail.call_count == 3
 
     def test_passes_framework_to_generator(
         self, client, auth_headers, audit_trail, compliance_reporter
     ):
-        client.post("/api/v1/report/compliance", headers=auth_headers, json=self._payload())
+        client.post(
+            "/api/v1/report/compliance", headers=auth_headers, json=self._payload()
+        )
         call_kwargs = compliance_reporter.generate.call_args[1]
         assert call_kwargs["framework"] == "GDPR"
 
     def test_passes_date_range_to_generator(
         self, client, auth_headers, audit_trail, compliance_reporter
     ):
-        client.post("/api/v1/report/compliance", headers=auth_headers, json=self._payload())
+        client.post(
+            "/api/v1/report/compliance", headers=auth_headers, json=self._payload()
+        )
         call_kwargs = compliance_reporter.generate.call_args[1]
         assert call_kwargs["date_range"] == {"start": "2026-03-01", "end": "2026-03-13"}
 
@@ -649,7 +690,9 @@ class TestComplianceReport:
         self, client, auth_headers, compliance_reporter
     ):
         payload = self._payload(detection_ids=[], decision_ids=[])
-        resp = client.post("/api/v1/report/compliance", headers=auth_headers, json=payload)
+        resp = client.post(
+            "/api/v1/report/compliance", headers=auth_headers, json=payload
+        )
         assert resp.status_code == 200
         call_args = compliance_reporter.generate.call_args[0]
         assert call_args[0] == []

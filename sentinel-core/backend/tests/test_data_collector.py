@@ -126,8 +126,10 @@ def _noop_auth(fn):
 
 def _noop_role(*_roles):
     """Pass-through replacement for require_role."""
+
     def decorator(fn):
         return fn
+
     return decorator
 
 
@@ -148,16 +150,19 @@ _mock_kafka_producer = MagicMock()
 _mock_kafka_module = MagicMock()
 _mock_kafka_module.KafkaProducer = MagicMock(return_value=_mock_kafka_producer)
 
-with patch("threading.Thread.start", _noop_thread_start), patch.dict(
-    "sys.modules",
-    {
-        "kafka": _mock_kafka_module,
-        "redis": MagicMock(from_url=MagicMock(return_value=_fake_redis_instance)),
-        "auth_middleware": MagicMock(
-            require_auth=_noop_auth,
-            require_role=_noop_role,
-        ),
-    },
+with (
+    patch("threading.Thread.start", _noop_thread_start),
+    patch.dict(
+        "sys.modules",
+        {
+            "kafka": _mock_kafka_module,
+            "redis": MagicMock(from_url=MagicMock(return_value=_fake_redis_instance)),
+            "auth_middleware": MagicMock(
+                require_auth=_noop_auth,
+                require_role=_noop_role,
+            ),
+        },
+    ),
 ):
     for mod in list(sys.modules.keys()):
         if mod == "collector":
@@ -172,6 +177,7 @@ collector_mod.producer = _mock_kafka_producer
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(autouse=True)
 def _reset_state():
@@ -194,6 +200,7 @@ def client():
 # ===================================================================
 # Health check endpoint
 # ===================================================================
+
 
 class TestHealthCheck:
     def test_health_returns_200(self, client):
@@ -228,6 +235,7 @@ class TestHealthCheck:
 # Ingest endpoint (single and batch)
 # ===================================================================
 
+
 class TestIngestEndpoint:
     def test_ingest_single_record_success(self, client):
         payload = {
@@ -250,8 +258,18 @@ class TestIngestEndpoint:
 
     def test_ingest_batch_records_success(self, client):
         payload = [
-            {"source_ip": "10.0.0.1", "dest_ip": "10.0.0.2", "protocol": 6, "bytes": 100},
-            {"source_ip": "10.0.0.2", "dest_ip": "10.0.0.1", "protocol": 17, "bytes": 200},
+            {
+                "source_ip": "10.0.0.1",
+                "dest_ip": "10.0.0.2",
+                "protocol": 6,
+                "bytes": 100,
+            },
+            {
+                "source_ip": "10.0.0.2",
+                "dest_ip": "10.0.0.1",
+                "protocol": 17,
+                "bytes": 200,
+            },
         ]
         resp = client.post(
             "/api/v1/ingest",
@@ -313,6 +331,7 @@ class TestIngestEndpoint:
 # Threats listing endpoint
 # ===================================================================
 
+
 class TestThreatsEndpoint:
     def test_get_threats_empty(self, client):
         resp = client.get("/api/v1/threats")
@@ -332,13 +351,16 @@ class TestThreatsEndpoint:
         assert resp.status_code == 200
         body = resp.get_json()
         assert body["total"] >= 1
-        found = next((t for t in body["threats"] if t.get("type") == "network_anomaly"), None)
+        found = next(
+            (t for t in body["threats"] if t.get("type") == "network_anomaly"), None
+        )
         assert found is not None
 
 
 # ===================================================================
 # Traffic statistics endpoint
 # ===================================================================
+
 
 class TestTrafficStatsEndpoint:
     def test_traffic_stats_empty(self, client):
@@ -364,6 +386,7 @@ class TestTrafficStatsEndpoint:
 # Collector status endpoint
 # ===================================================================
 
+
 class TestCollectorStatusEndpoint:
     def test_status_returns_200(self, client):
         resp = client.get("/api/v1/collector/status")
@@ -383,6 +406,7 @@ class TestCollectorStatusEndpoint:
 # Start/stop collector endpoints
 # ===================================================================
 
+
 class TestCollectorStartStop:
     def test_start_collector_returns_200(self, client):
         collector_mod.collector.running = False
@@ -401,6 +425,7 @@ class TestCollectorStartStop:
 # ===================================================================
 # CIM normalization logic
 # ===================================================================
+
 
 class TestCIMNormalization:
     def test_normalize_api_data(self):
@@ -430,7 +455,12 @@ class TestCIMNormalization:
 
     def test_normalize_protocol_number_to_name(self):
         normalizer = collector_mod.CIMNormalizer()
-        data = {"source_ip": "1.1.1.1", "dest_ip": "2.2.2.2", "protocol": 6, "bytes": 100}
+        data = {
+            "source_ip": "1.1.1.1",
+            "dest_ip": "2.2.2.2",
+            "protocol": 6,
+            "bytes": 100,
+        }
         result = normalizer.normalize(data, collector_mod.DataSourceType.API)
         assert result["transport"] == "TCP"
 
@@ -456,7 +486,12 @@ class TestCIMNormalization:
 
     def test_normalize_timestamp_from_int(self):
         normalizer = collector_mod.CIMNormalizer()
-        data = {"source_ip": "1.1.1.1", "dest_ip": "2.2.2.2", "timestamp": 1700000000, "bytes": 0}
+        data = {
+            "source_ip": "1.1.1.1",
+            "dest_ip": "2.2.2.2",
+            "timestamp": 1700000000,
+            "bytes": 0,
+        }
         result = normalizer.normalize(data, collector_mod.DataSourceType.API)
         assert "event_time" in result
         assert "Z" in result["event_time"] or "T" in result["event_time"]
@@ -465,6 +500,7 @@ class TestCIMNormalization:
 # ===================================================================
 # Anomaly detection (_detect_anomaly, _create_alert)
 # ===================================================================
+
 
 class TestAnomalyDetection:
     def test_large_payload_triggers_anomaly(self, client):
@@ -486,13 +522,15 @@ class TestAnomalyDetection:
         for _ in range(105):
             client.post(
                 "/api/v1/ingest",
-                data=json.dumps({
-                    "source_ip": "10.0.0.99",
-                    "dest_ip": "8.8.8.8",
-                    "protocol": "TCP",
-                    "bytes": 60,
-                    "tcp_flags": 0x02,
-                }),
+                data=json.dumps(
+                    {
+                        "source_ip": "10.0.0.99",
+                        "dest_ip": "8.8.8.8",
+                        "protocol": "TCP",
+                        "bytes": 60,
+                        "tcp_flags": 0x02,
+                    }
+                ),
                 content_type="application/json",
             )
         assert len(_fake_redis_publish_log) >= 1
@@ -516,6 +554,7 @@ class TestAnomalyDetection:
 # ===================================================================
 # SSE publish on threat detection (Redis publish to sentinel:sse:threats)
 # ===================================================================
+
 
 class TestSSEPublish:
     def test_publish_to_sentinel_sse_threats_on_anomaly(self, client):
@@ -545,6 +584,7 @@ class TestSSEPublish:
 # ===================================================================
 # Error handling for endpoints
 # ===================================================================
+
 
 class TestErrorHandling:
     def test_traffic_stats_redis_error_returns_500(self, client):

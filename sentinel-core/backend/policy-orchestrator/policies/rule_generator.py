@@ -5,6 +5,7 @@ Converts high-level policy dicts (action, source, destination, protocol)
 into normalised firewall rule dicts consumable by vendor adapters and
 the policy engine's conflict-detection index.
 """
+
 import ipaddress
 import logging
 import uuid
@@ -51,17 +52,19 @@ class RuleGenerator:
         for src_ip, src_cidr in sources:
             for dest_ip in dest_ips:
                 for port in ports:
-                    rules.append({
-                        "id": f"rule_{uuid.uuid4().hex[:12]}",
-                        "action": action,
-                        "source_ip": src_ip,
-                        "source_cidr": src_cidr,
-                        "dest_ip": dest_ip,
-                        "dest_port": port,
-                        "protocol": protocol,
-                        "priority": priority,
-                        "direction": direction,
-                    })
+                    rules.append(
+                        {
+                            "id": f"rule_{uuid.uuid4().hex[:12]}",
+                            "action": action,
+                            "source_ip": src_ip,
+                            "source_cidr": src_cidr,
+                            "dest_ip": dest_ip,
+                            "dest_port": port,
+                            "protocol": protocol,
+                            "priority": priority,
+                            "direction": direction,
+                        }
+                    )
 
         logger.debug(
             "Generated %d rule(s) for policy '%s'",

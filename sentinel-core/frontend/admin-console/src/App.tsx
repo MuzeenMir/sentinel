@@ -1,27 +1,55 @@
-import { lazy, Suspense } from 'react'
-import { Routes, Route, Navigate, Link } from 'react-router-dom'
-import { Layout } from './components/Layout'
-import { Login } from './pages/Login'
-import { useAuthStore } from './store/authStore'
-import { appConfig } from './config/runtime'
+import { lazy, Suspense } from "react";
+import { Routes, Route, Navigate, Link } from "react-router-dom";
+import { Layout } from "./components/Layout";
+import { Login } from "./pages/Login";
+import { useAuthStore } from "./store/authStore";
+import { appConfig } from "./config/runtime";
 
-const Dashboard = lazy(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })))
-const Threats = lazy(() => import('./pages/Threats').then(m => ({ default: m.Threats })))
-const ThreatDetail = lazy(() => import('./pages/ThreatDetail').then(m => ({ default: m.ThreatDetail })))
-const Policies = lazy(() => import('./pages/Policies').then(m => ({ default: m.Policies })))
-const Compliance = lazy(() => import('./pages/Compliance').then(m => ({ default: m.Compliance })))
-const Alerts = lazy(() => import('./pages/Alerts').then(m => ({ default: m.Alerts })))
-const Hardening = lazy(() => import('./pages/Hardening').then(m => ({ default: m.Hardening })))
-const HidsEvents = lazy(() => import('./pages/HidsEvents').then(m => ({ default: m.HidsEvents })))
-const Users = lazy(() => import('./pages/Users').then(m => ({ default: m.Users })))
-const AuditLog = lazy(() => import('./pages/AuditLog').then(m => ({ default: m.AuditLog })))
-const Tenants = lazy(() => import('./pages/Tenants').then(m => ({ default: m.Tenants })))
-const MfaSetup = lazy(() => import('./pages/MfaSetup').then(m => ({ default: m.MfaSetup })))
-const SiemConfig = lazy(() => import('./pages/SiemConfig').then(m => ({ default: m.SiemConfig })))
-const Settings = lazy(() => import('./pages/Settings').then(m => ({ default: m.Settings })))
+const Dashboard = lazy(() =>
+  import("./pages/Dashboard").then((m) => ({ default: m.Dashboard })),
+);
+const Threats = lazy(() =>
+  import("./pages/Threats").then((m) => ({ default: m.Threats })),
+);
+const ThreatDetail = lazy(() =>
+  import("./pages/ThreatDetail").then((m) => ({ default: m.ThreatDetail })),
+);
+const Policies = lazy(() =>
+  import("./pages/Policies").then((m) => ({ default: m.Policies })),
+);
+const Compliance = lazy(() =>
+  import("./pages/Compliance").then((m) => ({ default: m.Compliance })),
+);
+const Alerts = lazy(() =>
+  import("./pages/Alerts").then((m) => ({ default: m.Alerts })),
+);
+const Hardening = lazy(() =>
+  import("./pages/Hardening").then((m) => ({ default: m.Hardening })),
+);
+const HidsEvents = lazy(() =>
+  import("./pages/HidsEvents").then((m) => ({ default: m.HidsEvents })),
+);
+const Users = lazy(() =>
+  import("./pages/Users").then((m) => ({ default: m.Users })),
+);
+const AuditLog = lazy(() =>
+  import("./pages/AuditLog").then((m) => ({ default: m.AuditLog })),
+);
+const Tenants = lazy(() =>
+  import("./pages/Tenants").then((m) => ({ default: m.Tenants })),
+);
+const MfaSetup = lazy(() =>
+  import("./pages/MfaSetup").then((m) => ({ default: m.MfaSetup })),
+);
+const SiemConfig = lazy(() =>
+  import("./pages/SiemConfig").then((m) => ({ default: m.SiemConfig })),
+);
+const Settings = lazy(() =>
+  import("./pages/Settings").then((m) => ({ default: m.Settings })),
+);
 
 function App() {
-  const { isAuthenticated } = useAuthStore()
+  const { isAuthenticated } = useAuthStore();
 
   if (!isAuthenticated) {
     return (
@@ -33,9 +61,12 @@ function App() {
             <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6">
               <div className="card max-w-md w-full p-6 space-y-4">
                 <div>
-                  <h1 className="text-xl font-semibold">Authentication Required</h1>
+                  <h1 className="text-xl font-semibold">
+                    Authentication Required
+                  </h1>
                   <p className="text-sm text-slate-400 mt-2">
-                    Please sign in with your credentials to access the SENTINEL dashboard.
+                    Please sign in with your credentials to access the SENTINEL
+                    dashboard.
                   </p>
                 </div>
                 <div className="flex justify-center">
@@ -54,12 +85,18 @@ function App() {
           }
         />
       </Routes>
-    )
+    );
   }
 
   return (
     <Layout>
-      <Suspense fallback={<div className="flex items-center justify-center h-64 text-slate-400">Loading…</div>}>
+      <Suspense
+        fallback={
+          <div className="flex items-center justify-center h-64 text-slate-400">
+            Loading…
+          </div>
+        }
+      >
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/threats" element={<Threats />} />
@@ -79,7 +116,7 @@ function App() {
         </Routes>
       </Suspense>
     </Layout>
-  )
+  );
 }
 
-export default App
+export default App;

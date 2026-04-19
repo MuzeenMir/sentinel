@@ -1,119 +1,120 @@
-import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
-import { authApi } from '../services/api'
-import type { User } from '../types'
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
+import { authApi } from "../services/api";
+import type { User } from "../types";
 
 interface AuthState {
-  isAuthenticated: boolean
-  user: User | null
-  token: string | null
-  refreshToken: string | null
-  isLoading: boolean
-  error: string | null
+  isAuthenticated: boolean;
+  user: User | null;
+  token: string | null;
+  refreshToken: string | null;
+  isLoading: boolean;
+  error: string | null;
 
-  login: (username: string, password: string) => Promise<void>
-  logout: () => Promise<void>
-  refreshAccessToken: () => Promise<void>
-  clearError: () => void
-  checkAuth: () => Promise<boolean>
+  login: (username: string, password: string) => Promise<void>;
+  logout: () => Promise<void>;
+  refreshAccessToken: () => Promise<void>;
+  clearError: () => void;
+  checkAuth: () => Promise<boolean>;
 }
 
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
-    isAuthenticated: false,
-    user: null,
-    token: null,
-    refreshToken: null,
-    isLoading: false,
-    error: null,
+      isAuthenticated: false,
+      user: null,
+      token: null,
+      refreshToken: null,
+      isLoading: false,
+      error: null,
 
-    login: async (username: string, password: string) => {
-      set({ isLoading: true, error: null })
+      login: async (username: string, password: string) => {
+        set({ isLoading: true, error: null });
 
-      try {
-        const response = await authApi.login({ username, password })
-        const { access_token, refresh_token, user } = response.data
+        try {
+          const response = await authApi.login({ username, password });
+          const { access_token, refresh_token, user } = response.data;
 
-        set({
-          isAuthenticated: true,
-          user,
-          token: access_token,
-          refreshToken: refresh_token,
-          isLoading: false,
-          error: null,
-        })
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Login failed'
-        set({
-          isAuthenticated: false,
-          user: null,
-          token: null,
-          refreshToken: null,
-          isLoading: false,
-          error: errorMessage,
-        })
-        throw error
-      }
-    },
-
-    logout: async () => {
-      try {
-        if (get().token) {
-          await authApi.logout()
+          set({
+            isAuthenticated: true,
+            user,
+            token: access_token,
+            refreshToken: refresh_token,
+            isLoading: false,
+            error: null,
+          });
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message : "Login failed";
+          set({
+            isAuthenticated: false,
+            user: null,
+            token: null,
+            refreshToken: null,
+            isLoading: false,
+            error: errorMessage,
+          });
+          throw error;
         }
-      } catch {
-        // Ignore errors during logout -- server-side invalidation is best-effort
-      } finally {
-        set({
-          isAuthenticated: false,
-          user: null,
-          token: null,
-          refreshToken: null,
-          error: null,
-        })
-      }
-    },
+      },
 
-    refreshAccessToken: async () => {
-      const { refreshToken } = get()
+      logout: async () => {
+        try {
+          if (get().token) {
+            await authApi.logout();
+          }
+        } catch {
+          // Ignore errors during logout -- server-side invalidation is best-effort
+        } finally {
+          set({
+            isAuthenticated: false,
+            user: null,
+            token: null,
+            refreshToken: null,
+            error: null,
+          });
+        }
+      },
 
-      if (!refreshToken) {
-        throw new Error('No refresh token available')
-      }
+      refreshAccessToken: async () => {
+        const { refreshToken } = get();
 
-      try {
-        const response = await authApi.refreshToken(refreshToken)
-        const newAccessToken = response.data.access_token
+        if (!refreshToken) {
+          throw new Error("No refresh token available");
+        }
 
-        set({ token: newAccessToken })
-      } catch {
-        await get().logout()
-        throw new Error('Session expired')
-      }
-    },
+        try {
+          const response = await authApi.refreshToken(refreshToken);
+          const newAccessToken = response.data.access_token;
 
-    clearError: () => set({ error: null }),
+          set({ token: newAccessToken });
+        } catch {
+          await get().logout();
+          throw new Error("Session expired");
+        }
+      },
 
-    checkAuth: async () => {
-      const { token } = get()
+      clearError: () => set({ error: null }),
 
-      if (!token) {
-        return false
-      }
+      checkAuth: async () => {
+        const { token } = get();
 
-      try {
-        const response = await authApi.verifyToken()
-        set({ user: response.data.user, isAuthenticated: true })
-        return true
-      } catch {
-        await get().logout()
-        return false
-      }
-    },
+        if (!token) {
+          return false;
+        }
+
+        try {
+          const response = await authApi.verifyToken();
+          set({ user: response.data.user, isAuthenticated: true });
+          return true;
+        } catch {
+          await get().logout();
+          return false;
+        }
+      },
     }),
     {
-      name: 'sentinel-auth',
+      name: "sentinel-auth",
       version: 0,
       partialize: (state) => ({
         isAuthenticated: state.isAuthenticated,
@@ -123,4 +124,4 @@ export const useAuthStore = create<AuthState>()(
       }),
     },
   ),
-)
+);

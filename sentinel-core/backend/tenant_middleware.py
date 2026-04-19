@@ -24,7 +24,7 @@ import logging
 import os
 from functools import wraps
 
-from flask import g, jsonify, request
+from flask import g, jsonify
 
 logger = logging.getLogger(__name__)
 
