@@ -66,6 +66,6 @@ repos:
     hooks:
       - id: commitlint
         stages: [commit-msg]
-        additional_dependencies: ['@commitlint/config-conventional@19.4.0']
+        additional_dependencies: ['@commitlint/config-conventional@20.5.0']
 
 # Order matters: fast checks first, slow (mypy, prettier) last.
