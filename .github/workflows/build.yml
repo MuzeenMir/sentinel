@@ -10,6 +10,13 @@ on:
     tags: ['v*']
   pull_request:
     branches: [main, develop]
+    paths-ignore:
+      - '**/*.md'
+      - '.gitignore'
+      - '.gitattributes'
+      - 'docs/**'
+      - 'LICENSE'
+      - 'CODEOWNERS'
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -107,7 +114,9 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,scope=${{ matrix.service }},mode=max
-          provenance: mode=max
+          # provenance attestation creates manifest list; daemon load can't ingest.
+          # Disable on PRs (load:true), keep mode=max on push (push:true → registry).
+          provenance: ${{ github.event_name == 'pull_request' && 'false' || 'mode=max' }}
           sbom: false    # SBOM is produced in sbom.yml from the pushed image
       - name: Record digest
         if: github.event_name != 'pull_request'
