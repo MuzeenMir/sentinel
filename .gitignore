@@ -118,3 +118,4 @@ sentinel-core/backend/.test-venv/
 .claude/
 .agents/
 skills-lock.json
+.gstack/
