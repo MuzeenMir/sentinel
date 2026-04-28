@@ -96,9 +96,7 @@ impl RequestHandler for Resolver {
         let domain = lower_name_to_domain(query.name());
 
         if is_blocked(&self.blocklist, &domain).await {
-            self.blockpage
-                .set_current(make_block_reason(&domain))
-                .await;
+            self.blockpage.set_current(make_block_reason(&domain)).await;
             return sinkhole(request, query.query_type(), &mut response_handle).await;
         }
 
@@ -152,10 +150,7 @@ fn lower_name_to_domain(name: &LowerName) -> String {
 }
 
 /// Send a REFUSED response for op-codes we don't speak.
-async fn refused<R: ResponseHandler>(
-    request: &Request,
-    response_handle: &mut R,
-) -> ResponseInfo {
+async fn refused<R: ResponseHandler>(request: &Request, response_handle: &mut R) -> ResponseInfo {
     let builder = MessageResponseBuilder::from_message_request(request);
     let response = builder.error_msg(request.header(), ResponseCode::Refused);
     response_handle
@@ -329,9 +324,7 @@ mod tests {
     #[tokio::test]
     async fn resolver_block_path_writes_blockpage_slot() {
         let bl = new_blocklist();
-        bl.write()
-            .await
-            .insert("malicious.example".to_string());
+        bl.write().await.insert("malicious.example".to_string());
         let bp = AppState::new();
         let _r = Resolver::new(bl.clone(), bp.clone());
 
