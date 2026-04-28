@@ -16,6 +16,12 @@ path = "src/main.rs"
 name = "sentinel"
 path = "src/lib.rs"
 
+[dependencies]
+anyhow = "1.0"
+tokio = { version = "1.41", features = ["rt-multi-thread", "macros", "sync"] }
+# rustls-tls keeps the build portable on Windows + Linux CI without OpenSSL.
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+
 [profile.release]
 lto = "thin"
 codegen-units = 1
