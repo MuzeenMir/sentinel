@@ -1,0 +1,85 @@
+name: rust
+
+# Rust skeleton CI. Runs cargo fmt, clippy, build, and test on Linux + Windows.
+# macOS is deferred to v2.0+ per DESIGN.md / TODOS.md platform gate.
+# Aggregator job `rust` is the gate intended for branch protection.
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+
+concurrency:
+  group: rust-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  rust-fmt:
+    name: rust-fmt
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all -- --check
+
+  rust-clippy:
+    name: rust-clippy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy --all-targets --all-features -- -D warnings
+
+  rust-test:
+    name: rust-test
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build
+        run: cargo build --verbose
+      - name: Test
+        run: cargo test --verbose
+      - name: Smoke (--version)
+        run: cargo run --quiet -- --version
+
+  rust:
+    name: rust
+    needs: [rust-fmt, rust-clippy, rust-test]
+    if: always()
+    runs-on: ubuntu-latest
+    env:
+      FMT_RESULT: ${{ needs.rust-fmt.result }}
+      CLIPPY_RESULT: ${{ needs.rust-clippy.result }}
+      TEST_RESULT: ${{ needs.rust-test.result }}
+    steps:
+      - name: Aggregate
+        run: |
+          if [ "$FMT_RESULT" != "success" ] || \
+             [ "$CLIPPY_RESULT" != "success" ] || \
+             [ "$TEST_RESULT" != "success" ]; then
+            echo "::error::rust failed (fmt=$FMT_RESULT clippy=$CLIPPY_RESULT test=$TEST_RESULT)"
+            exit 1
+          fi
+          echo "rust green"

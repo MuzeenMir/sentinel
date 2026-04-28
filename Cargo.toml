@@ -1,0 +1,23 @@
+[package]
+name = "sentinel"
+version = "0.1.0-dev"
+edition = "2021"
+rust-version = "1.78"
+license = "MIT"
+repository = "https://github.com/MuzeenMir/sentinel"
+description = "Open-source DNS shield for Windows."
+authors = ["Muzeen Mir <roodynicole833@gmail.com>"]
+
+[[bin]]
+name = "sentinel"
+path = "src/main.rs"
+
+[lib]
+name = "sentinel"
+path = "src/lib.rs"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
+panic = "abort"
