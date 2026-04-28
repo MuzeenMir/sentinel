@@ -1,103 +1,46 @@
 # SENTINEL — Claude Code project context
 
-Use file for Claude Code sessions in repo. App code under **`sentinel-core/`** (not repo root — flatten to root = Phase 0 task, see below).
-
-## SENTINEL v2 Revamp — Active Phases
-
-**Reference:** `sentinel-core/docs/revamp/` (README, SRS-002, SDD-002, SDP-002, GIT-RESTRUCTURE, CLAUDE-DESIGN-WORKFLOW). Driver: `CODE-REVIEW-main-2026-04-18.md` audit — v1 ~60% real, ~40% scaffolding; chronic CI failures, schema drift, marketing-grade claims.
-
-**Architecture target:** 11 services → 4 + LLM Gateway
-- `console` ← api-gateway + auth-service + dashboard
-- `controller` ← alert-service + policy-orchestrator (read) + audit
-- `analyzer` ← ai-engine + xai-service + Bytewax stream
-- `collector` ← data-collector + agent-grpc + sensor skeletons (Falco/Suricata/Wazuh/OpenSCAP)
-- `llm-gateway` ← new (Gemma 4, TurboQuant); Phase 1 = shell returning 410
-
-**Phase 0 (4 wks, active):** stabilize — 8 split CI workflows, idempotent migrations, honest README, secrets sweep, SBOM+cosign, OTel pilot, git flatten `sentinel-core/`→root, CODEOWNERS, commitlint, trunk-based. Exit: 7 consecutive green days on `main`.
-
-**Phase 1 (8 wks, blocked on Phase 0):** consolidate behind `USE_V2_*` JWT flags — shared `backend/_lib/` (cim, tenancy, otel, audit, llm_client), Helm scaffold, PG16 + pgvector + RLS, Kafka 3 per-tenant topics, Redis 7, Tempo. Exit: `sentinel-internal` canary runs 14 days on v2, zero P0/P1 regressions.
-
-**Hard constraints:**
-- No LLM output reach enforcement adapters — write actions need human approval.
-- Audit log append-only at Postgres role level (not app code).
-- DRL demoted to research; no Kubernetes role permissions.
-- Python 3.12+ backend, FastAPI (Flask sunset by Phase 2); TypeScript 5.x strict, React 18.
-- Conventional Commits mandatory; squash-merge only; signed commits on `main`.
-- Two-person rule for OPA bundles, model promotions, Helm prod values, RLS policies, audit schemas.
-
-**Do not (Phase 0/1):** decommission v1 services, remove compliance-engine, touch drl-engine beyond archival, land real LLM inference (Phase 2+).
+Use this file for Claude Code sessions in repo. Solo-dev project: open-source DNS shield for Windows. Pre-v0.1; the Rust skeleton, threat-feed updater, tray icon, installer, and block-page are being built.
 
 ## What this is
 
-SENTINEL = server/endpoint security platform: telemetry collection, AI-assisted detection, policy orchestration, compliance reporting. **Shipping scope (v1):** Flask microservices, React admin console, Kafka/Flink stream processing, ML-based anomaly detection, DRL policy prototype (demoted), Terraform AWS deployment. Marketing claims ("enterprise-grade", production-ready compliance) **not** accurate for v1 — describe v2 target.
+Sentinel runs as a local DNS resolver on `127.0.0.1`, blocks connections to malicious domains using URLhaus + a Tranco-anchored allowlist, and serves a calm, evidence-led block-page when something is caught. Single machine, single binary, no SaaS, no telemetry.
+
+Direction details + visual identity in `DESIGN.md`. Operational backlog in `TODOS.md` (T1 archive → T2 Tranco refresh → T3 DX expansion).
 
 ## Repository layout
 
 | Area | Path | Notes |
-|------|------|--------|
-| Backend (Flask microservices) | `sentinel-core/backend/<service>/` | Each service: `app.py`, `requirements.txt`, often Dockerfile |
-| Admin UI | `sentinel-core/frontend/admin-console/` | React 18, TypeScript, Vite |
-| Stream processing | `sentinel-core/stream-processing/flink-jobs/` | Apache Flink (Python), Kafka-oriented jobs |
-| Training | `sentinel-core/training/` | ML / DRL training scripts |
-| Infrastructure | `sentinel-core/infrastructure/terraform/` | AWS Terraform |
-| Cursor / Bugbot | `.cursor/` | Rules, skills, BUGBOT — parallel to file for Cursor |
+|------|------|-------|
+| Visual identity / design system | `DESIGN.md` | Single source of truth for UI surfaces (block-page, tray, toasts, installer). |
+| Operational TODOs | `TODOS.md` | Pre-v0.1 sprint, v0.1 sprint, v0.2 pre-decisions. |
+| CI workflows | `.github/workflows/` | `lint` (commitlint), `security` (gitleaks + trivy fs), `release-please`. |
+| gstack tooling | `scripts/install-gstack.sh` | Installer for the gstack skill set. Local skill artifacts are gitignored. |
+| Archive (v1 Flask/Python) | branch `archive/v1-python` | Frozen at `f15b62d6`. `git checkout archive/v1-python` to mine v1 patterns. |
 
-## Architecture (data flow)
+The Rust crate skeleton (`Cargo.toml`, `src/`, `crates/`) lands in PR-3 of the T1 slice. There is intentionally no source tree on `main` until then.
 
-- Client traffic → **API Gateway** (auth, rate limits, routing) → domain services.
-- Collectors + pipelines → **Kafka** → Flink → features; **AI engine** integrates via HTTP and/or Kafka consumption.
-- **DRL engine** → policy decisions → **Policy orchestrator** → firewall adapters.
-- **Compliance engine** + **XAI** support compliance reporting and explainability.
+## v1 history
+
+The v1 Flask/Python codebase under `sentinel-core/` was archived 2026-04-27 (PR #5) and removed from `main` in PR T1-2. The April 2026 audit (`CODE-REVIEW-main-2026-04-18.md`) found v1 was ~60% real, ~40% scaffolding, with chronic CI failures and marketing-grade claims. Rather than fork-lift the v2 revamp, the project pivoted to a narrow, single-machine OSS DNS shield (design doc `~/.gstack/projects/MuzeenMir-sentinel/dscorp-main-design-20260425-191642.md`).
+
+If a session needs v1 patterns (audit-service, llm-gateway design notes, ML pipeline references), check out `archive/v1-python` rather than expecting them in `main`.
 
 ## Conventions (non-negotiable)
 
-- **No secrets in source**: env vars and `.env.example` placeholders only; never commit keys, passwords, tokens.
-- **Safe input handling**: no `eval` / `exec` on untrusted data; parameterized SQL; auth + RBAC on APIs.
-- **Errors**: log + handle failures; avoid bare `except:` or silent swallow without logging.
-- **Dependencies**: Prefer MIT/Apache/BSD; avoid GPL/AGPL unless approved.
-- **Tests**: Backend + stream-processing changes should include or update tests where applicable.
-
-## Documentation
-
-- Specification index: `sentinel-core/docs/SPECIFICATIONS.md`
-- Full specs may live in `sentinel-core/docs/specifications/` (often gitignored; distributed separately).
-- Quick refs: `sentinel-core/docs/security.md`, `sentinel-core/docs/api-reference.md`, `sentinel-core/docs/ml-models.md`
-- Human overview: `sentinel-core/readme.md`
-- Cursor-oriented agent summary: `AGENTS.md` (root)
-
-## Common commands
-
-Most work assume `cd sentinel-core` unless noted.
-
-**Stack (Docker)**
-
-```bash
-cd sentinel-core
-cp .env.example .env   # then edit
-docker compose up -d
-```
-
-Typical URLs after compose (see `readme.md` for current ports): admin console ~`http://localhost:3000`, API gateway ~`http://localhost:8080`, docs ~`http://localhost:8080/docs`.
-
-**Frontend (`sentinel-core/frontend/admin-console/`)**
-
-```bash
-npm install
-npm run dev          # Vite dev server
-npm run build
-npm run test         # Vitest
-npm run lint
-npm run type-check
-```
-
-**Python backend**
-
-- Per-service virtualenv + `pip install -r requirements.txt` under `sentinel-core/backend/<service>/`.
-- Run patterns vary by service; check each service's `readme` or `Dockerfile` for entrypoint.
+- **No secrets in source.** Env vars only; `.env.example` placeholders. Never commit keys, passwords, tokens.
+- **Safe input handling.** No `eval` / `exec` on untrusted data; parameterized SQL; auth + RBAC on any future API.
+- **Errors logged + handled.** No bare `except:` or silent swallow without logging.
+- **Dependencies.** Prefer MIT / Apache / BSD; avoid GPL / AGPL unless approved.
+- **Tests.** Rust changes ship with `#[cfg(test)]` coverage; integration tests where the surface is observable.
+- **Conventional Commits** are required (`commitlint.config.js`). Squash-merge only. Signed commits required on `main`.
+- **GitHub Actions hardening.** Never interpolate `${{ github.event.* }}` text fields directly into `run:` scripts; route through `env:` first.
 
 ## Git
 
-- **Canonical remote**: `https://github.com/MuzeenMir/sentinel` — use `origin` → that repo for pushes unless user says otherwise.
+- **Canonical remote**: `https://github.com/MuzeenMir/sentinel`. Push to `origin` → that repo unless asked otherwise.
+- **Branches**: `main` (signed, squash-merge target), `archive/v1-python` (frozen v1 history), feature branches per-PR.
+- **Release flow**: release-please action opens release PRs from Conventional Commits on `main`. Workflow-permissions repo setting must allow GH Actions to create PRs (owner action, not code).
 
 ## gstack — Browser & QA Skills
 
@@ -113,7 +56,7 @@ For personal Claude Code notes not shared, use **`CLAUDE.local.md`** in project 
 
 ## Skill routing
 
-When user request match available skill, invoke via Skill tool. Skill has multi-step workflows, checklists, quality gates — better than ad-hoc answer. When in doubt, invoke skill. False positive cheaper than false negative.
+When user request matches an available skill, invoke via Skill tool. Skills carry multi-step workflows, checklists, and quality gates — better than ad-hoc answers. False positive cheaper than false negative.
 
 Key routing rules:
 - Product ideas, "is this worth building", brainstorming → invoke /office-hours

@@ -4,7 +4,6 @@ extend-exclude = [
     ".test-venv",
     ".venv",
     "venv",
-    "sentinel_env",
     "compiled",
     "node_modules",
     "__pycache__",
@@ -17,16 +16,6 @@ extend-exclude = [
 # Tests commonly patch sys.path before local imports.
 "**/tests/**/*.py" = ["E402"]
 "**/conftest.py" = ["E402"]
-# PyFlink jobs configure env before importing flink modules.
-"**/stream-processing/flink-jobs/**/*.py" = ["E402"]
-# Availability probes (optional deps): imports checked via ImportError.
-"**/backend/metrics.py" = ["F401"]
-"**/backend/shared/metrics.py" = ["F401"]
-# Bootstrap block runs sys.path manipulation before later imports.
-"**/backend/auth-service/app.py" = ["E402"]
-"**/backend/hardening-service/app.py" = ["E402"]
-# Training entrypoint: conditional torch import + sys.path shim.
-"**/training/train_all.py" = ["E402", "F401"]
 
 [tool.mypy]
 python_version = "3.12"
@@ -34,4 +23,4 @@ ignore_missing_imports = true
 no_incremental = true
 explicit_package_bases = true
 namespace_packages = true
-exclude = '(^|/)(ebpf-lib|firewall-adapters|\.test-venv|\.venv|venv|sentinel_env|compiled|__pycache__|node_modules)(/|$)'
+exclude = '(^|/)(\.test-venv|\.venv|venv|compiled|__pycache__|node_modules)(/|$)'

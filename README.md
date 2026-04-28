@@ -1,78 +1,42 @@
 # SENTINEL
 
-Server and endpoint security platform: telemetry collection, AI-assisted detection, policy orchestration, and compliance reporting. Deployed via Docker Compose (dev) or Terraform/AWS (infra scaffolded, not production-validated).
+Open-source DNS shield for Windows. Runs as a local resolver on `127.0.0.1`, blocks connections to known-malicious domains using community-curated threat feeds, and serves a calm, evidence-led block-page when something is caught. All processing is local; nothing is sent to a server.
 
-> **Status:** active development. This repository is mid-revamp (v1 → v2). Claims below describe what currently ships. Target architecture and timeline live in `sentinel-core/docs/revamp/`. An April 2026 audit (`CODE-REVIEW-main-2026-04-18.md`) drives the v2 plan.
+> **Status:** pre-v0.1. Active scaffolding. The Rust skeleton, threat-feed updater, tray icon, installer, and block-page are being built per `TODOS.md` and `DESIGN.md`. No release artifact yet.
 
-> **v1 archive notice (2026-04-27):** the v1 Flask/Python codebase under `sentinel-core/` is **frozen** as of commit `f15b62d6` and will be removed from `main` in a follow-up PR. The full v1+v2 history is preserved on the [`archive/v1-python`](https://github.com/MuzeenMir/sentinel/tree/archive/v1-python) branch — `git checkout archive/v1-python` to inspect, mine patterns, or revisit audit-service / llm-gateway design notes. Active work shifts to a Rust skeleton aligned with the v2 target architecture (4 services + LLM Gateway). See `TODOS.md` T1–T3 for the slicing plan.
+> **v1 archive notice (2026-04-27):** the v1 Flask/Python codebase that previously lived under `sentinel-core/` is **frozen** at commit `f15b62d6` on the [`archive/v1-python`](https://github.com/MuzeenMir/sentinel/tree/archive/v1-python) branch. `git checkout archive/v1-python` to inspect, mine patterns, or revisit the v2 revamp design notes. `main` has been emptied of the v1 tree to make room for the Rust rewrite.
 
-## What ships today (v1)
+## Direction
 
-- **Backend microservices** (Flask, Python): auth, API gateway, alert, AI engine, XAI, data collector, policy orchestrator, compliance engine, DRL engine (demoted to research), hardening service.
-- **Admin console** (React 18 + TypeScript + Vite): dashboard, policy and alert views.
-- **Stream processing**: Apache Flink jobs over Kafka.
-- **ML detection**: XGBoost, LSTM, Isolation Forest, Autoencoder ensemble. Accuracy numbers are research-grade, not production benchmarks.
-- **Explainability**: SHAP integration via XAI service.
-- **Compliance engine**: framework scaffolding for GDPR / HIPAA / NIST CSF / PCI-DSS. Control mapping is partial; no external certification.
-- **Infrastructure**: Terraform modules for AWS (VPC, RDS, ElastiCache, MSK). Not deployed or validated end-to-end in production.
+A single-machine, single-purpose security tool aimed at users underserved by enterprise EDR/XDR products: home labs, indie devs, small studios, anyone who wants malicious-domain blocking without the SaaS console, the data exfil, or the per-seat bill.
 
-## What does not yet ship (deferred to v2)
+- **DNS-layer blocking** against URLhaus + Tranco-anchored allowlist.
+- **Quad9 / Cloudflare upstream** failover with status surfaced in the tray.
+- **Block-page** on `127.0.0.1` explaining *what*, *why*, and *what to do* — with `Allow once` / `Allow forever` controls.
+- **Tray icon** as the constant trust surface (green / amber / red).
+- **VPN-aware** — auto-pause when another adapter takes over DNS (v0.2).
+- **Open source, MIT, no telemetry, signed releases via cosign.**
 
-- Real multi-tenant isolation with Postgres RLS.
-- LLM-assisted triage (llm-gateway is a Phase 1 shell returning `HTTP 410`).
-- Consolidated services (11 → 4 + llm-gateway is a v2 goal).
-- SSO / SCIM, billing, SOC2 certification.
-- Helm charts and Kubernetes production deploy.
-- SBOM + cosign signed releases (Phase 0 in progress).
-- Signed, append-only audit at the Postgres role level.
-
-## Quick start (dev)
-
-```bash
-cd sentinel-core
-cp .env.example .env           # edit before starting
-docker compose up -d
-```
-
-Typical URLs (dev compose):
-
-- Admin console: http://localhost:3000
-- API gateway: http://localhost:8080
-- API docs: http://localhost:8080/docs
-
-Initial admin credentials are set via `ADMIN_USERNAME` / `ADMIN_PASSWORD` / `ADMIN_EMAIL` in `.env`.
+Reference design: `DESIGN.md` (visual identity + component patterns). Roadmap: `TODOS.md` (T1–T3 + DX expansion).
 
 ## Repository layout
 
 ```
-sentinel-core/
-├── backend/                    # Flask microservices
-├── frontend/admin-console/     # React + Vite admin UI
-├── stream-processing/          # Flink jobs
-├── training/                   # ML / DRL training scripts
-├── infrastructure/terraform/   # AWS Terraform (scaffolded)
-├── docs/                       # Quick refs + specifications index
-│   └── revamp/                 # v2 design docs (SRS/SDD/SDP, GIT-RESTRUCTURE, ADRs)
-├── tests/                      # Integration + e2e
-└── docker-compose.yml
+.
+├── DESIGN.md         # visual identity, components, copy library
+├── TODOS.md          # operational backlog (T1 archive, T2 Tranco refresh, T3 DX)
+├── CLAUDE.md         # Claude Code session context
+├── README.md         # this file
+└── .github/workflows # CI (lint commitlint, security gitleaks + trivy)
 ```
 
-A git-flatten of `sentinel-core/` → repo root is scheduled in Phase 0 of the revamp. After that lands, these paths move up one level.
-
-## Documentation
-
-- **Specification index**: `sentinel-core/docs/SPECIFICATIONS.md`
-- **Quick refs**: `sentinel-core/docs/security.md`, `sentinel-core/docs/api-reference.md`, `sentinel-core/docs/ml-models.md`
-- **Overview**: `sentinel-core/readme.md`
-- **v2 revamp**: `sentinel-core/docs/revamp/README.md` and siblings
-- **ADRs**: `sentinel-core/docs/adr/`
-- **Backlog**: `sentinel-core/docs/revamp/BACKLOG.md`
+The Rust crate skeleton (`Cargo.toml`, `src/`, `crates/`) lands in PR-3 of the T1 slice.
 
 ## Contributing
 
-- Conventional Commits required (`commitlint.config.js`). Scopes include `collector | analyzer | controller | console | agent | llm-gateway | revamp | opa | helm | ci | docs | migrations | deps`.
-- Pre-commit hooks via `.pre-commit-config.yaml`. Install with `pre-commit install`.
-- `CODEOWNERS` gates review. Squash-merge only; signed commits required on `main`.
+- Conventional Commits required (`commitlint.config.js`).
+- Squash-merge only; signed commits required on `main`.
+- `CODEOWNERS` gates review (solo-dev phase: everything routes to `@MuzeenMir`).
 
 ## License
 

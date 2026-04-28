@@ -1,7 +1,9 @@
 name: lint
 
-# Backend (ruff) + frontend (eslint/prettier) lint gates, plus commitlint on PRs.
-# Aggregator job `lint` gates branch protection; sub-jobs run in parallel.
+# Conventional Commits gate. Backend (ruff) + frontend (eslint/prettier)
+# jobs were dropped with the v1 sentinel-core/ archive; reintroduce
+# language-specific lint as the Rust skeleton (cargo fmt, clippy) and any
+# new JS/Python surfaces land.
 
 on:
   push:
@@ -9,7 +11,6 @@ on:
   pull_request:
     branches: [main, develop]
 
-# Silence Node 20 deprecation warning from actions/* ahead of Sep 2026 cutover.
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
@@ -22,56 +23,14 @@ permissions:
   pull-requests: read
 
 jobs:
-  lint-backend:
-    name: lint-backend
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-          cache: pip
-      - name: Install ruff
-        run: pip install ruff==0.5.6
-      - name: Ruff check
-        run: |
-          ruff check \
-            sentinel-core/backend \
-            sentinel-core/stream-processing \
-            sentinel-core/training
-      - name: Ruff format check
-        run: |
-          ruff format --check \
-            sentinel-core/backend \
-            sentinel-core/stream-processing \
-            sentinel-core/training
-
-  lint-frontend:
-    name: lint-frontend
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    defaults:
-      run:
-        working-directory: sentinel-core/frontend/admin-console
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: npm
-          cache-dependency-path: sentinel-core/frontend/admin-console/package-lock.json
-      - run: npm ci
-      - name: ESLint
-        run: npm run lint
-      - name: Prettier check
-        run: npx prettier --check 'src/**/*.{ts,tsx,js,jsx,css,json,md}'
-
   lint-commitlint:
     name: lint-commitlint
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    env:
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -87,23 +46,24 @@ jobs:
       - name: Validate PR commits
         run: |
           npx commitlint \
-            --from=${{ github.event.pull_request.base.sha }} \
-            --to=${{ github.event.pull_request.head.sha }} \
+            --from="$BASE_SHA" \
+            --to="$HEAD_SHA" \
             --verbose
 
   lint:
     name: lint
-    needs: [lint-backend, lint-frontend]
-    runs-on: ubuntu-latest
-    # commitlint is not a required dependency here because it does not run on
-    # push events. Its result is still visible on the PR conversation.
+    needs: [lint-commitlint]
     if: always()
+    runs-on: ubuntu-latest
+    env:
+      COMMITLINT_RESULT: ${{ needs.lint-commitlint.result }}
     steps:
-      - name: All lint checks green
+      - name: Aggregate
         run: |
-          if [ "${{ needs.lint-backend.result }}" != "success" ] || \
-             [ "${{ needs.lint-frontend.result }}" != "success" ]; then
-            echo "::error::lint failed"
+          # commitlint only runs on PRs. On push events it is skipped, which
+          # is acceptable — push to main has already passed PR-time commitlint.
+          if [ "$COMMITLINT_RESULT" = "failure" ] || [ "$COMMITLINT_RESULT" = "cancelled" ]; then
+            echo "::error::lint failed (commitlint=$COMMITLINT_RESULT)"
             exit 1
           fi
-          echo "lint green"
+          echo "lint green (commitlint=$COMMITLINT_RESULT)"
