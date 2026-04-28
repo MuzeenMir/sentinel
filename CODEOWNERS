@@ -1,47 +1,15 @@
 # SENTINEL CODEOWNERS
 # Syntax: https://docs.github.com/en/repositories/managing-your-repositories-settings-and-security/customizing-your-repository/about-code-owners
-# Last matching rule wins. Teams must exist in @MuzeenMir/sentinel org before GitHub enforces ownership.
+# Last matching rule wins. Solo-dev phase: all paths fall back to @MuzeenMir.
 #
-# Phase 0: placeholders pointing to @MuzeenMir (owner). Replace with @org/<team> handles as teams form.
+# v1 sentinel-core/ tree archived (see archive/v1-python branch); per-service
+# rules removed with that tree. Re-add granular ownership as the Rust skeleton
+# and any team form.
 
 # ---- Global fallback ----
 *                                       @MuzeenMir
 
-# ---- Backend services (current v1 layout) ----
-/sentinel-core/backend/                 @MuzeenMir
-/sentinel-core/backend/auth-service/    @MuzeenMir
-/sentinel-core/backend/api-gateway/     @MuzeenMir
-/sentinel-core/backend/ai-engine/       @MuzeenMir
-/sentinel-core/backend/xai-service/     @MuzeenMir
-/sentinel-core/backend/alert-service/   @MuzeenMir
-/sentinel-core/backend/policy-orchestrator/  @MuzeenMir
-/sentinel-core/backend/compliance-engine/    @MuzeenMir
-/sentinel-core/backend/drl-engine/      @MuzeenMir
-/sentinel-core/backend/data-collector/  @MuzeenMir
-/sentinel-core/backend/xdp-collector/   @MuzeenMir
-/sentinel-core/backend/migrations/      @MuzeenMir
-
-# ---- Backend v2 consolidated services (Phase 1) ----
-/sentinel-core/backend/_lib/            @MuzeenMir
-/sentinel-core/backend/console/         @MuzeenMir
-/sentinel-core/backend/controller/      @MuzeenMir
-/sentinel-core/backend/analyzer/        @MuzeenMir
-/sentinel-core/backend/collector/       @MuzeenMir
-/sentinel-core/backend/llm_gateway/     @MuzeenMir
-
-# ---- Frontend ----
-/sentinel-core/frontend/                @MuzeenMir
-
-# ---- Stream + training ----
-/sentinel-core/stream-processing/       @MuzeenMir
-/sentinel-core/training/                @MuzeenMir
-
-# ---- Infra + deploy ----
-/sentinel-core/infrastructure/          @MuzeenMir
-/deploy/                                @MuzeenMir
-/opa-bundles/                           @MuzeenMir
-
-# ---- CI / supply chain (two-person rule) ----
+# ---- CI / supply chain (two-person rule when a second owner exists) ----
 /.github/                               @MuzeenMir
 /.github/workflows/                     @MuzeenMir
 /.pre-commit-config.yaml                @MuzeenMir
@@ -49,9 +17,6 @@
 /scripts/apply-branch-protection.sh     @MuzeenMir
 
 # ---- Docs ----
-/sentinel-core/docs/                    @MuzeenMir
-/sentinel-core/docs/revamp/             @MuzeenMir
-/sentinel-core/docs/adr/                @MuzeenMir
 /docs/                                  @MuzeenMir
 /docs/revamp/                           @MuzeenMir
 /docs/adr/                              @MuzeenMir
