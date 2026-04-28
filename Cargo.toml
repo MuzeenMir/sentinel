@@ -18,9 +18,20 @@ path = "src/lib.rs"
 
 [dependencies]
 anyhow = "1.0"
-tokio = { version = "1.41", features = ["rt-multi-thread", "macros", "sync"] }
+tokio = { version = "1.41", features = ["rt-multi-thread", "macros", "net", "sync"] }
 # rustls-tls keeps the build portable on Windows + Linux CI without OpenSSL.
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+# Block-page server: axum on 127.0.0.1, default features off so we only pull
+# what we use (form bodies for the keep/allow-once/allow-forever buttons,
+# http1, tokio runtime integration).
+axum = { version = "0.8", default-features = false, features = ["form", "http1", "tokio"] }
+serde = { version = "1.0", features = ["derive"] }
+
+[dev-dependencies]
+# tower::ServiceExt::oneshot lets the router tests hit the in-process axum
+# Service without binding a port.
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
 
 [profile.release]
 lto = "thin"

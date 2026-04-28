@@ -1,0 +1,266 @@
+<!doctype html>
+<!--
+  Sentinel block-page — server-rendered static template.
+
+  Source of truth: ~/.gstack/projects/MuzeenMir-sentinel/designs/blockpage-20260426/variant-C-final.html
+  Approved 2026-04-26 via /plan-design-review (variant C dark terminal).
+
+  Tokens substituted by the Rust block-page server at request time:
+    {{domain}}            — the queried hostname
+    {{feed}}              — threat feed name (URLhaus, etc.)
+    {{listed_date}}       — YYYY-MM-DD the domain was first seen on the feed
+    {{listed_relative}}   — "(N days ago)" companion phrase
+    {{threat_type}}       — short threat label, e.g. "malware host / credential harvest"
+    {{block_id}}          — 8-char hex block id (forensic trust)
+    {{ts_iso}}            — RFC 3339 timestamp of this block decision
+    {{version}}           — sentinel crate version (CARGO_PKG_VERSION)
+
+  Deliberate constraints:
+    - Zero external assets. No CDN, no Google Fonts, no remote anything. The block
+      page must render correctly when the user is offline or on a network where
+      DNS itself is broken (which is exactly when this page exists).
+    - Zero JavaScript. The buttons fire as plain HTML form posts in the v0.1
+      "Allow once / Allow forever" flow. Keyboard tab order is the source-order.
+    - Pretext skipped. The page is server-rendered and never reflows client-side.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>sentinel — blocked: {{domain}}</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex,nofollow">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg:          #0d1117;
+    --panel:       #11161e;
+    --rule:        #1f2630;
+    --fg:          #e6edf3;
+    --muted:       #7a8590;
+    --accent:      #4ec3a8;
+    --accent-dim:  #1c2925;
+    --warn:        #f0a868;
+    --warn-dim:    #2a221a;
+    --danger:      #c97a64;
+    --mono: ui-monospace, 'JetBrains Mono', 'SF Mono', 'Menlo', 'Cascadia Mono', 'Consolas', monospace;
+    --sans: system-ui, -apple-system, 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      color-scheme: light;
+      --bg:         #f6f7f8;
+      --panel:      #ffffff;
+      --rule:       #e1e5ea;
+      --fg:         #0d1117;
+      --muted:      #5f6873;
+      --accent:     #0e6b5a;
+      --accent-dim: #e6f0ec;
+      --warn:       #8a4f1a;
+      --warn-dim:   #f4e9d8;
+      --danger:     #8c2a14;
+    }
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--mono);
+    font-size: 14px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 56px 16px;
+  }
+  main.terminal {
+    width: 100%;
+    max-width: 720px;
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    overflow: hidden;
+    animation: appear 240ms ease-out;
+  }
+  @keyframes appear {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    main.terminal { animation: none; }
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+  .titlebar {
+    background: var(--bg);
+    border-bottom: 1px solid var(--rule);
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .shield { width: 16px; height: 16px; color: var(--accent); flex: 0 0 16px; }
+  .brand  { color: var(--fg); font-weight: 500; }
+  .titlebar .meta { margin-left: auto; }
+  .body { padding: 28px 28px 24px; }
+  .prompt-line {
+    color: var(--muted);
+    font-size: 12px;
+    margin-bottom: 8px;
+  }
+  .prompt-line .arrow { color: var(--warn); }
+  .verdict {
+    display: inline-block;
+    color: var(--warn);
+    background: var(--warn-dim);
+    border: 1px solid var(--warn);
+    padding: 2px 10px;
+    border-radius: 3px;
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin: 4px 0 24px;
+  }
+  h1 {
+    font-family: var(--mono);
+    font-size: 22px;
+    font-weight: 500;
+    margin: 0 0 28px;
+    word-break: break-all;
+    line-height: 1.3;
+    color: var(--fg);
+  }
+  .props {
+    border-left: 1px solid var(--rule);
+    padding: 0 0 0 16px;
+    margin: 0 0 32px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .props .row { margin: 4px 0; }
+  .props .key { color: var(--muted); display: inline-block; min-width: 90px; }
+  .props .val { color: var(--fg); }
+  .props .val.feed { color: var(--accent); }
+  .props .val.warn { color: var(--warn); }
+  .actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+    padding: 20px 0 0;
+    border-top: 1px solid var(--rule);
+    margin-top: 24px;
+  }
+  .actions form { margin: 0; padding: 0; }
+  button {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 500;
+    background: transparent;
+    color: var(--fg);
+    border: 1px solid var(--rule);
+    padding: 9px 16px;
+    cursor: pointer;
+    border-radius: 4px;
+    min-height: 44px;
+    transition: background 120ms, border-color 120ms;
+  }
+  button:hover         { border-color: var(--accent); background: var(--accent-dim); }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button.primary {
+    background: var(--accent);
+    color: var(--bg);
+    border-color: var(--accent);
+    font-weight: 600;
+  }
+  button.primary:hover { background: var(--fg); border-color: var(--fg); }
+  button.danger {
+    color: var(--danger);
+    margin-left: auto;
+    border-color: transparent;
+    text-decoration: underline;
+    text-decoration-color: var(--rule);
+  }
+  button.danger:hover {
+    background: transparent;
+    border-color: var(--danger);
+    text-decoration-color: var(--danger);
+  }
+  .footer {
+    background: var(--bg);
+    border-top: 1px solid var(--rule);
+    padding: 10px 16px;
+    color: var(--muted);
+    font-size: 11px;
+    display: flex;
+    gap: 18px;
+    flex-wrap: wrap;
+  }
+  .footer a { color: var(--muted); text-decoration: underline; text-decoration-color: var(--rule); }
+  .footer a:hover { color: var(--accent); }
+</style>
+</head>
+<body>
+<main class="terminal" role="main" aria-labelledby="blocked-domain">
+  <div class="titlebar">
+    <svg class="shield" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M12 2 L3 6 V12 C3 17 7 21 12 22 C17 21 21 17 21 12 V6 Z" fill="currentColor" opacity="0.2"/>
+      <path d="M12 2 L3 6 V12 C3 17 7 21 12 22 C17 21 21 17 21 12 V6 Z" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <path d="M8 12 L11 15 L16 9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <span class="brand">sentinel</span>
+    <span class="separator" aria-hidden="true">— resolver</span>
+    <span class="meta">localhost &middot; listening</span>
+  </div>
+
+  <div class="body">
+    <div class="prompt-line"><span class="arrow" aria-hidden="true">&#9656;</span> dns query intercepted</div>
+    <output class="verdict" role="status" aria-live="polite">blocked</output>
+
+    <h1 id="blocked-domain">{{domain}}</h1>
+
+    <dl class="props" aria-label="Block reason">
+      <div class="row"><span class="key">feed</span> <span class="val feed">{{feed}}</span></div>
+      <div class="row"><span class="key">listed</span> <span class="val">{{listed_date}} {{listed_relative}}</span></div>
+      <div class="row"><span class="key">type</span> <span class="val warn">{{threat_type}}</span></div>
+      <div class="row"><span class="key">action</span> <span class="val">sinkhole &rarr; 127.0.0.1</span></div>
+      <div class="row"><span class="key">your machine</span> <span class="val">never connected</span></div>
+    </dl>
+
+    <div class="actions">
+      <form method="post" action="/decision">
+        <input type="hidden" name="domain" value="{{domain}}">
+        <input type="hidden" name="block_id" value="{{block_id}}">
+        <button class="primary" type="submit" name="action" value="keep_blocked">Keep blocked</button>
+      </form>
+      <form method="post" action="/decision">
+        <input type="hidden" name="domain" value="{{domain}}">
+        <input type="hidden" name="block_id" value="{{block_id}}">
+        <button type="submit" name="action" value="allow_once">Allow once</button>
+      </form>
+      <form method="post" action="/decision" class="danger-form" style="margin-left:auto">
+        <input type="hidden" name="domain" value="{{domain}}">
+        <input type="hidden" name="block_id" value="{{block_id}}">
+        <button class="danger" type="submit" name="action" value="allow_forever">Allow forever</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span>ts {{ts_iso}}</span>
+    <span>id {{block_id}}</span>
+    <span>v{{version}} &middot; MIT</span>
+    <a href="https://github.com/MuzeenMir/sentinel" target="_blank" rel="noopener noreferrer">github.com/MuzeenMir/sentinel</a>
+  </div>
+</main>
+</body>
+</html>
