@@ -13,11 +13,11 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use axum::{
-    Form, Router,
     extract::State,
     http::StatusCode,
     response::{Html, IntoResponse},
     routing::{get, post},
+    Form, Router,
 };
 use serde::Deserialize;
 use tokio::sync::RwLock;
