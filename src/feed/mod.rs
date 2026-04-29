@@ -64,9 +64,7 @@ pub async fn refresh_urlhaus(blocklist: &BlockList) -> anyhow::Result<usize> {
             hostfile_to_metadata_map(urlhaus::fetch_domains().await?)
         }
         Err(e) => {
-            eprintln!(
-                "urlhaus: csv_online fetch failed ({e:#}), falling back to hostfile"
-            );
+            eprintln!("urlhaus: csv_online fetch failed ({e:#}), falling back to hostfile");
             hostfile_to_metadata_map(urlhaus::fetch_domains().await?)
         }
     };
