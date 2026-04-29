@@ -20,8 +20,8 @@ use crate::feed::BlockMetadata;
 /// URLhaus public hostfile feed. Plain text, refreshed continuously upstream.
 const URLHAUS_HOSTFILE_URL: &str = "https://urlhaus.abuse.ch/downloads/hostfile/";
 
-/// URLhaus CSV feed, currently-online URLs only. Plain text, columns:
-/// `id, dateadded, url, url_status, threat, tags, urlhaus_link, reporter`.
+/// URLhaus CSV feed, currently-online URLs only. Plain text, 9 columns:
+/// `id, dateadded, url, url_status, last_online, threat, tags, urlhaus_link, reporter`.
 const URLHAUS_CSV_ONLINE_URL: &str = "https://urlhaus.abuse.ch/downloads/csv_online/";
 
 /// Fetch the URLhaus hostfile and parse it into a deduped domain set.
@@ -82,8 +82,11 @@ pub fn parse_hostfile(body: &str) -> HashSet<String> {
 /// Parse a URLhaus `csv_online` body into a deduped `domain -> metadata`
 /// map.
 ///
-/// Skips comment lines (`#`) and rows that fail to expose at least the
-/// five fields we read (id, dateadded, url, url_status, threat). On
+/// CSV columns (9): `id, dateadded, url, url_status, last_online,
+/// threat, tags, urlhaus_link, reporter`. We read fields 1 (dateadded),
+/// 2 (url), and 5 (threat); the rest are ignored.
+///
+/// Skips comment lines (`#`) and rows shorter than 6 fields. On
 /// duplicate domains — the same domain appearing under multiple URLs —
 /// keeps the EARLIEST `dateadded`, matching the block-page copy
 /// "Listed in URLhaus since YYYY-MM-DD".
@@ -95,7 +98,7 @@ pub fn parse_csv_online(body: &str) -> HashMap<String, BlockMetadata> {
             continue;
         }
         let fields = parse_csv_line(line);
-        if fields.len() < 5 {
+        if fields.len() < 6 {
             continue;
         }
         // Some URLhaus dumps include an inline header row; skip it
@@ -105,7 +108,7 @@ pub fn parse_csv_online(body: &str) -> HashMap<String, BlockMetadata> {
         }
         let dateadded_full = &fields[1];
         let url = &fields[2];
-        let threat = &fields[4];
+        let threat = &fields[5];
 
         let Some(domain) = domain_from_url(url) else {
             continue;
@@ -261,14 +264,15 @@ mod tests {
 
     #[test]
     fn parse_csv_line_handles_quotes_and_embedded_commas() {
-        let line = r#""3018000","2026-04-22 12:34:56","http://evil.example/p?q=a,b","online","malware_download""#;
+        let line = r#""3018000","2026-04-22 12:34:56","http://evil.example/p?q=a,b","online","2026-04-22 12:34:56","malware_download""#;
         let fields = parse_csv_line(line);
-        assert_eq!(fields.len(), 5);
+        assert_eq!(fields.len(), 6);
         assert_eq!(fields[0], "3018000");
         assert_eq!(fields[1], "2026-04-22 12:34:56");
         assert_eq!(fields[2], "http://evil.example/p?q=a,b");
         assert_eq!(fields[3], "online");
-        assert_eq!(fields[4], "malware_download");
+        assert_eq!(fields[4], "2026-04-22 12:34:56");
+        assert_eq!(fields[5], "malware_download");
     }
 
     #[test]
@@ -312,12 +316,14 @@ mod tests {
 
     #[test]
     fn parse_csv_online_extracts_metadata_and_dedupes_to_earliest() {
+        // URLhaus csv_online schema: id, dateadded, url, url_status,
+        // last_online, threat, tags, urlhaus_link, reporter.
         let body = r#"# URLhaus database dump (CSV) - online URLs only
 # Last updated: 2026-04-29 12:00:00 UTC
 #
-"3018000","2026-04-22 12:34:56","http://evil.example/a.exe","online","malware_download","exe","https://urlhaus.abuse.ch/url/3018000/","reporter1"
-"3018001","2026-04-25 09:00:00","http://evil.example/b.exe","online","malware_download","exe","https://urlhaus.abuse.ch/url/3018001/","reporter2"
-"3018002","2026-04-26 11:11:11","http://phish.example.com/login","online","phishing","creds","https://urlhaus.abuse.ch/url/3018002/","reporter3"
+"3018000","2026-04-22 12:34:56","http://evil.example/a.exe","online","2026-04-22 13:00:00","malware_download","exe","https://urlhaus.abuse.ch/url/3018000/","reporter1"
+"3018001","2026-04-25 09:00:00","http://evil.example/b.exe","online","2026-04-25 09:30:00","malware_download","exe","https://urlhaus.abuse.ch/url/3018001/","reporter2"
+"3018002","2026-04-26 11:11:11","http://phish.example.com/login","online","2026-04-26 11:30:00","phishing","creds","https://urlhaus.abuse.ch/url/3018002/","reporter3"
 "#;
         let map = parse_csv_online(body);
         assert_eq!(map.len(), 2);
@@ -338,7 +344,7 @@ mod tests {
 # more header
 
 "too","short"
-"3018000","2026-04-22 12:34:56","http://ok.example/x","online","malware_download"
+"3018000","2026-04-22 12:34:56","http://ok.example/x","online","2026-04-22 13:00:00","malware_download"
 "#;
         let map = parse_csv_online(body);
         assert_eq!(map.len(), 1);
@@ -347,11 +353,25 @@ mod tests {
 
     #[test]
     fn parse_csv_online_skips_inline_header_row() {
-        let body = r#""id","dateadded","url","url_status","threat","tags","urlhaus_link","reporter"
-"3018000","2026-04-22 12:34:56","http://ok.example/x","online","malware_download","exe","https://urlhaus.abuse.ch/url/3018000/","reporter1"
+        let body = r#""id","dateadded","url","url_status","last_online","threat","tags","urlhaus_link","reporter"
+"3018000","2026-04-22 12:34:56","http://ok.example/x","online","2026-04-22 13:00:00","malware_download","exe","https://urlhaus.abuse.ch/url/3018000/","reporter1"
 "#;
         let map = parse_csv_online(body);
         assert_eq!(map.len(), 1);
         assert!(map.contains_key("ok.example"));
+    }
+
+    #[test]
+    fn parse_csv_online_does_not_confuse_last_online_with_threat() {
+        // Regression: an earlier version of this parser read `threat`
+        // from index 4, which is `last_online` in the 9-column schema.
+        // The block-page surfaced the timestamp as the threat label.
+        let body = r#""3018000","2026-04-22 12:34:56","http://evil.example/a.exe","online","2026-04-22 13:00:00","malware_download","exe","https://urlhaus.abuse.ch/url/3018000/","reporter"
+"#;
+        let map = parse_csv_online(body);
+        let meta = map.get("evil.example").expect("evil.example present");
+        assert_eq!(meta.listed_date, "2026-04-22");
+        assert_eq!(meta.threat_type, "malware_download");
+        assert_ne!(meta.threat_type, "2026-04-22 13:00:00");
     }
 }
