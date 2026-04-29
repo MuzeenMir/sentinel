@@ -27,7 +27,7 @@ use time::OffsetDateTime;
 use tokio::net::{TcpListener, UdpSocket};
 
 use crate::blockpage::{AppState, BlockReason};
-use crate::feed::{is_blocked, BlockList};
+use crate::feed::{lookup, BlockList, BlockMetadata};
 
 /// Sinkhole TTL — short on purpose. If the user allow-lists the domain
 /// while the page is open, the next query refetches against the
@@ -95,8 +95,10 @@ impl RequestHandler for Resolver {
         let query = request.query();
         let domain = lower_name_to_domain(query.name());
 
-        if is_blocked(&self.blocklist, &domain).await {
-            self.blockpage.set_current(make_block_reason(&domain)).await;
+        if let Some(metadata) = lookup(&self.blocklist, &domain).await {
+            self.blockpage
+                .set_current(make_block_reason(&domain, &metadata))
+                .await;
             return sinkhole(request, query.query_type(), &mut response_handle).await;
         }
 
@@ -240,19 +242,68 @@ async fn forward<R: ResponseHandler>(
     }
 }
 
-/// Construct a [`BlockReason`] for `domain`. Listing-date metadata
-/// (real `YYYY-MM-DD` and "N days ago" strings) lands with the
-/// URLhaus parser enrichment; for now we surface a placeholder so
-/// the page renders cleanly.
-fn make_block_reason(domain: &str) -> BlockReason {
+/// Construct a [`BlockReason`] for `domain` using metadata from the
+/// active feed. The CSV path supplies a real `YYYY-MM-DD` listing date
+/// and URLhaus threat classification; the hostfile fallback supplies
+/// neither, so we substitute the same "—" / "malware" placeholders the
+/// page used pre-enrichment so the layout stays stable.
+fn make_block_reason(domain: &str, metadata: &BlockMetadata) -> BlockReason {
+    let listed_date = if metadata.listed_date.is_empty() {
+        "—".to_string()
+    } else {
+        metadata.listed_date.clone()
+    };
+    let listed_relative = relative_days_ago(&metadata.listed_date)
+        .map(|phrase| format!("({phrase})"))
+        .unwrap_or_default();
+    let threat_type = if metadata.threat_type.is_empty() {
+        "malware".to_string()
+    } else {
+        humanize_threat(&metadata.threat_type)
+    };
     BlockReason {
         domain: domain.to_string(),
         feed: "URLhaus".to_string(),
-        listed_date: "—".to_string(),
-        listed_relative: String::new(),
-        threat_type: "malware".to_string(),
+        listed_date,
+        listed_relative,
+        threat_type,
         block_id: short_block_id(),
         ts_iso: now_rfc3339(),
+    }
+}
+
+/// Convert a URLhaus snake_case threat type (e.g. `malware_download`,
+/// `phishing`) into the lower-case spaced phrase the block-page voice
+/// expects.
+fn humanize_threat(snake: &str) -> String {
+    snake.replace('_', " ")
+}
+
+/// Return a human phrase like `"6 days ago"` for a `YYYY-MM-DD` listing
+/// date, or `None` if the input is empty / malformed / in the future.
+///
+/// Date-arithmetic only — no time-of-day. We want stable, slowly-changing
+/// copy ("6 days ago" rather than "6 days, 4 hours, 12 minutes ago").
+fn relative_days_ago(yyyy_mm_dd: &str) -> Option<String> {
+    if yyyy_mm_dd.is_empty() {
+        return None;
+    }
+    let mut parts = yyyy_mm_dd.split('-');
+    let year: i32 = parts.next()?.parse().ok()?;
+    let month_num: u8 = parts.next()?.parse().ok()?;
+    let day: u8 = parts.next()?.parse().ok()?;
+    if parts.next().is_some() {
+        return None;
+    }
+    let month = time::Month::try_from(month_num).ok()?;
+    let listed = time::Date::from_calendar_date(year, month, day).ok()?;
+    let today = OffsetDateTime::now_utc().date();
+    let days = (today - listed).whole_days();
+    match days {
+        0 => Some("today".to_string()),
+        1 => Some("1 day ago".to_string()),
+        d if d > 1 => Some(format!("{d} days ago")),
+        _ => None,
     }
 }
 
@@ -288,6 +339,17 @@ mod tests {
     use super::*;
     use crate::feed::new_blocklist;
 
+    fn empty_meta() -> BlockMetadata {
+        BlockMetadata::default()
+    }
+
+    fn sample_meta() -> BlockMetadata {
+        BlockMetadata {
+            listed_date: "2026-04-22".to_string(),
+            threat_type: "malware_download".to_string(),
+        }
+    }
+
     #[tokio::test]
     async fn lower_name_strips_trailing_dot_and_lowercases() {
         let n = LowerName::from(Name::from_ascii("Evil.Example.").unwrap());
@@ -295,15 +357,81 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn make_block_reason_populates_required_fields() {
-        let r = make_block_reason("malicious.example");
+    async fn make_block_reason_with_empty_metadata_uses_placeholders() {
+        let r = make_block_reason("malicious.example", &empty_meta());
         assert_eq!(r.domain, "malicious.example");
         assert_eq!(r.feed, "URLhaus");
+        assert_eq!(r.listed_date, "—");
+        assert_eq!(r.listed_relative, "");
         assert_eq!(r.threat_type, "malware");
         assert_eq!(r.block_id.len(), 8);
         assert!(r.block_id.chars().all(|c| c.is_ascii_hexdigit()));
         // RFC 3339 starts with a 4-digit year.
         assert!(r.ts_iso.chars().take(4).all(|c| c.is_ascii_digit()));
+    }
+
+    #[tokio::test]
+    async fn make_block_reason_with_csv_metadata_surfaces_real_date_and_threat() {
+        let r = make_block_reason("malicious.example", &sample_meta());
+        assert_eq!(r.listed_date, "2026-04-22");
+        // listed_relative is wall-clock-dependent; assert shape only.
+        assert!(r.listed_relative.starts_with('('));
+        assert!(r.listed_relative.ends_with(')'));
+        assert_eq!(r.threat_type, "malware download");
+    }
+
+    #[test]
+    fn humanize_threat_replaces_underscores_with_spaces() {
+        assert_eq!(humanize_threat("malware_download"), "malware download");
+        assert_eq!(humanize_threat("phishing"), "phishing");
+        assert_eq!(humanize_threat(""), "");
+    }
+
+    #[test]
+    fn relative_days_ago_handles_today_one_and_many() {
+        let today = OffsetDateTime::now_utc().date();
+        let today_str = format!(
+            "{:04}-{:02}-{:02}",
+            today.year(),
+            today.month() as u8,
+            today.day()
+        );
+        assert_eq!(relative_days_ago(&today_str), Some("today".to_string()));
+
+        let yesterday = today - time::Duration::days(1);
+        let y_str = format!(
+            "{:04}-{:02}-{:02}",
+            yesterday.year(),
+            yesterday.month() as u8,
+            yesterday.day()
+        );
+        assert_eq!(relative_days_ago(&y_str), Some("1 day ago".to_string()));
+
+        let week_ago = today - time::Duration::days(7);
+        let w_str = format!(
+            "{:04}-{:02}-{:02}",
+            week_ago.year(),
+            week_ago.month() as u8,
+            week_ago.day()
+        );
+        assert_eq!(relative_days_ago(&w_str), Some("7 days ago".to_string()));
+    }
+
+    #[test]
+    fn relative_days_ago_returns_none_for_empty_or_malformed_or_future() {
+        assert_eq!(relative_days_ago(""), None);
+        assert_eq!(relative_days_ago("not-a-date"), None);
+        assert_eq!(relative_days_ago("2026-13-40"), None);
+        assert_eq!(relative_days_ago("2026-04-22-extra"), None);
+
+        let future = OffsetDateTime::now_utc().date() + time::Duration::days(30);
+        let f_str = format!(
+            "{:04}-{:02}-{:02}",
+            future.year(),
+            future.month() as u8,
+            future.day()
+        );
+        assert_eq!(relative_days_ago(&f_str), None);
     }
 
     #[tokio::test]
@@ -324,7 +452,9 @@ mod tests {
     #[tokio::test]
     async fn resolver_block_path_writes_blockpage_slot() {
         let bl = new_blocklist();
-        bl.write().await.insert("malicious.example".to_string());
+        bl.write()
+            .await
+            .insert("malicious.example".to_string(), sample_meta());
         let bp = AppState::new();
         let _r = Resolver::new(bl.clone(), bp.clone());
 
@@ -332,12 +462,16 @@ mod tests {
         // (it wraps a UDP datagram + sender), so the in-process
         // assertion here is on the helper that the handler invokes
         // when it decides to block.
-        bp.set_current(make_block_reason("malicious.example")).await;
+        let metadata = lookup(&bl, "malicious.example").await.unwrap();
+        bp.set_current(make_block_reason("malicious.example", &metadata))
+            .await;
         let slot = bp.current.read().await;
         assert!(slot.is_some());
         let r = slot.as_ref().unwrap();
         assert_eq!(r.domain, "malicious.example");
         assert_eq!(r.feed, "URLhaus");
+        assert_eq!(r.listed_date, "2026-04-22");
+        assert_eq!(r.threat_type, "malware download");
     }
 
     #[tokio::test]
