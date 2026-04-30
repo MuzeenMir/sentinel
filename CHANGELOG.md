@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.1.1](https://github.com/MuzeenMir/sentinel/compare/v0.1.0...v0.1.1) (2026-04-30)
+
+
+### Features
+
+* **resolver:** close v0.1 product loop with live URLhaus blocking ([#18](https://github.com/MuzeenMir/sentinel/issues/18)) ([902d66f](https://github.com/MuzeenMir/sentinel/commit/902d66f58f02dfe4c9886c84ce6b933c02405748))
+
+
+### Documentation
+
+* **installer:** watch-test bundle for v0.1.1 hand-deliverable installs ([#22](https://github.com/MuzeenMir/sentinel/issues/22)) ([83c98a0](https://github.com/MuzeenMir/sentinel/commit/83c98a034dfa09825c6293f3d979a02373aad9e2))
+* lock Show HN draft (Hard Gate close, part 1) ([#20](https://github.com/MuzeenMir/sentinel/issues/20)) ([465f340](https://github.com/MuzeenMir/sentinel/commit/465f3402e121dc65347c9fc73a47250cb1b14101))
+* lock watch-test roster (Hard Gate close, part 2) ([#21](https://github.com/MuzeenMir/sentinel/issues/21)) ([5995926](https://github.com/MuzeenMir/sentinel/commit/59959266799854934bd44e68d19a23e03a3f6e00))
+
 ## 0.1.0 (2026-04-28)
 
 
