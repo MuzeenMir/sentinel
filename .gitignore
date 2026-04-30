@@ -37,6 +37,14 @@ desktop.ini
 *.log
 *.pid
 
+# Watch-test bundle runtime state (created by setup.ps1) and the local
+# binary the dev drops in before zipping for delivery. Scripts + docs in
+# scripts/watchtest/ are tracked; the binary + per-machine state are not.
+scripts/watchtest/sentinel.exe
+scripts/watchtest/.dns-backup.json
+scripts/watchtest/sentinel*.log
+scripts/watchtest/.sentinel.pid
+
 # External reference PDFs kept locally (system cards, analyst reports, etc.)
 # Scoped to repo root so genuine PDFs under docs/ can still be tracked.
 /*.pdf
