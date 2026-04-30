@@ -1,0 +1,20 @@
+SENTINEL — Watch-test Quickstart (v0.1.1)
+==========================================
+
+You're testing a pre-release build. Five steps. Two scripts.
+
+1. RIGHT-CLICK PowerShell -> "Run as administrator".
+2. cd into this folder (where you unzipped the bundle).
+3. Run:    .\setup.ps1
+4. Use your computer normally for a while. Browse, work, whatever.
+   If you hit a malicious site, you'll see a Sentinel block-page.
+5. When you want to stop testing, run:    .\uninstall.ps1
+   That puts your DNS back the way it was.
+
+If something looks broken or you just want to undo:
+  .\uninstall.ps1   (always safe to run, even if setup didn't finish)
+
+Questions during the test? Ask the person who handed you this folder.
+They'll be sitting with you for the first 30 minutes.
+
+That's it. No internet account, no telemetry, no auto-update.
