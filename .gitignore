@@ -44,6 +44,7 @@ scripts/watchtest/sentinel.exe
 scripts/watchtest/.dns-backup.json
 scripts/watchtest/sentinel*.log
 scripts/watchtest/.sentinel.pid
+scripts/watchtest/sentinel-autostart.ps1
 
 # External reference PDFs kept locally (system cards, analyst reports, etc.)
 # Scoped to repo root so genuine PDFs under docs/ can still be tracked.

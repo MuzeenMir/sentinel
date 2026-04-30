@@ -72,6 +72,44 @@ $proc = Start-Process -FilePath $exePath `
     -PassThru
 $proc.Id | Out-File -FilePath $pidPath -Encoding ascii
 
+# 5b. Register a Task Scheduler entry so sentinel.exe restarts after reboot.
+#     Watch-test only path — v0.1 release will use a real Windows Service.
+#     Registers as the current user, runs at logon with highest privileges.
+#     The wrapper script preserves stdout/stderr redirection across reboots.
+$wrapperPath = Join-Path $PSScriptRoot 'sentinel-autostart.ps1'
+$wrapperScript = @'
+# Auto-start wrapper for Sentinel watch-test. Registered by setup.ps1.
+# Unregistered by uninstall.ps1.
+$ErrorActionPreference = 'Continue'
+$root = Split-Path -Parent $MyInvocation.MyCommand.Path
+$exe  = Join-Path $root 'sentinel.exe'
+$log  = Join-Path $root 'sentinel.log'
+$err  = Join-Path $root 'sentinel.err.log'
+$pidF = Join-Path $root '.sentinel.pid'
+if (-not (Test-Path $exe)) { exit 1 }
+$p = Start-Process -FilePath $exe -ArgumentList 'service' `
+    -WorkingDirectory $root `
+    -RedirectStandardOutput $log -RedirectStandardError $err `
+    -WindowStyle Hidden -PassThru
+$p.Id | Out-File -FilePath $pidF -Encoding ascii
+'@
+Set-Content -Path $wrapperPath -Value $wrapperScript -Encoding utf8
+
+$taskName = 'SentinelWatchtest'
+# Drop any prior registration before re-creating, so re-running setup is idempotent.
+Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+
+$action    = New-ScheduledTaskAction -Execute 'powershell.exe' `
+    -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$wrapperPath`""
+$trigger   = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+$principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Highest
+$settings  = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
+    -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
+
+Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger `
+    -Principal $principal -Settings $settings | Out-Null
+Write-Host "Auto-start registered: scheduled task '$taskName' runs at logon as $env:USERNAME"
+
 # Brief health check: sentinel needs ~1s to bind ports. If it exited
 # already, surface stderr immediately so the operator isn't left guessing.
 Start-Sleep -Seconds 2

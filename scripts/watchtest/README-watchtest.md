@@ -24,14 +24,23 @@ This build exists for the watch test only. It is missing things that the
 finished v0.1 will have:
 
 - **No installer.** You unzip a folder and run a `.ps1` script.
-- **No tray icon.** You'll see a `sentinel.exe` PowerShell window when
-  it's running. That window is the UI.
+- **No tray icon.** Sentinel runs hidden in the background. The
+  `sentinel.log` and `sentinel.err.log` files in this folder are the
+  only UI when something is wrong.
 - **No auto-update.** This build is frozen for the 7 days of the test.
-- **No log file on disk.** Output appears in the PowerShell window.
 - **No `Add/Remove Programs` entry.** Use `uninstall.ps1` to revert.
 - **No code-signed binary.** Windows SmartScreen may complain about an
   "unrecognized publisher." That is expected for a pre-release. The
   finished v0.1 will be signed.
+
+What this build DOES handle:
+
+- **Auto-start across reboots.** `setup.ps1` registers a Task Scheduler
+  task (`SentinelWatchtest`) that re-launches sentinel.exe every time
+  you log in. You don't have to re-run setup after restart, sleep, or
+  shutdown — just log back in. `uninstall.ps1` removes the task before
+  it kills the process, so the test ends cleanly when you decide to
+  stop.
 
 If any of those bother you, please tell the person who handed you this
 bundle. Their list of "what bothers a real user" is more important than

@@ -17,7 +17,20 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
     exit 1
 }
 
-# 2. Stop sentinel.exe — prefer the PID file written by setup.ps1, fall
+# 2a. Unregister the auto-start scheduled task BEFORE killing sentinel.exe,
+#     so the task can't re-spawn the process between our kill and DNS revert.
+$taskName = 'SentinelWatchtest'
+$existing = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+if ($existing) {
+    Write-Host "Unregistering scheduled task '$taskName'..."
+    Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
+} else {
+    Write-Host "No scheduled task '$taskName' registered."
+}
+$wrapperPath = Join-Path $PSScriptRoot 'sentinel-autostart.ps1'
+if (Test-Path $wrapperPath) { Remove-Item $wrapperPath -ErrorAction SilentlyContinue }
+
+# 2b. Stop sentinel.exe — prefer the PID file written by setup.ps1, fall
 #    back to name-match so this script also works for ad-hoc kills.
 $pidPath = Join-Path $PSScriptRoot '.sentinel.pid'
 $stopped = $false
