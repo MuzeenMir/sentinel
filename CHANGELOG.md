@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.2](https://github.com/MuzeenMir/sentinel/compare/v0.1.1...v0.1.2) (2026-05-01)
+
+
+### Features
+
+* **feed:** add quarterly Tranco baseline auto-refresh (T2) ([#24](https://github.com/MuzeenMir/sentinel/issues/24)) ([e6fcb2b](https://github.com/MuzeenMir/sentinel/commit/e6fcb2b678b9c26eaf0a5667ceea1b1c068c938c))
+* **installer:** watch-test bundle auto-starts at user logon ([#23](https://github.com/MuzeenMir/sentinel/issues/23)) ([8431b72](https://github.com/MuzeenMir/sentinel/commit/8431b72aae0aa22b0a6ab2a70f35f377917b6686))
+
 ## [0.1.1](https://github.com/MuzeenMir/sentinel/compare/v0.1.0...v0.1.1) (2026-04-30)
 
 
