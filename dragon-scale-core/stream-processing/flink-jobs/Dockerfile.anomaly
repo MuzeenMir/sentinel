@@ -1,0 +1,23 @@
+FROM python:3.11-slim
+LABEL maintainer="DRAGON_SCALE Team"
+LABEL description="DRAGON_SCALE stream job — statistical anomaly detection"
+
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd -r dragon-scale && useradd -r -g dragon-scale -d /app -s /sbin/nologin dragon-scale
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel \
+    && pip install --no-cache-dir -r requirements.txt
+
+COPY base_job.py anomaly_detection.py ./
+
+RUN chown -R dragon-scale:dragon-scale /app
+USER dragon-scale
+
+ENV PYTHONUNBUFFERED=1
+
+ENTRYPOINT ["python", "anomaly_detection.py"]

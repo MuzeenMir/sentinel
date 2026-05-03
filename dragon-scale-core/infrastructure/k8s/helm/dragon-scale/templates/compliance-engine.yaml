@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "dragon-scale.fullname" . }}-compliance-engine
+  labels:
+    {{- include "dragon-scale.labels" . | nindent 4 }}
+    app.kubernetes.io/component: compliance-engine
+spec:
+  replicas: {{ .Values.complianceEngine.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "dragon-scale.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: compliance-engine
+  template:
+    metadata:
+      labels:
+        {{- include "dragon-scale.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: compliance-engine
+        app.kubernetes.io/part-of: dragon-scale
+    spec:
+      serviceAccountName: {{ include "dragon-scale.fullname" . }}-compliance-engine
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: compliance-engine
+          image: {{ include "dragon-scale.image" (dict "service" .Values.complianceEngine "global" .Values) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.complianceEngine.port }}
+              protocol: TCP
+          env:
+            - name: SERVICE_NAME
+              value: "compliance-engine"
+            {{- include "dragon-scale.commonEnv" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.complianceEngine.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "dragon-scale.fullname" . }}-compliance-engine
+  labels:
+    {{- include "dragon-scale.labels" . | nindent 4 }}
+    app.kubernetes.io/component: compliance-engine
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.complianceEngine.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "dragon-scale.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: compliance-engine

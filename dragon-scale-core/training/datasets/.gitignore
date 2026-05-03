@@ -1,0 +1,6 @@
+# Ignore downloaded dataset files (large CSVs)
+data/cicids2018/
+data/cicids2017/
+data/unsw_nb15/
+data/MANIFEST.txt
+!data/.gitkeep

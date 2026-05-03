@@ -1,0 +1,87 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-slate-950 text-slate-100 antialiased;
+  }
+
+  ::-webkit-scrollbar {
+    @apply w-2;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-slate-900;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-slate-700 hover:bg-slate-600;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-slate-800/50 border border-slate-700/50 rounded-xl backdrop-blur-sm;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center px-4 py-2 rounded-lg
+           bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-medium
+           transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center px-4 py-2 rounded-lg
+           bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm font-medium
+           transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center justify-center px-4 py-2 rounded-lg
+           bg-red-600 hover:bg-red-500 text-white text-sm font-medium
+           transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .input-field {
+    @apply w-full rounded-lg border border-slate-600 bg-slate-700/50
+           px-3 py-2 text-sm text-slate-100 placeholder-slate-400
+           focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 focus:outline-none;
+  }
+
+  .select-field {
+    @apply rounded-lg border border-slate-600 bg-slate-700/50
+           px-3 py-2 text-sm text-slate-100
+           focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 focus:outline-none;
+  }
+
+  .table-header {
+    @apply px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-400;
+  }
+
+  .table-cell {
+    @apply px-4 py-3 text-sm text-slate-300;
+  }
+
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .badge-critical {
+    @apply badge bg-red-500/20 text-red-400 border border-red-500/30;
+  }
+
+  .badge-high {
+    @apply badge bg-orange-500/20 text-orange-400 border border-orange-500/30;
+  }
+
+  .badge-medium {
+    @apply badge bg-yellow-500/20 text-yellow-400 border border-yellow-500/30;
+  }
+
+  .badge-low {
+    @apply badge bg-blue-500/20 text-blue-400 border border-blue-500/30;
+  }
+
+  .badge-info {
+    @apply badge bg-slate-500/20 text-slate-400 border border-slate-500/30;
+  }
+}

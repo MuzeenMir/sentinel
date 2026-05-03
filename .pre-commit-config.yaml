@@ -1,0 +1,71 @@
+# Pre-commit hooks for DRAGON_SCALE.
+# Install: `pip install pre-commit && pre-commit install && pre-commit install --hook-type commit-msg`
+# Run on all files: `pre-commit run --all-files`
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+      - id: mixed-line-ending
+        args: [--fix=lf]
+
+  # Python — ruff (replaces flake8 + isort + pyupgrade) and mypy
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.5.6
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+        files: ^(dragon-scale-core/backend|backend|dragon-scale-core/stream-processing|dragon-scale-core/training|backend/_lib)/
+      - id: ruff-format
+        files: ^(dragon-scale-core/backend|backend|dragon-scale-core/stream-processing|dragon-scale-core/training|backend/_lib)/
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.11.1
+    hooks:
+      - id: mypy
+        additional_dependencies:
+          - pydantic>=2.0
+          - types-requests
+          - types-PyYAML
+        files: ^(dragon-scale-core/backend|backend|backend/_lib)/
+        # mypy is strict only in new v2 code; v1 services are gradually typed.
+        args: [--ignore-missing-imports]
+
+  # Frontend — prettier + eslint run via local node from their dirs; gate via CI.
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v3.1.0
+    hooks:
+      - id: prettier
+        files: \.(js|jsx|ts|tsx|json|yml|yaml|md|css|scss)$
+        exclude: ^(package-lock\.json|dragon-scale-core/frontend/admin-console/dist/|node_modules/)
+
+  # Secrets
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.4
+    hooks:
+      - id: gitleaks
+
+  # Shell
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.10.0.1
+    hooks:
+      - id: shellcheck
+        args: [--severity=warning]
+
+  # Conventional Commits
+  - repo: https://github.com/alessandrojcm/commitlint-pre-commit-hook
+    rev: v9.18.0
+    hooks:
+      - id: commitlint
+        stages: [commit-msg]
+        additional_dependencies: ['@commitlint/config-conventional@19.4.0']
+
+# Order matters: fast checks first, slow (mypy, prettier) last.

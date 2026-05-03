@@ -1,0 +1,33 @@
+name: release-please
+
+# Auto-generated changelog + release PR from Conventional Commits.
+# Not a required status check — it only runs on push to main and opens a PR.
+#
+# REPO SETTING REQUIRED: Settings → Actions → General → Workflow permissions
+#   must have "Allow GitHub Actions to create and approve pull requests" ENABLED.
+# Without it, the action creates the branch+commit but fails at PR creation with:
+#   "GitHub Actions is not permitted to create or approve pull requests."
+# Alternative: swap `secrets.GITHUB_TOKEN` for a PAT secret with `repo` scope.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    name: release-please
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: googleapis/release-please-action@v4
+        with:
+          # Config + manifest seed single-package release flow. Swap to
+          # component paths under backend/* and frontend/* when monorepo
+          # flatten (deferred past Phase 0 exit per GIT-RESTRUCTURE.md) lands.
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+          token: ${{ secrets.GITHUB_TOKEN }}

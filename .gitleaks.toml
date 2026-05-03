@@ -1,0 +1,34 @@
+title = "DRAGON_SCALE gitleaks config"
+
+# Start from the default gitleaks ruleset
+[extend]
+useDefault = true
+
+# Global allowlist: example values inside documentation should not trigger the scanner.
+# Real secrets must never land in these paths either, but placeholder JWT/example tokens
+# are common in API docs and examples, and their entropy can trip generic-api-key.
+[allowlist]
+description = "Allowlist documentation / example placeholders + vendored / virtualenv trees"
+paths = [
+  '''dragon-scale-core/docs/.*\.md''',
+  '''.*\.example($|\.)''',
+  '''.*/fixtures/.*''',
+  '''.*/tests?/.*''',
+  # Accidentally-committed Python virtualenvs (gitignored post-cleanup, but
+  # history scans still see library internals — Pillow, ONNX, etc. — whose
+  # source code trips generic-api-key / aws-access-token false positives).
+  # Tracked in docs/revamp/SECRETS-ROTATION-LOG.md 2026-04-19 findings 1-3.
+  '''(^|/)dragon_scale_env/.*''',
+  '''(^|/)venv/.*''',
+  '''(^|/)\.venv/.*''',
+  '''(^|/)env/.*''',
+  '''(^|/)node_modules/.*''',
+]
+regexes = [
+  # Common placeholder dragon-scales
+  '''<[A-Z_]+>''',
+  '''YOUR_[A-Z_]+''',
+  '''\beyJ\.{3}''',   # truncated JWT-style placeholders like "eyJ..."
+  '''example-[a-z0-9-]+-token''',
+  '''test-[a-z0-9-]+-token''',
+]
