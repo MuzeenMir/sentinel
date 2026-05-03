@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
-# Copy required, missing files from senti (EC2 copy) into dragon-scale.
-# Run from repo root: ./dragon-scale-core/training/sync-from-senti.sh
+# Copy required, missing files from dragon-scale (EC2 copy) into dragon-scale.
+# Run from repo root: ./dragon-scale-core/training/sync-from-dragon-scale.sh
 # Uses rsync --ignore-existing so existing files in dragon-scale are never overwritten.
 
 set -euo pipefail
 
-SENTI="${1:-$HOME/senti}"
+LEGACY="${1:-$HOME/dragon-scale}"
 DRAGON_SCALE="$(cd "$(dirname "$0")/../.." && pwd)"
 
-if [ ! -d "$SENTI" ]; then
-  echo "ERROR: $SENTI not found. Usage: $0 [path-to-senti]"
+if [ ! -d "$LEGACY" ]; then
+  echo "ERROR: $LEGACY not found. Usage: $0 [path-to-dragon-scale]"
   exit 1
 fi
 
-echo "Syncing from $SENTI -> $DRAGON_SCALE (missing files only)"
+echo "Syncing from $LEGACY -> $DRAGON_SCALE (missing files only)"
 echo ""
 
 # Paths that are gitignored but required (trained models, dataset data)
@@ -23,7 +23,7 @@ PATHS=(
 )
 
 for rel in "${PATHS[@]}"; do
-  src="$SENTI/$rel"
+  src="$LEGACY/$rel"
   dst="$DRAGON_SCALE/$rel"
   if [ ! -d "$src" ]; then
     echo "Skip (no source): $rel"
@@ -35,4 +35,4 @@ for rel in "${PATHS[@]}"; do
 done
 
 echo ""
-echo "Done. Dragon Scale now has any missing files from senti."
+echo "Done. Dragon Scale now has any missing files from dragon-scale."

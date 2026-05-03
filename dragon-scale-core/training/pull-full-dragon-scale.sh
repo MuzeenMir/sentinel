@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ###############################################################################
-# Pull the entire dragon-scale folder from EC2 to ~/senti (full copy).
+# Pull the entire dragon-scale folder from EC2 to ~/dragon-scale (full copy).
 # Run from anywhere: ./dragon-scale-core/training/pull-full-dragon-scale.sh
 #
 # Uses same method as pull-models.sh: .dragon-scale-instance-ip and dragon-scale-training.pem
@@ -37,7 +37,7 @@ if [ -z "$PUBLIC_IP" ] || [ "$PUBLIC_IP" = "None" ]; then
   exit 1
 fi
 
-DEST="${2:-$HOME/senti}"
+DEST="${2:-$HOME/dragon-scale}"
 mkdir -p "$DEST"
 echo "Pulling full dragon-scale from ${PUBLIC_IP} into $DEST ..."
 
