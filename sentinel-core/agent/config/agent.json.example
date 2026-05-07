@@ -1,0 +1,26 @@
+{
+  "control_plane_url": "https://sentinel.example.com",
+  "kafka_servers": "kafka.sentinel.svc:9092",
+  "auth_token": "",
+  "interface": "eth0",
+  "data_dir": "/var/lib/sentinel",
+  "log_dir": "/var/log/sentinel",
+  "fim_paths": [
+    "/etc/passwd",
+    "/etc/shadow",
+    "/etc/sudoers",
+    "/etc/ssh/sshd_config",
+    "/etc/crontab",
+    "/etc/hosts",
+    "/etc/resolv.conf",
+    "/etc/ld.so.preload",
+    "/root/.ssh/authorized_keys"
+  ],
+  "fim_interval_sec": 60,
+  "hardening_interval_sec": 3600,
+  "heartbeat_interval_sec": 30,
+  "enable_xdp": true,
+  "enable_hids": true,
+  "enable_hardening": true,
+  "enable_fim": true
+}

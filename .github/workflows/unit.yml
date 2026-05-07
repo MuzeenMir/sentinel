@@ -29,7 +29,7 @@ jobs:
     timeout-minutes: 20
     defaults:
       run:
-        working-directory: dragon-scale-core/backend
+        working-directory: sentinel-core/backend
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -75,7 +75,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: backend-coverage
-          path: dragon-scale-core/backend/coverage.xml
+          path: sentinel-core/backend/coverage.xml
           if-no-files-found: warn
 
   unit-frontend:
@@ -84,14 +84,14 @@ jobs:
     timeout-minutes: 10
     defaults:
       run:
-        working-directory: dragon-scale-core/frontend/admin-console
+        working-directory: sentinel-core/frontend/admin-console
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: npm
-          cache-dependency-path: dragon-scale-core/frontend/admin-console/package-lock.json
+          cache-dependency-path: sentinel-core/frontend/admin-console/package-lock.json
       - run: npm ci
       - name: vitest
         run: npm run test -- --run
@@ -104,7 +104,7 @@ jobs:
     timeout-minutes: 30
     defaults:
       run:
-        working-directory: dragon-scale-core
+        working-directory: sentinel-core
     steps:
       - uses: actions/checkout@v4
       - name: Check for training requirements and data
@@ -150,7 +150,7 @@ jobs:
     timeout-minutes: 15
     defaults:
       run:
-        working-directory: dragon-scale-core/backend
+        working-directory: sentinel-core/backend
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

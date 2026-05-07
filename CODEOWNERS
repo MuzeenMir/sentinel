@@ -1,6 +1,6 @@
-# DRAGON_SCALE CODEOWNERS
+# SENTINEL CODEOWNERS
 # Syntax: https://docs.github.com/en/repositories/managing-your-repositories-settings-and-security/customizing-your-repository/about-code-owners
-# Last matching rule wins. Teams must exist in @MuzeenMir/dragon-scale org before GitHub enforces ownership.
+# Last matching rule wins. Teams must exist in @MuzeenMir/sentinel org before GitHub enforces ownership.
 #
 # Phase 0: placeholders pointing to @MuzeenMir (owner). Replace with @org/<team> handles as teams form.
 
@@ -8,36 +8,36 @@
 *                                       @MuzeenMir
 
 # ---- Backend services (current v1 layout) ----
-/dragon-scale-core/backend/                 @MuzeenMir
-/dragon-scale-core/backend/auth-service/    @MuzeenMir
-/dragon-scale-core/backend/api-gateway/     @MuzeenMir
-/dragon-scale-core/backend/ai-engine/       @MuzeenMir
-/dragon-scale-core/backend/xai-service/     @MuzeenMir
-/dragon-scale-core/backend/alert-service/   @MuzeenMir
-/dragon-scale-core/backend/policy-orchestrator/  @MuzeenMir
-/dragon-scale-core/backend/compliance-engine/    @MuzeenMir
-/dragon-scale-core/backend/drl-engine/      @MuzeenMir
-/dragon-scale-core/backend/data-collector/  @MuzeenMir
-/dragon-scale-core/backend/xdp-collector/   @MuzeenMir
-/dragon-scale-core/backend/migrations/      @MuzeenMir
+/sentinel-core/backend/                 @MuzeenMir
+/sentinel-core/backend/auth-service/    @MuzeenMir
+/sentinel-core/backend/api-gateway/     @MuzeenMir
+/sentinel-core/backend/ai-engine/       @MuzeenMir
+/sentinel-core/backend/xai-service/     @MuzeenMir
+/sentinel-core/backend/alert-service/   @MuzeenMir
+/sentinel-core/backend/policy-orchestrator/  @MuzeenMir
+/sentinel-core/backend/compliance-engine/    @MuzeenMir
+/sentinel-core/backend/drl-engine/      @MuzeenMir
+/sentinel-core/backend/data-collector/  @MuzeenMir
+/sentinel-core/backend/xdp-collector/   @MuzeenMir
+/sentinel-core/backend/migrations/      @MuzeenMir
 
 # ---- Backend v2 consolidated services (Phase 1) ----
-/dragon-scale-core/backend/_lib/            @MuzeenMir
-/dragon-scale-core/backend/console/         @MuzeenMir
-/dragon-scale-core/backend/controller/      @MuzeenMir
-/dragon-scale-core/backend/analyzer/        @MuzeenMir
-/dragon-scale-core/backend/collector/       @MuzeenMir
-/dragon-scale-core/backend/llm_gateway/     @MuzeenMir
+/sentinel-core/backend/_lib/            @MuzeenMir
+/sentinel-core/backend/console/         @MuzeenMir
+/sentinel-core/backend/controller/      @MuzeenMir
+/sentinel-core/backend/analyzer/        @MuzeenMir
+/sentinel-core/backend/collector/       @MuzeenMir
+/sentinel-core/backend/llm_gateway/     @MuzeenMir
 
 # ---- Frontend ----
-/dragon-scale-core/frontend/                @MuzeenMir
+/sentinel-core/frontend/                @MuzeenMir
 
 # ---- Stream + training ----
-/dragon-scale-core/stream-processing/       @MuzeenMir
-/dragon-scale-core/training/                @MuzeenMir
+/sentinel-core/stream-processing/       @MuzeenMir
+/sentinel-core/training/                @MuzeenMir
 
 # ---- Infra + deploy ----
-/dragon-scale-core/infrastructure/          @MuzeenMir
+/sentinel-core/infrastructure/          @MuzeenMir
 /deploy/                                @MuzeenMir
 /opa-bundles/                           @MuzeenMir
 
@@ -49,9 +49,9 @@
 /scripts/apply-branch-protection.sh     @MuzeenMir
 
 # ---- Docs ----
-/dragon-scale-core/docs/                    @MuzeenMir
-/dragon-scale-core/docs/revamp/             @MuzeenMir
-/dragon-scale-core/docs/adr/                @MuzeenMir
+/sentinel-core/docs/                    @MuzeenMir
+/sentinel-core/docs/revamp/             @MuzeenMir
+/sentinel-core/docs/adr/                @MuzeenMir
 /docs/                                  @MuzeenMir
 /docs/revamp/                           @MuzeenMir
 /docs/adr/                              @MuzeenMir

@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sentinel.fullname" . }}-data-collector
+  labels:
+    {{- include "sentinel.labels" . | nindent 4 }}
+    app.kubernetes.io/component: data-collector
+spec:
+  replicas: {{ .Values.dataCollector.replicaCount | default 1 }}
+  selector:
+    matchLabels:
+      {{- include "sentinel.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: data-collector
+  template:
+    metadata:
+      labels:
+        {{- include "sentinel.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: data-collector
+        app.kubernetes.io/part-of: sentinel
+    spec:
+      serviceAccountName: {{ include "sentinel.fullname" . }}-data-collector
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+        - name: data-collector
+          image: {{ include "sentinel.image" (dict "service" .Values.dataCollector "global" .Values) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.dataCollector.port | default 5001 }}
+              protocol: TCP
+          env:
+            - name: SERVICE_NAME
+              value: "data-collector"
+            {{- include "sentinel.commonEnv" . | nindent 12 }}
+          resources:
+            {{- toYaml (.Values.dataCollector.resources | default dict) | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          securityContext:
+            privileged: true
+            capabilities:
+              add: ["NET_RAW", "NET_ADMIN", "SYS_ADMIN"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "sentinel.fullname" . }}-data-collector
+  labels:
+    {{- include "sentinel.labels" . | nindent 4 }}
+    app.kubernetes.io/component: data-collector
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.dataCollector.port | default 5001 }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "sentinel.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: data-collector

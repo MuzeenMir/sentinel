@@ -1,0 +1,4 @@
+# SENTINEL Agent Dependencies
+requests>=2.31.0
+confluent-kafka>=2.3.0
+pyroute2>=0.7.0

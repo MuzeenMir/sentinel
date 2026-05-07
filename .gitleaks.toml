@@ -1,4 +1,4 @@
-title = "DRAGON_SCALE gitleaks config"
+title = "SENTINEL gitleaks config"
 
 # Start from the default gitleaks ruleset
 [extend]
@@ -10,7 +10,7 @@ useDefault = true
 [allowlist]
 description = "Allowlist documentation / example placeholders + vendored / virtualenv trees"
 paths = [
-  '''dragon-scale-core/docs/.*\.md''',
+  '''sentinel-core/docs/.*\.md''',
   '''.*\.example($|\.)''',
   '''.*/fixtures/.*''',
   '''.*/tests?/.*''',
@@ -18,14 +18,14 @@ paths = [
   # history scans still see library internals — Pillow, ONNX, etc. — whose
   # source code trips generic-api-key / aws-access-token false positives).
   # Tracked in docs/revamp/SECRETS-ROTATION-LOG.md 2026-04-19 findings 1-3.
-  '''(^|/)dragon_scale_env/.*''',
+  '''(^|/)sentinel_env/.*''',
   '''(^|/)venv/.*''',
   '''(^|/)\.venv/.*''',
   '''(^|/)env/.*''',
   '''(^|/)node_modules/.*''',
 ]
 regexes = [
-  # Common placeholder dragon-scales
+  # Common placeholder sentinels
   '''<[A-Z_]+>''',
   '''YOUR_[A-Z_]+''',
   '''\beyJ\.{3}''',   # truncated JWT-style placeholders like "eyJ..."

@@ -1,5 +1,5 @@
 <!--
-  DRAGON_SCALE PR template. Keep it honest — this is a checklist, not theatre.
+  SENTINEL PR template. Keep it honest — this is a checklist, not theatre.
   Conventional Commits in the title: <type>(<scope>): <subject>
   Example: feat(console): wire tenant switcher to console API
 -->

@@ -1,10 +1,10 @@
-# DRAGON_SCALE — Claude Code project context
+# SENTINEL — Claude Code project context
 
-Use this file for Claude Code sessions in this repository. Primary application code lives under **`dragon-scale-core/`** (not the repo root alone — flatten to root is a Phase 0 task, see below).
+Use this file for Claude Code sessions in this repository. Primary application code lives under **`sentinel-core/`** (not the repo root alone — flatten to root is a Phase 0 task, see below).
 
-## DRAGON_SCALE v2 Revamp — Active Phases
+## SENTINEL v2 Revamp — Active Phases
 
-**Reference:** `dragon-scale-core/docs/revamp/` (README, SRS-002, SDD-002, SDP-002, GIT-RESTRUCTURE, CLAUDE-DESIGN-WORKFLOW). Driver: `CODE-REVIEW-main-2026-04-18.md` audit — v1 is ~60% real, ~40% scaffolding; chronic CI failures, schema drift, marketing-grade claims.
+**Reference:** `sentinel-core/docs/revamp/` (README, SRS-002, SDD-002, SDP-002, GIT-RESTRUCTURE, CLAUDE-DESIGN-WORKFLOW). Driver: `CODE-REVIEW-main-2026-04-18.md` audit — v1 is ~60% real, ~40% scaffolding; chronic CI failures, schema drift, marketing-grade claims.
 
 **Architecture target:** 11 services → 4 + LLM Gateway
 - `console` ← api-gateway + auth-service + dashboard
@@ -13,9 +13,9 @@ Use this file for Claude Code sessions in this repository. Primary application c
 - `collector` ← data-collector + agent-grpc + sensor skeletons (Falco/Suricata/Wazuh/OpenSCAP)
 - `llm-gateway` ← new (Gemma 4, TurboQuant); Phase 1 = shell returning 410
 
-**Phase 0 (4 wks, active):** stabilize — 8 split CI workflows, idempotent migrations, honest README, secrets sweep, SBOM+cosign, OTel pilot, git flatten `dragon-scale-core/`→root, CODEOWNERS, commitlint, trunk-based. Exit: 7 consecutive green days on `main`.
+**Phase 0 (4 wks, active):** stabilize — 8 split CI workflows, idempotent migrations, honest README, secrets sweep, SBOM+cosign, OTel pilot, git flatten `sentinel-core/`→root, CODEOWNERS, commitlint, trunk-based. Exit: 7 consecutive green days on `main`.
 
-**Phase 1 (8 wks, blocked on Phase 0):** consolidate behind `USE_V2_*` JWT flags — shared `backend/_lib/` (cim, tenancy, otel, audit, llm_client), Helm scaffold, PG16 + pgvector + RLS, Kafka 3 per-tenant topics, Redis 7, Tempo. Exit: `dragon-scale-internal` canary runs 14 days on v2 with zero P0/P1 regressions.
+**Phase 1 (8 wks, blocked on Phase 0):** consolidate behind `USE_V2_*` JWT flags — shared `backend/_lib/` (cim, tenancy, otel, audit, llm_client), Helm scaffold, PG16 + pgvector + RLS, Kafka 3 per-tenant topics, Redis 7, Tempo. Exit: `sentinel-internal` canary runs 14 days on v2 with zero P0/P1 regressions.
 
 **Hard constraints:**
 - No LLM output reaches enforcement adapters — write actions require human approval.
@@ -29,17 +29,17 @@ Use this file for Claude Code sessions in this repository. Primary application c
 
 ## What this is
 
-DRAGON_SCALE is a server/endpoint security platform: telemetry collection, AI-assisted detection, policy orchestration, and compliance reporting. **Current shipping scope (v1):** Flask microservices, React admin console, Kafka/Flink stream processing, ML-based anomaly detection, DRL policy prototype (demoted), Terraform AWS deployment. Marketing-grade claims ("enterprise-grade", production-ready compliance) are **not** accurate for v1 — they describe the v2 target.
+SENTINEL is a server/endpoint security platform: telemetry collection, AI-assisted detection, policy orchestration, and compliance reporting. **Current shipping scope (v1):** Flask microservices, React admin console, Kafka/Flink stream processing, ML-based anomaly detection, DRL policy prototype (demoted), Terraform AWS deployment. Marketing-grade claims ("enterprise-grade", production-ready compliance) are **not** accurate for v1 — they describe the v2 target.
 
 ## Repository layout
 
 | Area | Path | Notes |
 |------|------|--------|
-| Backend (Flask microservices) | `dragon-scale-core/backend/<service>/` | Each service: `app.py`, `requirements.txt`, often Dockerfile |
-| Admin UI | `dragon-scale-core/frontend/admin-console/` | React 18, TypeScript, Vite |
-| Stream processing | `dragon-scale-core/stream-processing/flink-jobs/` | Apache Flink (Python), Kafka-oriented jobs |
-| Training | `dragon-scale-core/training/` | ML / DRL training scripts |
-| Infrastructure | `dragon-scale-core/infrastructure/terraform/` | AWS Terraform |
+| Backend (Flask microservices) | `sentinel-core/backend/<service>/` | Each service: `app.py`, `requirements.txt`, often Dockerfile |
+| Admin UI | `sentinel-core/frontend/admin-console/` | React 18, TypeScript, Vite |
+| Stream processing | `sentinel-core/stream-processing/flink-jobs/` | Apache Flink (Python), Kafka-oriented jobs |
+| Training | `sentinel-core/training/` | ML / DRL training scripts |
+| Infrastructure | `sentinel-core/infrastructure/terraform/` | AWS Terraform |
 | Cursor / Bugbot | `.cursor/` | Rules, skills, BUGBOT—parallel to this file for Cursor |
 
 ## Architecture (data flow)
@@ -59,27 +59,27 @@ DRAGON_SCALE is a server/endpoint security platform: telemetry collection, AI-as
 
 ## Documentation
 
-- Specification index: `dragon-scale-core/docs/SPECIFICATIONS.md`
-- Full specifications may live in `dragon-scale-core/docs/specifications/` (often gitignored; distributed separately).
-- Quick refs: `dragon-scale-core/docs/security.md`, `dragon-scale-core/docs/api-reference.md`, `dragon-scale-core/docs/ml-models.md`
-- Human overview: `dragon-scale-core/readme.md`
+- Specification index: `sentinel-core/docs/SPECIFICATIONS.md`
+- Full specifications may live in `sentinel-core/docs/specifications/` (often gitignored; distributed separately).
+- Quick refs: `sentinel-core/docs/security.md`, `sentinel-core/docs/api-reference.md`, `sentinel-core/docs/ml-models.md`
+- Human overview: `sentinel-core/readme.md`
 - Cursor-oriented agent summary: `AGENTS.md` (root)
 
 ## Common commands
 
-Most day-to-day work assumes `cd dragon-scale-core` unless noted.
+Most day-to-day work assumes `cd sentinel-core` unless noted.
 
 **Stack (Docker)**
 
 ```bash
-cd dragon-scale-core
+cd sentinel-core
 cp .env.example .env   # then edit
 docker compose up -d
 ```
 
 Typical URLs after compose (see `readme.md` for current ports): admin console ~`http://localhost:3000`, API gateway ~`http://localhost:8080`, docs ~`http://localhost:8080/docs`.
 
-**Frontend (`dragon-scale-core/frontend/admin-console/`)**
+**Frontend (`sentinel-core/frontend/admin-console/`)**
 
 ```bash
 npm install
@@ -92,12 +92,12 @@ npm run type-check
 
 **Python backend**
 
-- Per-service virtualenv and `pip install -r requirements.txt` under `dragon-scale-core/backend/<service>/`.
+- Per-service virtualenv and `pip install -r requirements.txt` under `sentinel-core/backend/<service>/`.
 - Run patterns vary by service; check each service’s `readme` or `Dockerfile` for the intended entrypoint.
 
 ## Git
 
-- **Canonical remote**: `https://github.com/MuzeenMir/dragon-scale` — use `origin` → that repo for normal pushes unless the user says otherwise.
+- **Canonical remote**: `https://github.com/MuzeenMir/sentinel` — use `origin` → that repo for normal pushes unless the user says otherwise.
 
 ## Optional local overrides
 

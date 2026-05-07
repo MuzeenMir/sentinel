@@ -4,7 +4,7 @@ extend-exclude = [
     ".test-venv",
     ".venv",
     "venv",
-    "dragon_scale_env",
+    "sentinel_env",
     "compiled",
     "node_modules",
     "__pycache__",
@@ -34,4 +34,4 @@ ignore_missing_imports = true
 no_incremental = true
 explicit_package_bases = true
 namespace_packages = true
-exclude = '(^|/)(ebpf-lib|firewall-adapters|\.test-venv|\.venv|venv|dragon_scale_env|compiled|__pycache__|node_modules)(/|$)'
+exclude = '(^|/)(ebpf-lib|firewall-adapters|\.test-venv|\.venv|venv|sentinel_env|compiled|__pycache__|node_modules)(/|$)'

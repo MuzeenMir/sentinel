@@ -4,7 +4,7 @@
   "packages": {
     ".": {
       "release-type": "simple",
-      "package-name": "dragon-scale",
+      "package-name": "sentinel",
       "include-component-in-tag": false,
       "changelog-sections": [
         { "type": "feat", "section": "Features", "hidden": false },

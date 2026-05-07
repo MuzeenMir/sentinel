@@ -37,15 +37,15 @@ jobs:
       - name: Ruff check
         run: |
           ruff check \
-            dragon-scale-core/backend \
-            dragon-scale-core/stream-processing \
-            dragon-scale-core/training
+            sentinel-core/backend \
+            sentinel-core/stream-processing \
+            sentinel-core/training
       - name: Ruff format check
         run: |
           ruff format --check \
-            dragon-scale-core/backend \
-            dragon-scale-core/stream-processing \
-            dragon-scale-core/training
+            sentinel-core/backend \
+            sentinel-core/stream-processing \
+            sentinel-core/training
 
   lint-frontend:
     name: lint-frontend
@@ -53,14 +53,14 @@ jobs:
     timeout-minutes: 10
     defaults:
       run:
-        working-directory: dragon-scale-core/frontend/admin-console
+        working-directory: sentinel-core/frontend/admin-console
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: npm
-          cache-dependency-path: dragon-scale-core/frontend/admin-console/package-lock.json
+          cache-dependency-path: sentinel-core/frontend/admin-console/package-lock.json
       - run: npm ci
       - name: ESLint
         run: npm run lint

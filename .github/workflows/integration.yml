@@ -1,7 +1,7 @@
 name: integration
 
 # docker-compose-based integration tests + fresh-DB Alembic idempotency probe.
-# Integration suite lives under dragon-scale-core/tests/ (non-e2e slice — that is
+# Integration suite lives under sentinel-core/tests/ (non-e2e slice — that is
 # in e2e-smoke.yml).
 
 on:
@@ -47,7 +47,7 @@ jobs:
     timeout-minutes: 20
     defaults:
       run:
-        working-directory: dragon-scale-core
+        working-directory: sentinel-core
     env:
       JWT_SECRET_KEY: ci-integration-not-a-real-secret
       ADMIN_USERNAME: admin
@@ -60,12 +60,12 @@ jobs:
       - name: Write CI .env
         run: |
           cat > .env <<EOF
-          POSTGRES_USER=dragon-scale
+          POSTGRES_USER=sentinel
           POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-          POSTGRES_DB=dragon_scale_db
-          POSTGRES_HOST=dragon-scale-postgres
+          POSTGRES_DB=sentinel_db
+          POSTGRES_HOST=sentinel-postgres
           POSTGRES_PORT=5432
-          DATABASE_URL=postgresql://dragon-scale:${POSTGRES_PASSWORD}@dragon-scale-postgres:5432/dragon_scale_db
+          DATABASE_URL=postgresql://sentinel:${POSTGRES_PASSWORD}@sentinel-postgres:5432/sentinel_db
           JWT_SECRET_KEY=${JWT_SECRET_KEY}
           ADMIN_USERNAME=${ADMIN_USERNAME}
           ADMIN_PASSWORD=${ADMIN_PASSWORD}
@@ -81,7 +81,7 @@ jobs:
       - name: Wait for Postgres
         run: |
           for i in $(seq 1 30); do
-            if docker compose exec -T postgres pg_isready -U dragon-scale -d dragon_scale_db >/dev/null 2>&1; then
+            if docker compose exec -T postgres pg_isready -U sentinel -d sentinel_db >/dev/null 2>&1; then
               echo "postgres ready after ${i} attempts"; break
             fi
             sleep 2
@@ -101,12 +101,12 @@ jobs:
       - name: Bring up auth + api-gateway
         run: docker compose up -d auth-service api-gateway
       - name: Install Python integration test deps
-        working-directory: dragon-scale-core/backend
+        working-directory: sentinel-core/backend
         run: |
           pip install -r requirements-test.txt
           pip install requests
       - name: Run integration slice
-        working-directory: dragon-scale-core/backend
+        working-directory: sentinel-core/backend
         env:
           INTEGRATION_BASE_URL: http://localhost:8080
           ADMIN_USERNAME: ${{ env.ADMIN_USERNAME }}

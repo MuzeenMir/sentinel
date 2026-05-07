@@ -1,8 +1,8 @@
-# DRAGON_SCALE
+# SENTINEL
 
 Server and endpoint security platform: telemetry collection, AI-assisted detection, policy orchestration, and compliance reporting. Deployed via Docker Compose (dev) or Terraform/AWS (infra scaffolded, not production-validated).
 
-> **Status:** active development. This repository is mid-revamp (v1 → v2). Claims below describe what currently ships. Target architecture and timeline live in `dragon-scale-core/docs/revamp/`. An April 2026 audit (`CODE-REVIEW-main-2026-04-18.md`) drives the v2 plan.
+> **Status:** active development. This repository is mid-revamp (v1 → v2). Claims below describe what currently ships. Target architecture and timeline live in `sentinel-core/docs/revamp/`. An April 2026 audit (`CODE-REVIEW-main-2026-04-18.md`) drives the v2 plan.
 
 ## What ships today (v1)
 
@@ -27,7 +27,7 @@ Server and endpoint security platform: telemetry collection, AI-assisted detecti
 ## Quick start (dev)
 
 ```bash
-cd dragon-scale-core
+cd sentinel-core
 cp .env.example .env           # edit before starting
 docker compose up -d
 ```
@@ -43,7 +43,7 @@ Initial admin credentials are set via `ADMIN_USERNAME` / `ADMIN_PASSWORD` / `ADM
 ## Repository layout
 
 ```
-dragon-scale-core/
+sentinel-core/
 ├── backend/                    # Flask microservices
 ├── frontend/admin-console/     # React + Vite admin UI
 ├── stream-processing/          # Flink jobs
@@ -55,16 +55,16 @@ dragon-scale-core/
 └── docker-compose.yml
 ```
 
-A git-flatten of `dragon-scale-core/` → repo root is scheduled in Phase 0 of the revamp. After that lands, these paths move up one level.
+A git-flatten of `sentinel-core/` → repo root is scheduled in Phase 0 of the revamp. After that lands, these paths move up one level.
 
 ## Documentation
 
-- **Specification index**: `dragon-scale-core/docs/SPECIFICATIONS.md`
-- **Quick refs**: `dragon-scale-core/docs/security.md`, `dragon-scale-core/docs/api-reference.md`, `dragon-scale-core/docs/ml-models.md`
-- **Overview**: `dragon-scale-core/readme.md`
-- **v2 revamp**: `dragon-scale-core/docs/revamp/README.md` and siblings
-- **ADRs**: `dragon-scale-core/docs/adr/`
-- **Backlog**: `dragon-scale-core/docs/revamp/BACKLOG.md`
+- **Specification index**: `sentinel-core/docs/SPECIFICATIONS.md`
+- **Quick refs**: `sentinel-core/docs/security.md`, `sentinel-core/docs/api-reference.md`, `sentinel-core/docs/ml-models.md`
+- **Overview**: `sentinel-core/readme.md`
+- **v2 revamp**: `sentinel-core/docs/revamp/README.md` and siblings
+- **ADRs**: `sentinel-core/docs/adr/`
+- **Backlog**: `sentinel-core/docs/revamp/BACKLOG.md`
 
 ## Contributing
 

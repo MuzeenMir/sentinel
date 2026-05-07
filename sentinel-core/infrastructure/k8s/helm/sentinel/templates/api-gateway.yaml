@@ -1,0 +1,104 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sentinel.fullname" . }}-api-gateway
+  labels:
+    {{- include "sentinel.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api-gateway
+spec:
+  replicas: {{ .Values.apiGateway.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "sentinel.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: api-gateway
+  template:
+    metadata:
+      labels:
+        {{- include "sentinel.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: api-gateway
+    spec:
+      containers:
+        - name: api-gateway
+          image: {{ include "sentinel.image" (dict "service" .Values.apiGateway "global" .Values) }}
+          ports:
+            - containerPort: {{ .Values.apiGateway.port }}
+              protocol: TCP
+          env:
+            - name: SERVICE_NAME
+              value: "api-gateway"
+            {{- include "sentinel.commonEnv" . | nindent 12 }}
+            - name: AI_ENGINE_URL
+              value: "http://{{ include "sentinel.fullname" . }}-ai-engine:5003"
+            - name: DRL_ENGINE_URL
+              value: "http://{{ include "sentinel.fullname" . }}-drl-engine:5005"
+            - name: POLICY_SERVICE_URL
+              value: "http://{{ include "sentinel.fullname" . }}-policy-orchestrator:5004"
+            - name: ALERT_SERVICE_URL
+              value: "http://{{ include "sentinel.fullname" . }}-alert-service:5002"
+            - name: DATA_COLLECTOR_URL
+              value: "http://{{ include "sentinel.fullname" . }}-data-collector:5001"
+          resources:
+            {{- toYaml .Values.apiGateway.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.apiGateway.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.apiGateway.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "sentinel.fullname" . }}-api-gateway
+  labels:
+    {{- include "sentinel.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api-gateway
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.apiGateway.port }}
+      targetPort: {{ .Values.apiGateway.port }}
+      protocol: TCP
+  selector:
+    {{- include "sentinel.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: api-gateway
+{{- if .Values.apiGateway.ingress.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "sentinel.fullname" . }}-api-gateway
+  labels:
+    {{- include "sentinel.labels" . | nindent 4 }}
+  {{- with .Values.apiGateway.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  ingressClassName: {{ .Values.apiGateway.ingress.className }}
+  {{- with .Values.apiGateway.ingress.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    {{- range .Values.apiGateway.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType }}
+            backend:
+              service:
+                name: {{ include "sentinel.fullname" $ }}-api-gateway
+                port:
+                  number: {{ $.Values.apiGateway.port }}
+          {{- end }}
+    {{- end }}
+{{- end }}

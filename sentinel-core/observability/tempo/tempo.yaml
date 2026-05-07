@@ -1,0 +1,32 @@
+## Tempo — SENTINEL Phase 0 slice 5 local pilot.
+## Minimal single-binary config. OTLP gRPC on :4317, query on :3200.
+## Local filesystem storage — not production. Phase 1 replaces this with
+## S3/MinIO backing via Helm values; see docs/revamp/SDD-002.md §observability.
+
+server:
+  http_listen_port: 3200
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+
+ingester:
+  max_block_duration: 5m
+  trace_idle_period: 10s
+
+compactor:
+  compaction:
+    block_retention: 24h
+
+storage:
+  trace:
+    backend: local
+    local:
+      path: /var/tempo/blocks
+    wal:
+      path: /var/tempo/wal

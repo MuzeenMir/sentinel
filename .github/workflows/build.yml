@@ -35,44 +35,44 @@ jobs:
       matrix:
         include:
           - service: ai-engine
-            context: dragon-scale-core/backend
-            dockerfile: dragon-scale-core/backend/ai-engine/Dockerfile
+            context: sentinel-core/backend
+            dockerfile: sentinel-core/backend/ai-engine/Dockerfile
           - service: alert-service
-            context: dragon-scale-core/backend
-            dockerfile: dragon-scale-core/backend/alert-service/Dockerfile
+            context: sentinel-core/backend
+            dockerfile: sentinel-core/backend/alert-service/Dockerfile
           - service: api-gateway
-            context: dragon-scale-core/backend
-            dockerfile: dragon-scale-core/backend/api-gateway/Dockerfile
+            context: sentinel-core/backend
+            dockerfile: sentinel-core/backend/api-gateway/Dockerfile
           - service: auth-service
-            context: dragon-scale-core/backend
-            dockerfile: dragon-scale-core/backend/auth-service/Dockerfile
+            context: sentinel-core/backend
+            dockerfile: sentinel-core/backend/auth-service/Dockerfile
           - service: compliance-engine
-            context: dragon-scale-core/backend
-            dockerfile: dragon-scale-core/backend/compliance-engine/Dockerfile
+            context: sentinel-core/backend
+            dockerfile: sentinel-core/backend/compliance-engine/Dockerfile
           - service: data-collector
-            context: dragon-scale-core/backend
-            dockerfile: dragon-scale-core/backend/data-collector/Dockerfile
+            context: sentinel-core/backend
+            dockerfile: sentinel-core/backend/data-collector/Dockerfile
           - service: drl-engine
-            context: dragon-scale-core/backend
-            dockerfile: dragon-scale-core/backend/drl-engine/Dockerfile
+            context: sentinel-core/backend
+            dockerfile: sentinel-core/backend/drl-engine/Dockerfile
           - service: hardening-service
-            context: dragon-scale-core/backend
-            dockerfile: dragon-scale-core/backend/hardening-service/Dockerfile
+            context: sentinel-core/backend
+            dockerfile: sentinel-core/backend/hardening-service/Dockerfile
           - service: hids-agent
-            context: dragon-scale-core/backend
-            dockerfile: dragon-scale-core/backend/hids-agent/Dockerfile
+            context: sentinel-core/backend
+            dockerfile: sentinel-core/backend/hids-agent/Dockerfile
           - service: policy-orchestrator
-            context: dragon-scale-core/backend
-            dockerfile: dragon-scale-core/backend/policy-orchestrator/Dockerfile
+            context: sentinel-core/backend
+            dockerfile: sentinel-core/backend/policy-orchestrator/Dockerfile
           - service: xai-service
-            context: dragon-scale-core/backend
-            dockerfile: dragon-scale-core/backend/xai-service/Dockerfile
+            context: sentinel-core/backend
+            dockerfile: sentinel-core/backend/xai-service/Dockerfile
           - service: xdp-collector
-            context: dragon-scale-core/backend
-            dockerfile: dragon-scale-core/backend/xdp-collector/Dockerfile
+            context: sentinel-core/backend
+            dockerfile: sentinel-core/backend/xdp-collector/Dockerfile
           - service: admin-console
-            context: dragon-scale-core/frontend/admin-console
-            dockerfile: dragon-scale-core/frontend/admin-console/Dockerfile
+            context: sentinel-core/frontend/admin-console
+            dockerfile: sentinel-core/frontend/admin-console/Dockerfile
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -87,7 +87,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/dragon-scale-${{ matrix.service }}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/sentinel-${{ matrix.service }}
           tags: |
             type=sha,prefix=,format=long
             type=sha,prefix=,format=short

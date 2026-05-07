@@ -55,7 +55,7 @@ jobs:
         run: |
           set +e
           EXIT=0
-          for req in dragon-scale-core/backend/*/requirements.txt; do
+          for req in sentinel-core/backend/*/requirements.txt; do
             echo "::group::pip-audit $req"
             pip-audit -r "$req" --no-deps --strict
             rc=$?
@@ -77,8 +77,8 @@ jobs:
       - run: pip install bandit==1.7.9
       - name: Bandit (HIGH severity fails)
         run: |
-          bandit -r dragon-scale-core/backend \
-            --exclude dragon-scale-core/backend/.venv-backend \
+          bandit -r sentinel-core/backend \
+            --exclude sentinel-core/backend/.venv-backend \
             -ll -ii \
             --format json \
             --output bandit-report.json || true
@@ -111,14 +111,14 @@ jobs:
     timeout-minutes: 10
     defaults:
       run:
-        working-directory: dragon-scale-core/frontend/admin-console
+        working-directory: sentinel-core/frontend/admin-console
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: npm
-          cache-dependency-path: dragon-scale-core/frontend/admin-console/package-lock.json
+          cache-dependency-path: sentinel-core/frontend/admin-console/package-lock.json
       - run: npm ci
       - run: npm audit --audit-level=high
 
@@ -192,7 +192,7 @@ jobs:
     timeout-minutes: 10
     defaults:
       run:
-        working-directory: dragon-scale-core/backend
+        working-directory: sentinel-core/backend
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -217,7 +217,7 @@ jobs:
     needs: []
     defaults:
       run:
-        working-directory: dragon-scale-core
+        working-directory: sentinel-core
     steps:
       - uses: actions/checkout@v4
       - name: Stack up

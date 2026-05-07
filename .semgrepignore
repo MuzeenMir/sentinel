@@ -4,14 +4,14 @@
 #  - stream-processing/: Phase 1 consolidation into analyzer service.
 #  - infrastructure/terraform/: Phase 2+ deployment; EKS hardening tracked separately.
 #  - frontend/admin-console/node_modules/: vendored.
-#  - dragon-scale-core/frontend/admin-console/nginx.conf: header-redefinition is cosmetic;
+#  - sentinel-core/frontend/admin-console/nginx.conf: header-redefinition is cosmetic;
 #    hardening bundle lands with admin-console consolidation into console service.
 
 training/
-dragon-scale-core/training/
+sentinel-core/training/
 stream-processing/
-dragon-scale-core/stream-processing/
+sentinel-core/stream-processing/
 infrastructure/
-dragon-scale-core/infrastructure/
-dragon-scale-core/frontend/admin-console/node_modules/
-dragon-scale-core/frontend/admin-console/nginx.conf
+sentinel-core/infrastructure/
+sentinel-core/frontend/admin-console/node_modules/
+sentinel-core/frontend/admin-console/nginx.conf

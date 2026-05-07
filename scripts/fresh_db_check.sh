@@ -10,20 +10,20 @@
 #
 # Assumptions:
 #   - Docker (or compatible) is on PATH.
-#   - `alembic.ini` lives at dragon-scale-core/backend/migrations/alembic.ini
+#   - `alembic.ini` lives at sentinel-core/backend/migrations/alembic.ini
 #     (path overridable via $ALEMBIC_INI).
 #   - $DATABASE_URL is used by alembic.env.py; we set it to the throwaway DB.
 
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ALEMBIC_INI="${ALEMBIC_INI:-${REPO_ROOT}/dragon-scale-core/backend/migrations/alembic.ini}"
-CONTAINER="${CONTAINER:-dragon-scale-fresh-db-check-$$}"
+ALEMBIC_INI="${ALEMBIC_INI:-${REPO_ROOT}/sentinel-core/backend/migrations/alembic.ini}"
+CONTAINER="${CONTAINER:-sentinel-fresh-db-check-$$}"
 PG_IMAGE="${PG_IMAGE:-postgres:16-alpine}"
 PG_PORT="${PG_PORT:-55432}"
-PG_USER="${PG_USER:-dragon-scale}"
-PG_PASSWORD="${PG_PASSWORD:-dragon-scale}"
-PG_DB="${PG_DB:-dragon_scale_fresh_check}"
+PG_USER="${PG_USER:-sentinel}"
+PG_PASSWORD="${PG_PASSWORD:-sentinel}"
+PG_DB="${PG_DB:-sentinel_fresh_check}"
 WAIT_TIMEOUT="${WAIT_TIMEOUT:-30}"
 
 log() { printf '\033[1;34m[fresh-db]\033[0m %s\n' "$*"; }

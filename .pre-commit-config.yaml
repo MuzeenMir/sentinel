@@ -1,4 +1,4 @@
-# Pre-commit hooks for DRAGON_SCALE.
+# Pre-commit hooks for SENTINEL.
 # Install: `pip install pre-commit && pre-commit install && pre-commit install --hook-type commit-msg`
 # Run on all files: `pre-commit run --all-files`
 
@@ -23,9 +23,9 @@ repos:
     hooks:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
-        files: ^(dragon-scale-core/backend|backend|dragon-scale-core/stream-processing|dragon-scale-core/training|backend/_lib)/
+        files: ^(sentinel-core/backend|backend|sentinel-core/stream-processing|sentinel-core/training|backend/_lib)/
       - id: ruff-format
-        files: ^(dragon-scale-core/backend|backend|dragon-scale-core/stream-processing|dragon-scale-core/training|backend/_lib)/
+        files: ^(sentinel-core/backend|backend|sentinel-core/stream-processing|sentinel-core/training|backend/_lib)/
 
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.11.1
@@ -35,7 +35,7 @@ repos:
           - pydantic>=2.0
           - types-requests
           - types-PyYAML
-        files: ^(dragon-scale-core/backend|backend|backend/_lib)/
+        files: ^(sentinel-core/backend|backend|backend/_lib)/
         # mypy is strict only in new v2 code; v1 services are gradually typed.
         args: [--ignore-missing-imports]
 
@@ -45,7 +45,7 @@ repos:
     hooks:
       - id: prettier
         files: \.(js|jsx|ts|tsx|json|yml|yaml|md|css|scss)$
-        exclude: ^(package-lock\.json|dragon-scale-core/frontend/admin-console/dist/|node_modules/)
+        exclude: ^(package-lock\.json|sentinel-core/frontend/admin-console/dist/|node_modules/)
 
   # Secrets
   - repo: https://github.com/gitleaks/gitleaks

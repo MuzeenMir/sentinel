@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sentinel.fullname" . }}-auth-service
+  labels:
+    {{- include "sentinel.labels" . | nindent 4 }}
+    app.kubernetes.io/component: auth-service
+spec:
+  replicas: {{ .Values.authService.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "sentinel.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: auth-service
+  template:
+    metadata:
+      labels:
+        {{- include "sentinel.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: auth-service
+    spec:
+      containers:
+        - name: auth-service
+          image: {{ include "sentinel.image" (dict "service" .Values.authService "global" .Values) }}
+          ports:
+            - containerPort: {{ .Values.authService.port }}
+              protocol: TCP
+          env:
+            - name: SERVICE_NAME
+              value: "auth-service"
+            {{- include "sentinel.commonEnv" . | nindent 12 }}
+            - name: JWT_ACCESS_EXPIRES_HOURS
+              value: {{ .Values.authService.env.JWT_ACCESS_EXPIRES_HOURS | quote }}
+          resources:
+            {{- toYaml .Values.authService.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.authService.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.authService.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "sentinel.fullname" . }}-auth-service
+  labels:
+    {{- include "sentinel.labels" . | nindent 4 }}
+    app.kubernetes.io/component: auth-service
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.authService.port }}
+      targetPort: {{ .Values.authService.port }}
+      protocol: TCP
+  selector:
+    {{- include "sentinel.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: auth-service
