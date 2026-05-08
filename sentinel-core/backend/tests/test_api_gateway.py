@@ -409,6 +409,36 @@ class TestAlertEndpoints:
         assert resp.status_code == 200
         assert resp.get_json()["acknowledged"] is True
 
+    @patch("requests.post", side_effect=_auth_verify_ok_viewer)
+    def test_acknowledge_alert_viewer_forbidden(self, _mock, client):
+        resp = client.post(
+            "/api/v1/alerts/5/acknowledge",
+            headers=AUTH_HEADER,
+            json={"notes": "reviewed"},
+            content_type="application/json",
+        )
+        assert resp.status_code == 403
+
+    @patch("requests.post", side_effect=_auth_verify_ok_viewer)
+    def test_resolve_alert_viewer_forbidden(self, _mock, client):
+        resp = client.post(
+            "/api/v1/alerts/5/resolve",
+            headers=AUTH_HEADER,
+            json={"resolution": "closed"},
+            content_type="application/json",
+        )
+        assert resp.status_code == 403
+
+    @patch("requests.post", side_effect=_auth_verify_ok_viewer)
+    def test_update_alert_viewer_forbidden(self, _mock, client):
+        resp = client.put(
+            "/api/v1/alerts/5",
+            headers=AUTH_HEADER,
+            json={"status": "resolved"},
+            content_type="application/json",
+        )
+        assert resp.status_code == 403
+
     @patch(
         "requests.get",
         side_effect=_requests_lib.exceptions.ConnectionError("alert svc down"),
@@ -495,11 +525,26 @@ class TestPolicyEndpoints:
         )
         assert resp.status_code == 200
 
+    @patch("requests.post", side_effect=_auth_verify_ok_viewer)
+    def test_update_policy_viewer_forbidden(self, _mock, client):
+        resp = client.put(
+            "/api/v1/policies/p1",
+            headers=AUTH_HEADER,
+            json={"action": "deny"},
+            content_type="application/json",
+        )
+        assert resp.status_code == 403
+
     @patch("requests.delete", return_value=_mock_response(204, {}, content=b""))
     @patch("requests.post", side_effect=_auth_verify_ok)
     def test_delete_policy(self, _post, _del, client):
         resp = client.delete("/api/v1/policies/p1", headers=AUTH_HEADER)
         assert resp.status_code == 204
+
+    @patch("requests.post", side_effect=_auth_verify_ok_viewer)
+    def test_delete_policy_viewer_forbidden(self, _mock, client):
+        resp = client.delete("/api/v1/policies/p1", headers=AUTH_HEADER)
+        assert resp.status_code == 403
 
     @patch(
         "requests.get",
@@ -510,6 +555,48 @@ class TestPolicyEndpoints:
         resp = client.get("/api/v1/policies", headers=AUTH_HEADER)
         assert resp.status_code == 503
         assert "unavailable" in resp.get_json()["error"].lower()
+
+
+class TestAdminAndTenantRBAC:
+    @patch("requests.post", side_effect=_auth_verify_ok_viewer)
+    def test_admin_users_viewer_forbidden(self, _mock, client):
+        resp = client.get("/api/v1/admin/users", headers=AUTH_HEADER)
+        assert resp.status_code == 403
+
+    @patch("requests.post", side_effect=_auth_verify_ok_viewer)
+    def test_admin_update_user_viewer_forbidden(self, _mock, client):
+        resp = client.put(
+            "/api/v1/admin/users/1",
+            headers=AUTH_HEADER,
+            json={"role": "admin"},
+            content_type="application/json",
+        )
+        assert resp.status_code == 403
+
+    @patch("requests.post", side_effect=_auth_verify_ok_viewer)
+    def test_create_tenant_viewer_forbidden(self, _mock, client):
+        resp = client.post(
+            "/api/v1/tenants",
+            headers=AUTH_HEADER,
+            json={"name": "tenant-a"},
+            content_type="application/json",
+        )
+        assert resp.status_code == 403
+
+    @patch("requests.post", side_effect=_auth_verify_ok_viewer)
+    def test_update_tenant_viewer_forbidden(self, _mock, client):
+        resp = client.put(
+            "/api/v1/tenants/1",
+            headers=AUTH_HEADER,
+            json={"status": "suspended"},
+            content_type="application/json",
+        )
+        assert resp.status_code == 403
+
+    @patch("requests.post", side_effect=_auth_verify_ok_viewer)
+    def test_delete_tenant_viewer_forbidden(self, _mock, client):
+        resp = client.delete("/api/v1/tenants/1", headers=AUTH_HEADER)
+        assert resp.status_code == 403
 
 
 # ===================================================================

@@ -142,6 +142,50 @@ class TestSEC02_BruteForceProtection:
         resp = _login(client)
         assert resp.status_code in (401, 403, 429)
 
+    def test_locked_account_rejects_correct_password_before_password_check(self, client):
+        _create_user(client)
+        with app.app_context():
+            user = User.query.filter_by(username="secuser").first()
+            user.failed_login_attempts = 5
+            user.locked_until = auth_mod.datetime.utcnow() + auth_mod.timedelta(
+                minutes=15
+            )
+            db.session.commit()
+
+        with (
+            patch.object(auth_mod, "audit_log") as mock_audit,
+            patch.object(
+                User,
+                "check_password",
+                side_effect=AssertionError("password checked for locked user"),
+            ),
+        ):
+            resp = _login(client)
+
+        assert resp.status_code == 403
+        assert "temporarily locked" in resp.get_json()["error"].lower()
+        _mock_redis.incr.assert_any_call("failed_login_ip:127.0.0.1")
+        _mock_redis.expire.assert_any_call("failed_login_ip:127.0.0.1", 3600)
+        mock_audit.assert_called()
+
+    def test_unknown_user_runs_dummy_password_check(self, client):
+        with patch.object(auth_mod.bcrypt, "checkpw", return_value=False) as mock_check:
+            resp = client.post(
+                "/api/v1/auth/login",
+                json={"username": "missing-user", "password": "WrongPassword1!"},
+            )
+
+        assert resp.status_code == 401
+        assert mock_check.called
+
+    def test_login_rejects_non_string_password(self, client):
+        resp = client.post(
+            "/api/v1/auth/login",
+            json={"username": "missing-user", "password": 123},
+        )
+
+        assert resp.status_code == 400
+
 
 class TestSEC03_TokenSecurity:
     """SEC-03: JWT tokens are properly signed and validated."""
@@ -235,6 +279,29 @@ class TestSEC07_AccountStatus:
 
         resp = _login(client)
         assert resp.status_code == 403
+
+    def test_suspended_account_rejects_before_password_check(self, client):
+        _create_user(client)
+        with app.app_context():
+            user = User.query.filter_by(username="secuser").first()
+            user.status = UserStatus.SUSPENDED
+            db.session.commit()
+
+        with (
+            patch.object(auth_mod, "audit_log") as mock_audit,
+            patch.object(
+                User,
+                "check_password",
+                side_effect=AssertionError("password checked for suspended user"),
+            ),
+        ):
+            resp = _login(client)
+
+        assert resp.status_code == 403
+        assert "inactive or suspended" in resp.get_json()["error"].lower()
+        _mock_redis.incr.assert_any_call("failed_login_ip:127.0.0.1")
+        _mock_redis.expire.assert_any_call("failed_login_ip:127.0.0.1", 3600)
+        mock_audit.assert_called()
 
     def test_inactive_user_blocked(self, client):
         _create_user(client)

@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # SENTINEL Agent Installer
-# Usage: curl -sSL https://sentinel.example.com/install.sh | bash -s -- --token <AGENT_TOKEN> --server <API_URL>
+# Usage: curl -sSL https://sentinel.example.com/install.sh | bash -s -- --token <AGENT_TOKEN> --server <API_URL> --sha256 <EXPECTED_SHA256>
 set -euo pipefail
 
 SENTINEL_VERSION="${SENTINEL_VERSION:-latest}"
 SENTINEL_API_URL=""
 SENTINEL_AGENT_TOKEN=""
+SENTINEL_AGENT_SHA256="${SENTINEL_AGENT_SHA256:-}"
+SENTINEL_COSIGN_PUBKEY="${SENTINEL_COSIGN_PUBKEY:-}"
 INSTALL_DIR="/opt/sentinel-agent"
 DATA_DIR="/var/lib/sentinel"
 LOG_DIR="/var/log/sentinel"
@@ -20,12 +22,17 @@ parse_args() {
             --token)   SENTINEL_AGENT_TOKEN="$2"; shift 2 ;;
             --server)  SENTINEL_API_URL="$2"; shift 2 ;;
             --version) SENTINEL_VERSION="$2"; shift 2 ;;
+            --sha256)  SENTINEL_AGENT_SHA256="$2"; shift 2 ;;
+            --cosign-pubkey) SENTINEL_COSIGN_PUBKEY="$2"; shift 2 ;;
             *)         die "Unknown option: $1" ;;
         esac
     done
 
     [[ -n "$SENTINEL_AGENT_TOKEN" ]] || die "--token is required"
     [[ -n "$SENTINEL_API_URL" ]] || die "--server is required"
+    [[ "$SENTINEL_API_URL" == https://* ]] || die "--server must use https://"
+    [[ -n "$SENTINEL_AGENT_SHA256" ]] || die "--sha256 or SENTINEL_AGENT_SHA256 is required"
+    [[ "$SENTINEL_AGENT_SHA256" =~ ^[A-Fa-f0-9]{64}$ ]] || die "agent SHA-256 must be 64 hex characters"
 }
 
 detect_distro() {
@@ -41,7 +48,7 @@ detect_distro() {
 }
 
 install_dependencies() {
-    local deps=(curl ca-certificates)
+    local deps=(curl ca-certificates coreutils python3)
 
     case "$DISTRO_ID" in
         ubuntu|debian)
@@ -91,25 +98,58 @@ install_agent() {
     mkdir -p "$INSTALL_DIR" "$DATA_DIR" "$LOG_DIR"
 
     local download_url="${SENTINEL_API_URL%/}/downloads/agent/${SENTINEL_VERSION}/sentinel-agent-$(uname -m)"
+    local tmp_binary
+    tmp_binary="$(mktemp)"
+    cleanup_agent_download() {
+        rm -f "$tmp_binary" "$tmp_binary.sig"
+    }
+    trap cleanup_agent_download EXIT
+
     log "Downloading agent binary from $download_url..."
-    if ! curl -fsSL -o "$INSTALL_DIR/sentinel-agent" "$download_url"; then
+    if ! curl --proto '=https' --tlsv1.2 -fsSL -o "$tmp_binary" "$download_url"; then
         die "Failed to download agent binary. Verify --server URL and network connectivity."
     fi
-    chmod 755 "$INSTALL_DIR/sentinel-agent"
+
+    printf '%s  %s\n' "$SENTINEL_AGENT_SHA256" "$tmp_binary" | sha256sum -c - >/dev/null ||
+        die "Agent binary checksum verification failed"
+
+    if [[ -n "$SENTINEL_COSIGN_PUBKEY" ]]; then
+        command -v cosign >/dev/null 2>&1 || die "cosign is required when --cosign-pubkey is set"
+        curl --proto '=https' --tlsv1.2 -fsSL -o "$tmp_binary.sig" "${download_url}.sig" ||
+            die "Failed to download agent signature"
+        cosign verify-blob --key "$SENTINEL_COSIGN_PUBKEY" --signature "$tmp_binary.sig" "$tmp_binary" >/dev/null ||
+            die "Agent binary signature verification failed"
+    fi
+
+    install -m 755 "$tmp_binary" "$INSTALL_DIR/sentinel-agent"
+    cleanup_agent_download
+    trap - EXIT
     log "Agent binary installed at $INSTALL_DIR/sentinel-agent"
 
-    cat > "$INSTALL_DIR/config.json" <<EOF
-{
-  "control_plane_url": "$SENTINEL_API_URL",
-  "auth_token": "$SENTINEL_AGENT_TOKEN",
-  "data_dir": "$DATA_DIR",
-  "log_dir": "$LOG_DIR",
-  "enable_xdp": true,
-  "enable_hids": true,
-  "enable_hardening": true,
-  "enable_fim": true
+    SENTINEL_API_URL="$SENTINEL_API_URL" \
+    SENTINEL_AGENT_TOKEN="$SENTINEL_AGENT_TOKEN" \
+    DATA_DIR="$DATA_DIR" \
+    LOG_DIR="$LOG_DIR" \
+    python3 - "$INSTALL_DIR/config.json" <<'PY'
+import json
+import os
+import sys
+
+config = {
+    "control_plane_url": os.environ["SENTINEL_API_URL"],
+    "auth_token": os.environ["SENTINEL_AGENT_TOKEN"],
+    "data_dir": os.environ["DATA_DIR"],
+    "log_dir": os.environ["LOG_DIR"],
+    "enable_xdp": True,
+    "enable_hids": True,
+    "enable_hardening": True,
+    "enable_fim": True,
 }
-EOF
+
+with open(sys.argv[1], "w", encoding="utf-8") as handle:
+    json.dump(config, handle, indent=2)
+    handle.write("\n")
+PY
     chmod 600 "$INSTALL_DIR/config.json"
 
     log "Configuration written to $INSTALL_DIR/config.json"
@@ -135,10 +175,13 @@ LimitNOFILE=65536
 LimitMEMLOCK=infinity
 
 # Security hardening for the service itself
-NoNewPrivileges=no
+NoNewPrivileges=yes
+CapabilityBoundingSet=CAP_BPF CAP_PERFMON CAP_NET_ADMIN CAP_NET_RAW CAP_SYS_RESOURCE CAP_SYS_ADMIN
+AmbientCapabilities=CAP_BPF CAP_PERFMON CAP_NET_ADMIN CAP_NET_RAW CAP_SYS_RESOURCE CAP_SYS_ADMIN
 ProtectSystem=strict
 ReadWritePaths=$DATA_DIR $LOG_DIR /sys/fs/bpf
 ProtectHome=true
+PrivateTmp=true
 
 [Install]
 WantedBy=multi-user.target

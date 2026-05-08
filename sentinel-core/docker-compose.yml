@@ -6,9 +6,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-sentinel}
       POSTGRES_USER: ${POSTGRES_USER:-sentinel}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sentinel_password}
-    ports:
-      - "5433:5432"  # host 5433 to avoid conflict with local PostgreSQL on 5432
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -24,8 +22,6 @@ services:
   redis:
     image: redis:7-alpine
     container_name: sentinel-redis
-    ports:
-      - "6379:6379"
     volumes:
       - redis_data:/data
     command: redis-server --appendonly yes
@@ -45,9 +41,9 @@ services:
       - POSTGRES_HOST=sentinel-postgres
       - POSTGRES_PORT=5432
       - POSTGRES_USER=${POSTGRES_USER:-sentinel}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-sentinel_password}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
       - POSTGRES_DB=${POSTGRES_DB:-sentinel}
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-sentinel}:${POSTGRES_PASSWORD:-sentinel_password}@sentinel-postgres:5432/${POSTGRES_DB:-sentinel}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-sentinel}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@sentinel-postgres:5432/${POSTGRES_DB:-sentinel}
     depends_on:
       postgres:
         condition: service_healthy
@@ -63,14 +59,12 @@ services:
       context: ./backend
       dockerfile: auth-service/Dockerfile
     container_name: sentinel-auth-service
-    ports:
-      - "5000:5000"
     environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-sentinel}:${POSTGRES_PASSWORD:-sentinel_password}@postgres:5432/${POSTGRES_DB:-sentinel}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-sentinel}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@sentinel-postgres:5432/${POSTGRES_DB:-sentinel}
       - REDIS_URL=redis://redis:6379
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-change-this-in-production}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:?set JWT_SECRET_KEY}
       - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-ChangeMe!2026}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:?set ADMIN_PASSWORD}
       - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@yourdomain.com}
     depends_on:
       postgres:
@@ -90,8 +84,6 @@ services:
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
-    ports:
-      - "2181:2181"
     networks:
       - sentinel-network
 
@@ -100,20 +92,18 @@ services:
     container_name: sentinel-kafka
     depends_on:
       - zookeeper
-    ports:
-      - "9092:9092"
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
     networks:
       - sentinel-network
     healthcheck:
-      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server kafka:29092 > /dev/null 2>&1"]
       interval: 10s
       timeout: 10s
       retries: 15
@@ -139,6 +129,7 @@ services:
       - HARDENING_SERVICE_URL=http://hardening-service:5011
       - HIDS_AGENT_URL=http://hids-agent:5010
       - REDIS_URL=redis://redis:6379
+      - INTERNAL_SERVICE_TOKEN=${INTERNAL_SERVICE_TOKEN:?set INTERNAL_SERVICE_TOKEN}
       # Phase 0 slice 5 — OTel pilot. Empty = telemetry disabled (no-op).
       # Set to `http://tempo:4317` (or an OTLP collector) to enable. Start the
       # `observability` profile locally: `docker compose --profile observability up`.
@@ -163,8 +154,6 @@ services:
       context: ./backend
       dockerfile: data-collector/Dockerfile
     container_name: sentinel-data-collector
-    ports:
-      - "5001:5001"
     environment:
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - REDIS_URL=redis://redis:6379
@@ -182,11 +171,16 @@ services:
     restart: unless-stopped
 
   # High-speed XDP Collector (bare-metal / privileged container)
+  # XDP uses host networking, so localhost is the Docker host and Compose bridge
+  # service DNS is unavailable after Kafka/auth-service host ports are removed.
+  # Operators enabling this profile must provide externally reachable Kafka and
+  # control-plane endpoints through the XDP_* variables.
   xdp-collector:
     build:
       context: ./backend
       dockerfile: xdp-collector/Dockerfile
     container_name: sentinel-xdp-collector
+    profiles: ["xdp"]
     # XDP requires host networking and privileges to attach to NIC
     network_mode: "host"
     privileged: true
@@ -195,8 +189,15 @@ services:
       - XDP_ENABLED=true
       - XDP_INTERFACE=eth0
       - XDP_QUEUE_COUNT=1
-      - KAFKA_BOOTSTRAP_SERVERS=localhost:9092
-      - AUTH_SERVICE_URL=http://localhost:5000
+      - KAFKA_BOOTSTRAP_SERVERS=${XDP_KAFKA_BOOTSTRAP_SERVERS:-}
+      - AUTH_SERVICE_URL=${XDP_AUTH_SERVICE_URL:-}
+    command:
+      - /bin/sh
+      - -c
+      - >
+        : "$${KAFKA_BOOTSTRAP_SERVERS:?set XDP_KAFKA_BOOTSTRAP_SERVERS when using profile xdp}";
+        : "$${AUTH_SERVICE_URL:?set XDP_AUTH_SERVICE_URL when using profile xdp}";
+        exec gunicorn app:app -b 0.0.0.0:5012 -k gevent -w 4 --timeout 120 --access-logfile -
     depends_on:
       - auth-service
     restart: unless-stopped
@@ -207,8 +208,6 @@ services:
       context: ./backend
       dockerfile: alert-service/Dockerfile
     container_name: sentinel-alert-service
-    ports:
-      - "5002:5002"
     environment:
       - REDIS_URL=redis://redis:6379
       - AUTH_SERVICE_URL=http://auth-service:5000
@@ -230,8 +229,6 @@ services:
       context: ./backend
       dockerfile: ai-engine/Dockerfile
     container_name: sentinel-ai-engine
-    ports:
-      - "5003:5003"
     environment:
       - REDIS_URL=redis://redis:6379
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
@@ -263,9 +260,6 @@ services:
     environment:
       - discovery.type=single-node
       - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
-    ports:
-      - "9200:9200"
-      - "9300:9300"
     volumes:
       - es_data:/usr/share/elasticsearch/data
     networks:
@@ -276,8 +270,6 @@ services:
   kibana:
     image: docker.elastic.co/kibana/kibana:7.17.0
     container_name: sentinel-kibana
-    ports:
-      - "5601:5601"
     environment:
       ELASTICSEARCH_HOSTS: http://elasticsearch:9200
     depends_on:
@@ -292,8 +284,6 @@ services:
       context: ./backend
       dockerfile: policy-orchestrator/Dockerfile
     container_name: sentinel-policy-orchestrator
-    ports:
-      - "5004:5004"
     environment:
       - REDIS_URL=redis://redis:6379
       - AUTH_SERVICE_URL=http://auth-service:5000
@@ -310,8 +300,6 @@ services:
       context: ./backend
       dockerfile: drl-engine/Dockerfile
     container_name: sentinel-drl-engine
-    ports:
-      - "5005:5005"
     environment:
       - REDIS_URL=redis://redis:6379
       - AI_ENGINE_URL=http://ai-engine:5003
@@ -338,8 +326,6 @@ services:
       context: ./backend
       dockerfile: xai-service/Dockerfile
     container_name: sentinel-xai-service
-    ports:
-      - "5006:5006"
     environment:
       - REDIS_URL=redis://redis:6379
       - AI_ENGINE_URL=http://ai-engine:5003
@@ -358,8 +344,6 @@ services:
       context: ./backend
       dockerfile: compliance-engine/Dockerfile
     container_name: sentinel-compliance-engine
-    ports:
-      - "5007:5007"
     environment:
       - REDIS_URL=redis://redis:6379
       - AUTH_SERVICE_URL=http://auth-service:5000
@@ -376,8 +360,6 @@ services:
       context: ./backend
       dockerfile: hids-agent/Dockerfile
     container_name: sentinel-hids-agent
-    ports:
-      - "5010:5010"
     environment:
       - REDIS_URL=redis://redis:6379
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
@@ -407,8 +389,6 @@ services:
       context: ./backend
       dockerfile: hardening-service/Dockerfile
     container_name: sentinel-hardening-service
-    ports:
-      - "5011:5011"
     environment:
       - REDIS_URL=redis://redis:6379
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
@@ -451,8 +431,6 @@ services:
   prometheus:
     image: prom/prometheus:v2.51.0
     container_name: sentinel-prometheus
-    ports:
-      - "9090:9090"
     volumes:
       - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
@@ -467,10 +445,8 @@ services:
   grafana:
     image: grafana/grafana:10.4.0
     container_name: sentinel-grafana
-    ports:
-      - "3001:3000"
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-sentinel}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:?set GRAFANA_PASSWORD}
       - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
       - grafana_data:/var/lib/grafana
@@ -547,7 +523,7 @@ services:
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - DRL_ENGINE_URL=http://drl-engine:5005
       - POLICY_SERVICE_URL=http://policy-orchestrator:5004
-      - INTERNAL_SERVICE_TOKEN=${INTERNAL_SERVICE_TOKEN:-}
+      - INTERNAL_SERVICE_TOKEN=${INTERNAL_SERVICE_TOKEN:?set INTERNAL_SERVICE_TOKEN}
       - FLINK_PARALLELISM=1
       - CHECKPOINT_DIR=file:///tmp/flink-checkpoints/drl-feed
     depends_on:

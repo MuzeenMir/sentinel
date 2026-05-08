@@ -97,6 +97,8 @@ limiter = Limiter(
 
 logger = logging.getLogger(__name__)
 
+DUMMY_PASSWORD_HASH = bcrypt.hashpw(b"dummy-password-for-timing-only", bcrypt.gensalt())
+
 
 # Enums
 class UserRole(Enum):
@@ -378,6 +380,8 @@ def login():
 
         username = data["username"]
         password = data["password"]
+        if not isinstance(username, str) or not isinstance(password, str):
+            return jsonify({"error": "Username and password must be strings"}), 400
 
         # Additional IP-based rate limiting
         ip_addr = request.remote_addr
@@ -391,6 +395,43 @@ def login():
             ), 429
 
         user = User.query.filter_by(username=username).first()
+
+        if user:
+            if user.status != UserStatus.ACTIVE:
+                redis_client.incr(f"failed_login_ip:{ip_addr}")
+                redis_client.expire(f"failed_login_ip:{ip_addr}", 3600)
+                audit_log(
+                    AuditCategory.AUTH,
+                    "login_blocked_inactive",
+                    actor=f"user:{username}",
+                    detail={"ip": ip_addr, "status": user.status.value},
+                    redis_client=redis_client,
+                )
+                return jsonify({"error": "Account is inactive or suspended"}), 403
+
+            if login_attempts_exceeded(user):
+                redis_client.incr(f"failed_login_ip:{ip_addr}")
+                redis_client.expire(f"failed_login_ip:{ip_addr}", 3600)
+                audit_log(
+                    AuditCategory.AUTH,
+                    "login_blocked_locked",
+                    actor=f"user:{username}",
+                    detail={"ip": ip_addr},
+                    redis_client=redis_client,
+                )
+                remaining_time = (
+                    int((user.locked_until - datetime.utcnow()).total_seconds())
+                    if user.locked_until
+                    else 0
+                )
+                return jsonify(
+                    {
+                        "error": "Account temporarily locked due to too many failed attempts",
+                        "retry_after": max(0, remaining_time),
+                    }
+                ), 403
+        else:
+            bcrypt.checkpw(password.encode("utf-8"), DUMMY_PASSWORD_HASH)
 
         if not user or not user.check_password(password):
             # Increment failed attempts for both IP and user
@@ -406,23 +447,6 @@ def login():
                 redis_client=redis_client,
             )
             return jsonify({"error": "Invalid credentials"}), 401
-
-        # Check if user is locked or inactive
-        if user.status != UserStatus.ACTIVE:
-            return jsonify({"error": "Account is inactive or suspended"}), 403
-
-        if login_attempts_exceeded(user):
-            remaining_time = (
-                (user.locked_until - datetime.utcnow()).seconds
-                if user.locked_until
-                else 0
-            )
-            return jsonify(
-                {
-                    "error": "Account temporarily locked due to too many failed attempts",
-                    "retry_after": remaining_time,
-                }
-            ), 403
 
         # Reset login attempts and update last login
         reset_login_attempts(user)

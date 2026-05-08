@@ -171,9 +171,14 @@ def _fetch_downstream_stats():
         "policies_by_action": {},
     }
 
-    headers = {
-        "Authorization": f'Bearer {os.environ.get("INTERNAL_SERVICE_TOKEN", "")}'
-    }
+    internal_service_token = os.environ.get("INTERNAL_SERVICE_TOKEN", "").strip()
+    headers = {}
+    if internal_service_token:
+        headers["Authorization"] = f"Bearer {internal_service_token}"
+    else:
+        logger.warning(
+            "INTERNAL_SERVICE_TOKEN is unset; downstream stats requests will be unauthenticated"
+        )
 
     try:
         resp = requests.get(
@@ -448,7 +453,7 @@ def create_alert():
 
 
 @app.route("/api/v1/alerts/<int:alert_id>/acknowledge", methods=["POST"])
-@require_auth
+@require_role("admin")
 def acknowledge_alert(alert_id):
     """Acknowledge an alert"""
     try:
@@ -467,7 +472,7 @@ def acknowledge_alert(alert_id):
 
 
 @app.route("/api/v1/alerts/<int:alert_id>/resolve", methods=["POST"])
-@require_auth
+@require_role("admin")
 def resolve_alert(alert_id):
     """Resolve an alert"""
     return _proxy_to(
@@ -476,7 +481,7 @@ def resolve_alert(alert_id):
 
 
 @app.route("/api/v1/alerts/<int:alert_id>", methods=["PUT"])
-@require_auth
+@require_role("admin")
 def update_alert(alert_id):
     """Update alert status (e.g. ignore)"""
     return _proxy_to(app.config["ALERT_SERVICE_URL"], f"/api/v1/alerts/{alert_id}")
@@ -686,14 +691,14 @@ def create_policy():
 
 
 @app.route("/api/v1/policies/<policy_id>", methods=["PUT"])
-@require_auth
+@require_role("admin")
 def update_policy(policy_id):
     """Update a policy"""
     return _proxy_to(app.config["POLICY_SERVICE_URL"], f"/api/v1/policies/{policy_id}")
 
 
 @app.route("/api/v1/policies/<policy_id>", methods=["DELETE"])
-@require_auth
+@require_role("admin")
 def delete_policy(policy_id):
     """Delete a policy"""
     return _proxy_to(app.config["POLICY_SERVICE_URL"], f"/api/v1/policies/{policy_id}")
@@ -877,14 +882,14 @@ def hids_status():
 
 
 @app.route("/api/v1/admin/users", methods=["GET"])
-@require_auth
+@require_role("admin")
 def admin_get_users():
     """List users (admin)"""
     return _proxy_to(app.config["AUTH_SERVICE_URL"], "/api/v1/auth/users")
 
 
 @app.route("/api/v1/admin/users/<int:user_id>", methods=["PUT"])
-@require_auth
+@require_role("admin")
 def admin_update_user(user_id):
     """Update a user (admin)"""
     return _proxy_to(app.config["AUTH_SERVICE_URL"], f"/api/v1/auth/users/{user_id}")
@@ -942,15 +947,33 @@ def bad_request(e):
 # ── Tenant Management (proxied to auth-service) ──────────────────────────
 
 
-@app.route("/api/v1/tenants", methods=["GET", "POST"])
+@app.route("/api/v1/tenants", methods=["GET"])
 @require_auth
-def tenants():
+def tenants_list():
     return _proxy_to(app.config["AUTH_SERVICE_URL"], "/api/v1/tenants")
 
 
-@app.route("/api/v1/tenants/<int:tenant_pk>", methods=["GET", "PUT", "DELETE"])
+@app.route("/api/v1/tenants", methods=["POST"])
+@require_role("admin")
+def tenants_create():
+    return _proxy_to(app.config["AUTH_SERVICE_URL"], "/api/v1/tenants")
+
+
+@app.route("/api/v1/tenants/<int:tenant_pk>", methods=["GET"])
 @require_auth
-def tenant_detail(tenant_pk):
+def tenant_get(tenant_pk):
+    return _proxy_to(app.config["AUTH_SERVICE_URL"], f"/api/v1/tenants/{tenant_pk}")
+
+
+@app.route("/api/v1/tenants/<int:tenant_pk>", methods=["PUT"])
+@require_role("admin")
+def tenant_update(tenant_pk):
+    return _proxy_to(app.config["AUTH_SERVICE_URL"], f"/api/v1/tenants/{tenant_pk}")
+
+
+@app.route("/api/v1/tenants/<int:tenant_pk>", methods=["DELETE"])
+@require_role("admin")
+def tenant_delete(tenant_pk):
     return _proxy_to(app.config["AUTH_SERVICE_URL"], f"/api/v1/tenants/{tenant_pk}")
 
 
