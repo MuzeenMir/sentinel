@@ -382,7 +382,7 @@ class TestAlertEndpoints:
         assert resp.status_code == 201
 
     @patch("requests.post", side_effect=_auth_verify_ok_viewer)
-    def test_create_alert_viewer_forbidden(self, _mock, client):
+    def test_viewer_cannot_create_alert(self, _mock, client):
         resp = client.post(
             "/api/v1/alerts",
             headers=AUTH_HEADER,
