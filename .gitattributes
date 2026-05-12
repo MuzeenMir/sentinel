@@ -1,2 +1,10 @@
-# Ensure shell scripts always use LF (fixes "bash\r: No such file or directory" on Linux)
+* text=auto eol=lf
 *.sh text eol=lf
+*.py text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.png binary
+*.jpg binary
+*.pdf binary
