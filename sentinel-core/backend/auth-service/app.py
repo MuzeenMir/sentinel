@@ -32,6 +32,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from observability import configure_logging
 from metrics import init_metrics
 from audit_logger import audit_log, AuditCategory
+from _lib.net import bind_host
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -970,4 +971,4 @@ if __name__ == "__main__":
     if debug_mode:
         logger.warning("Running in DEBUG mode - DO NOT use in production!")
 
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "5000")), debug=debug_mode)
+    app.run(host=bind_host(), port=int(os.environ.get("PORT", "5000")), debug=debug_mode)

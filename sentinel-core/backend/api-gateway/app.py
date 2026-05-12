@@ -21,6 +21,7 @@ from audit_logger import (
     verify_integrity,
     AuditCategory,
 )
+from _lib.net import bind_host
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -1052,4 +1053,4 @@ def audit_categories():
 
 if __name__ == "__main__":
     debug_mode = os.environ.get("FLASK_DEBUG", "False").lower() == "true"
-    app.run(host="0.0.0.0", port=8080, debug=debug_mode)
+    app.run(host=bind_host(), port=8080, debug=debug_mode)

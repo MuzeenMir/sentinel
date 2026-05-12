@@ -11,6 +11,7 @@ WORKDIR /app
 
 COPY auth_middleware.py observability.py metrics.py resilience.py tenant_middleware.py ./
 COPY integrations/ integrations/
+COPY _lib/ _lib/
 
 COPY drl-engine/requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel \

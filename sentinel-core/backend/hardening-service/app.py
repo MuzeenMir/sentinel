@@ -35,6 +35,7 @@ from tenant_middleware import require_tenant
 from observability import configure_logging
 from metrics import init_metrics, HARDENING_POSTURE
 from ebpf_lib.loader import ProgramLoader
+from _lib.net import bind_host
 
 configure_logging(service_name="hardening-service")
 logger = logging.getLogger("sentinel.hardening-service")
@@ -1140,7 +1141,7 @@ with app.app_context():
 
 if __name__ == "__main__":
     app.run(
-        host="0.0.0.0",
+        host=bind_host(),
         port=int(os.environ.get("PORT", "5011")),
         debug=False,
     )

@@ -38,6 +38,7 @@ from auth_middleware import require_auth, require_role
 from tenant_middleware import require_tenant
 from observability import configure_logging
 from metrics import init_metrics, EBPF_EVENTS, FIM_ALERTS as FIM_ALERTS_METRIC
+from _lib.net import bind_host
 from ebpf_lib.schemas.events import (
     ProcessExecEvent,
     FileAccessEvent,
@@ -560,7 +561,7 @@ with app.app_context():
 
 if __name__ == "__main__":
     app.run(
-        host="0.0.0.0",
+        host=bind_host(),
         port=int(os.environ.get("PORT", "5010")),
         debug=False,
     )
