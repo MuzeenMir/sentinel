@@ -12,6 +12,7 @@ WORKDIR /app
 
 COPY auth_middleware.py observability.py metrics.py resilience.py tenant_middleware.py ./
 COPY integrations/ integrations/
+COPY _lib/ _lib/
 COPY ebpf-lib/ ebpf_lib/
 
 COPY hids-agent/requirements.txt .
