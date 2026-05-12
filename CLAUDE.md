@@ -1,6 +1,14 @@
-# SENTINEL — Claude Code project context
+# Dragon-Scale (formerly Sentinel) — Claude Code project context
 
-Use this file for Claude Code sessions in this repository. Primary application code lives under **`sentinel-core/`** (not the repo root alone — flatten to root is a Phase 0 task, see below).
+Use this file for Claude Code sessions in this repository. Primary application code lives under **`sentinel-core/`** (path name kept until Phase-1 flatten — see Phase 0 status below). The product was rebranded from `sentinel` → `dragon-scale`; the legacy upstream remote is still `MuzeenMir/sentinel` until a new repo is provisioned.
+
+## Active baseline plan (2026-05-12)
+
+**Read first:** `.team/specs/2026-05-12-ultraplan-baseline.md` — current path-to-baseline plan.
+**Branch:** `fix/dragon-scale-stabilize-2026-05-11`.
+**Owner:** Marcus (CTO) · Executor: Kai (Codex) · Approver: Mir.
+
+`sentinel-main/` sibling tree was deleted in Wave 2 (A3) after `.team/tickets/T-001-tree-diff-audit.md` confirmed zero ports needed.
 
 ## SENTINEL v2 Revamp — Active Phases
 
@@ -13,7 +21,19 @@ Use this file for Claude Code sessions in this repository. Primary application c
 - `collector` ← data-collector + agent-grpc + sensor skeletons (Falco/Suricata/Wazuh/OpenSCAP)
 - `llm-gateway` ← new (Gemma 4, TurboQuant); Phase 1 = shell returning 410
 
-**Phase 0 (4 wks, active):** stabilize — 8 split CI workflows, idempotent migrations, honest README, secrets sweep, SBOM+cosign, OTel pilot, git flatten `sentinel-core/`→root, CODEOWNERS, commitlint, trunk-based. Exit: 7 consecutive green days on `main`.
+**Phase 0 (active, baseline plan = `.team/specs/2026-05-12-ultraplan-baseline.md`):** stabilize. Status at 2026-05-12:
+- ✅ 9 split CI workflows present (build/e2e-smoke/integration/lint/release-please/sbom/security/typecheck/unit)
+- ✅ CODEOWNERS at repo root
+- ✅ CONTRIBUTING.md
+- ✅ B1 admin-RBAC on mutating routes; B2 lockout-before-bcrypt; install.sh supply-chain hardening (SHA256+cosign+HTTPS); install.sh systemd unit hardening (NoNewPrivileges/ProtectSystem/ProtectHome/PrivateTmp)
+- ✅ `.gitattributes` LF normalization + `git add --renormalize .` (Wave 2 W2.2, PR #1 merged 2026-05-12)
+- ✅ `bind_host()` shared helper + 127.0.0.1 default for Flask dev binds (Wave 2 W2.3, PR #3 merged 2026-05-12)
+- ❌ `validate_compose_security.py` 7-finding assertion (Wave 2 W2.4, next)
+- ❌ CI required-checks gate + ruff baseline cleared + B3 unit-file lint test (Wave 3)
+- ❌ branch protection on `main` (Wave 4, Mir)
+- ❌ idempotent migrations, honest README, secrets sweep, SBOM+cosign verify, OTel pilot, `sentinel-core/`→root flatten, commitlint, trunk-based (Wave 6, deferred — separate spec)
+
+Exit: 7 consecutive green days on `main`.
 
 **Phase 1 (8 wks, blocked on Phase 0):** consolidate behind `USE_V2_*` JWT flags — shared `backend/_lib/` (cim, tenancy, otel, audit, llm_client), Helm scaffold, PG16 + pgvector + RLS, Kafka 3 per-tenant topics, Redis 7, Tempo. Exit: `sentinel-internal` canary runs 14 days on v2 with zero P0/P1 regressions.
 
