@@ -22,6 +22,14 @@ _xai_dir = os.path.join(_backend_dir, "xai-service")
 sys.path.insert(0, _xai_dir)
 sys.path.insert(0, _backend_dir)
 
+# Force submodule resolution so unittest.mock.patch can look them up
+# as attributes on the parent package (empty __init__.py means they're
+# otherwise not bound until first explicit import).
+import explainers.shap_explainer  # noqa: F401
+import explainers.text_explainer  # noqa: F401
+import reports.audit_trail  # noqa: F401
+import reports.compliance_report  # noqa: F401
+
 # ---------------------------------------------------------------------------
 # Pre-import mocks — Redis and domain components are stubbed before the
 # module-level code in app.py executes.

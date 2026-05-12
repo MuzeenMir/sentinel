@@ -206,6 +206,19 @@ jobs:
       - name: Auth security tests
         run: python -m pytest tests/test_auth_security.py -v --tb=short
 
+  security-compose-validator:
+    name: security-compose-validator
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Validate compose security invariants
+        run: python sentinel-core/scripts/validate_compose_security.py
+
   security-dast:
     # OWASP ZAP baseline against the compose stack. PR-only to control runtime.
     # Not part of the `security` aggregator required check (too long); runs on
@@ -246,6 +259,7 @@ jobs:
       - security-trivy
       - security-codeql
       - security-auth-tests
+      - security-compose-validator
     runs-on: ubuntu-latest
     steps:
       - run: echo "security green"
