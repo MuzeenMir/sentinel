@@ -66,6 +66,7 @@ services:
       - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:?set ADMIN_PASSWORD}
       - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@yourdomain.com}
+      - LOCKOUT_THRESHOLD=5
       # Compose bridge peers need the HTTP listener on the container interface.
       - SENTINEL_BIND_HOST=0.0.0.0
     depends_on:
@@ -177,18 +178,15 @@ services:
     restart: unless-stopped
 
   # High-speed XDP Collector (bare-metal / privileged container)
-  # XDP uses host networking, so localhost is the Docker host and Compose bridge
-  # service DNS is unavailable after Kafka/auth-service host ports are removed.
-  # Operators enabling this profile must provide externally reachable Kafka and
-  # control-plane endpoints through the XDP_* variables.
+  # XDP is opt-in and privileged, but remains on the Compose bridge network.
+  # Operators can override Kafka/auth endpoints through the XDP_* variables.
   xdp-collector:
     build:
       context: ./backend
       dockerfile: xdp-collector/Dockerfile
     container_name: sentinel-xdp-collector
     profiles: ["xdp"]
-    # XDP requires host networking and privileges to attach to NIC
-    network_mode: "host"
+    # XDP requires privileges to attach to the configured NIC.
     privileged: true
     environment:
       - PORT=5012
@@ -206,6 +204,8 @@ services:
         exec gunicorn app:app -b 0.0.0.0:5012 -k gevent -w 4 --timeout 120 --access-logfile -
     depends_on:
       - auth-service
+    networks:
+      - sentinel-network
     restart: unless-stopped
 
   # Alert Service

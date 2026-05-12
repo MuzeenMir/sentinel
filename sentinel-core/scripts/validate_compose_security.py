@@ -10,6 +10,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 COMPOSE = ROOT / "docker-compose.yml"
+INSTALLER = ROOT / "agent" / "install.sh"
+API_GATEWAY_TEST = ROOT / "backend" / "tests" / "test_api_gateway.py"
 
 FORBIDDEN_DEFAULTS = [
     "POSTGRES_PASSWORD:-",
@@ -29,6 +31,13 @@ REQUIRED_SECRETS = {
     "ADMIN_PASSWORD",
     "GRAFANA_PASSWORD",
     "INTERNAL_SERVICE_TOKEN",
+}
+
+FORBIDDEN_FALLBACK_SECRET_NAMES = REQUIRED_SECRETS | {
+    "JWT_SECRET",
+    "DATABASE_PASSWORD",
+    "REDIS_PASSWORD",
+    "AGENT_TOKEN",
 }
 
 INTERNAL_SERVICES = {
@@ -59,12 +68,12 @@ INTERNAL_SERVICES = {
 
 PUBLIC_SERVICES = {"api-gateway", "admin-console", "tempo"}
 
-HOST_NETWORK_ALLOWED_PROFILES = {"xdp"}
-HOST_NETWORK_DEPENDENCY_ENV = {
-    "AUTH_SERVICE_URL",
-    "KAFKA_BOOTSTRAP_SERVERS",
-}
-LOCALHOST_DEPENDENCY_RE = re.compile(r"(?:^|[/:,@])(?:localhost|127\.0\.0\.1)(?::|/|$)")
+SYSTEMD_HARDENING_FLAGS = (
+    "NoNewPrivileges=yes",
+    "ProtectSystem=strict",
+    "ProtectHome=true",
+    "PrivateTmp=true",
+)
 
 
 def service_blocks(text: str) -> dict[str, str]:
@@ -90,54 +99,77 @@ def service_blocks(text: str) -> dict[str, str]:
     return {name: "\n".join(lines) for name, lines in blocks.items()}
 
 
-def has_allowed_host_network_profile(block: str) -> bool:
-    inline_profiles = re.search(r"^    profiles:\s*\[(?P<profiles>.*)\]\s*$", block, flags=re.MULTILINE)
-    if inline_profiles:
-        profiles = {
-            profile.strip().strip("\"'")
-            for profile in inline_profiles.group("profiles").split(",")
-        }
-        return bool(profiles & HOST_NETWORK_ALLOWED_PROFILES)
-
-    profiles: set[str] = set()
-    in_profiles = False
+def port_entries(block: str) -> list[str]:
+    entries: list[str] = []
+    in_ports = False
     for line in block.splitlines():
-        if re.match(r"^    [a-zA-Z0-9_-]+:\s*$", line):
-            in_profiles = line == "    profiles:"
+        inline_ports = re.match(r"^    ports:\s*\[(?P<ports>.*)]\s*$", line)
+        if inline_ports:
+            entries.extend(
+                port.strip().strip("\"'")
+                for port in inline_ports.group("ports").split(",")
+            )
+            in_ports = False
             continue
 
-        if not in_profiles:
+        if re.match(r"^    [a-zA-Z0-9_-]+:\s*", line):
+            in_ports = bool(re.match(r"^    ports:\s*(?:#.*)?$", line))
             continue
 
-        profile = re.match(r"^      - ['\"]?(?P<profile>[a-zA-Z0-9_-]+)['\"]?\s*$", line)
-        if profile:
-            profiles.add(profile.group("profile"))
+        if not in_ports:
+            continue
 
-    return bool(profiles & HOST_NETWORK_ALLOWED_PROFILES)
+        port = re.match(r"^      -\s*(?P<port>.+?)\s*$", line)
+        if port:
+            entries.append(port.group("port").strip().strip("\"'"))
+
+    return entries
 
 
-def host_network_localhost_dependencies(block: str) -> list[str]:
-    stale_dependencies: list[str] = []
-    for key in sorted(HOST_NETWORK_DEPENDENCY_ENV):
-        patterns = [
-            rf"^\s+-\s*{re.escape(key)}=(?P<value>\S.*)$",
-            rf"^\s*{re.escape(key)}:\s*['\"]?(?P<value>[^'\"]\S*)['\"]?\s*$",
-        ]
-        for pattern in patterns:
-            match = re.search(pattern, block, flags=re.MULTILINE)
-            if match and LOCALHOST_DEPENDENCY_RE.search(match.group("value")):
-                stale_dependencies.append(key)
-                break
-    return stale_dependencies
+def check_secret_fallbacks(text: str, errors: list[str]) -> None:
+    for secret in sorted(FORBIDDEN_FALLBACK_SECRET_NAMES):
+        if re.search(rf"\$\{{{re.escape(secret)}:-[^}}]+}}", text):
+            errors.append(f"{secret} must not define a default fallback")
+
+
+def check_auth_lockout_env(blocks: dict[str, str], errors: list[str]) -> None:
+    auth_block = blocks.get("auth-service", "")
+    has_lockout_threshold = re.search(
+        r"^\s*(?:-\s*)?LOCKOUT_THRESHOLD\s*=",
+        auth_block,
+        flags=re.MULTILINE,
+    )
+    if not has_lockout_threshold:
+        errors.append("auth-service must declare LOCKOUT_THRESHOLD")
+
+
+def check_installer(errors: list[str]) -> None:
+    text = INSTALLER.read_text(encoding="utf-8")
+    if "sha256sum" not in text:
+        errors.append("agent installer must verify downloads with sha256sum")
+    if "https://" not in text:
+        errors.append("agent installer must require https:// downloads")
+    for flag in SYSTEMD_HARDENING_FLAGS:
+        if flag not in text:
+            errors.append(f"agent installer systemd unit must set {flag}")
+
+
+def check_api_gateway_tests(errors: list[str]) -> None:
+    text = API_GATEWAY_TEST.read_text(encoding="utf-8")
+    if "def test_viewer_cannot" not in text:
+        errors.append("api-gateway tests must include viewer forbidden coverage")
 
 
 def main() -> int:
     text = COMPOSE.read_text(encoding="utf-8")
     errors: list[str] = []
+    blocks = service_blocks(text)
 
     for token in FORBIDDEN_DEFAULTS:
         if token in text:
             errors.append(f"forbidden compose default found: {token}")
+
+    check_secret_fallbacks(text, errors)
 
     for secret in sorted(REQUIRED_SECRETS):
         required_syntax = f"${{{secret}:?set {secret}}}"
@@ -149,18 +181,25 @@ def main() -> int:
                 errors.append(f"{secret} must use non-empty required-variable syntax")
                 break
 
-    for name, block in service_blocks(text).items():
+    check_auth_lockout_env(blocks, errors)
+    check_installer(errors)
+    check_api_gateway_tests(errors)
+
+    for name, block in blocks.items():
+        ports = port_entries(block)
         has_ports = re.search(r"^    ports:\s*(?:#.*|\S.*)?$", block, flags=re.MULTILINE)
         if name in INTERNAL_SERVICES and has_ports:
             errors.append(f"internal service exposes host ports: {name}")
+        if name in INTERNAL_SERVICES:
+            for port in ports:
+                if port.startswith("0.0.0.0:"):
+                    errors.append(f"internal service publishes 0.0.0.0 host port: {name}")
+                    break
         if name not in INTERNAL_SERVICES | PUBLIC_SERVICES:
             errors.append(f"unclassified compose service: {name}")
         has_host_network = re.search(r"^    network_mode:\s*['\"]?host['\"]?\s*$", block, flags=re.MULTILINE)
-        if has_host_network and not has_allowed_host_network_profile(block):
-            errors.append(f"host network service must be behind an explicit profile: {name}")
         if has_host_network:
-            for dependency in host_network_localhost_dependencies(block):
-                errors.append(f"host network service uses localhost dependency {dependency}: {name}")
+            errors.append(f"host network mode is forbidden: {name}")
 
     if errors:
         for error in errors:
