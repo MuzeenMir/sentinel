@@ -76,8 +76,12 @@ def _install_torch_stub():
         def load_state_dict(self, d, **kw):
             pass
 
+        def __call__(self, *a, **kw):
+            return _Tensor()
+
     class _Tensor:
-        pass
+        def item(self):
+            return 0
 
     _nn = _types.ModuleType("torch.nn")
     _nn.Module = _Module
@@ -125,6 +129,8 @@ def _install_torch_stub():
     _torch.device = lambda x: x
     _torch.FloatTensor = lambda *a: None
     _torch.LongTensor = lambda *a: None
+    _torch.randn = lambda *a, **kw: _Tensor()
+    _torch.argmax = lambda *a, **kw: _Tensor()
     _torch.save = lambda *a, **kw: None
     _torch.load = lambda *a, **kw: {}
     _torch.no_grad = lambda: type(
