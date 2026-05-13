@@ -83,8 +83,10 @@ def _install_torch_stub():
     _nn.Module = _Module
     _nn.Sequential = lambda *a: _Module()
     _nn.Linear = lambda *a, **kw: _Module()
+    _nn.LayerNorm = lambda *a, **kw: _Module()
     _nn.ReLU = lambda *a, **kw: _Module()
     _nn.Softmax = lambda *a, **kw: _Module()
+    _nn.Tanh = lambda *a, **kw: _Module()
     _nn.LSTM = lambda *a, **kw: _Module()
     _nn.MSELoss = lambda: (
         lambda x, y: type(
@@ -94,6 +96,7 @@ def _install_torch_stub():
     _nn_utils = _types.ModuleType("torch.nn.utils")
     _nn_utils.clip_grad_norm_ = lambda *a, **kw: None
     _nn.utils = _nn_utils
+    _nn_functional = _types.ModuleType("torch.nn.functional")
 
     _optim = _types.ModuleType("torch.optim")
     _optim.Adam = lambda *a, **kw: type(
@@ -135,16 +138,64 @@ def _install_torch_stub():
         ("torch", _torch),
         ("torch.nn", _nn),
         ("torch.nn.utils", _nn_utils),
+        ("torch.nn.functional", _nn_functional),
         ("torch.optim", _optim),
         ("torch.distributions", _dist),
         ("torch.utils", _utils),
         ("torch.utils.data", _data),
         ("torch.cuda", _cuda),
     ]:
-        sys.modules.setdefault(name, mod)
+        sys.modules[name] = mod
 
 
 _install_torch_stub()
+
+
+def _install_stable_baselines_stub():
+    """Inject a minimal stable-baselines3 stub when the package is absent."""
+    try:
+        import stable_baselines3  # noqa: F401
+
+        return
+    except Exception:
+        pass
+
+    class _PPO:
+        def __init__(self, *a, **kw):
+            self.device = "cpu"
+
+        @classmethod
+        def load(cls, *a, **kw):
+            return cls()
+
+        def save(self, *a, **kw):
+            pass
+
+    class _BaseFeaturesExtractor:
+        def __init_subclass__(cls, **kw):
+            super().__init_subclass__(**kw)
+
+        def __init__(self, *a, **kw):
+            pass
+
+    _sb3 = _types.ModuleType("stable_baselines3")
+    _sb3.PPO = _PPO
+    _common = _types.ModuleType("stable_baselines3.common")
+    _torch_layers = _types.ModuleType("stable_baselines3.common.torch_layers")
+    _torch_layers.BaseFeaturesExtractor = _BaseFeaturesExtractor
+    _vec_env = _types.ModuleType("stable_baselines3.common.vec_env")
+    _vec_env.DummyVecEnv = lambda *a, **kw: None
+
+    for name, mod in [
+        ("stable_baselines3", _sb3),
+        ("stable_baselines3.common", _common),
+        ("stable_baselines3.common.torch_layers", _torch_layers),
+        ("stable_baselines3.common.vec_env", _vec_env),
+    ]:
+        sys.modules.setdefault(name, mod)
+
+
+_install_stable_baselines_stub()
 
 # Uses the real auth_middleware; _bypass_auth fixture patches per-test.
 # Global sys.modules replacement removed to prevent leakage into other

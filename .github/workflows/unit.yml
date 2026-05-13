@@ -48,14 +48,15 @@ jobs:
             -r api-gateway/requirements.txt \
             -r drl-engine/requirements.txt
       - name: pytest (unit only, e2e excluded)
+        working-directory: .
         env:
           PYTHONDONTWRITEBYTECODE: '1'
         run: |
-          python -m pytest tests/ \
-            --ignore=tests/test_e2e_pipeline.py \
-            --cov=. \
+          python -m pytest sentinel-core/backend/tests sentinel-core/agent/tests \
+            --ignore=sentinel-core/backend/tests/test_e2e_pipeline.py \
+            --cov=sentinel-core/backend \
             --cov-branch \
-            --cov-report=xml:coverage.xml \
+            --cov-report=xml:sentinel-core/backend/coverage.xml \
             --cov-report=term \
             -v --tb=short
       - name: Coverage gate (Phase 0 floor 70%; SDP-002 §7 target 75%)
