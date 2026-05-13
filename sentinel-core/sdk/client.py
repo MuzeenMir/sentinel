@@ -19,7 +19,6 @@ from __future__ import annotations
 import logging
 import time
 from typing import Any, Dict, List, Optional
-from urllib.parse import urljoin
 
 import requests
 from requests.adapters import HTTPAdapter, Retry
@@ -28,7 +27,6 @@ from sdk.exceptions import (
     APIError,
     AuthenticationError,
     RateLimitError,
-    SentinelError,
     ValidationError,
 )
 from sdk.models import (

@@ -4,13 +4,12 @@ SENTINEL Dependency Checker
 Validates all package versions across the entire project for conflicts and compatibility.
 """
 
-import os
 import json
 import re
 from pathlib import Path
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Dict, List, Set, Tuple, Optional
+from typing import Dict, List, Optional
 
 # Known compatibility issues (package, python_version, issue)
 COMPATIBILITY_ISSUES = {
@@ -233,7 +232,7 @@ class DependencyChecker:
         print("SENTINEL DEPENDENCY CHECK REPORT")
         print("="*70)
 
-        print(f"\n📊 Summary:")
+        print("\n📊 Summary:")
         print(f"  Python packages: {len(self.python_packages)}")
         print(f"  NPM packages: {len(self.npm_packages)}")
         print(f"  Services scanned: {len(set(pkg.source.split('/')[0] for pkg in [s for specs in self.python_packages.values() for s in specs]))}")

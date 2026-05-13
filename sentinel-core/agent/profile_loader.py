@@ -12,7 +12,7 @@ import os
 import platform
 import shutil
 from pathlib import Path
-from typing import Any, Dict, Optional, Type
+from typing import Any, Dict, Type
 
 from profiles.base import BaseProfile, ProfileConfig
 from profiles.business_app import BusinessAppProfile

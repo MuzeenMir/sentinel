@@ -11,7 +11,7 @@ import logging
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Dict
 
-from sdk.exceptions import APIError, SentinelError, ValidationError
+from sdk.exceptions import APIError, ValidationError
 from sdk.models import DetectionResult
 
 if TYPE_CHECKING:

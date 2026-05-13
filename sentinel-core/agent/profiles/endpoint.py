@@ -7,17 +7,14 @@ logs, and exposes a localhost API for browser-extension communication.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import os
 import re
-import socket
-import threading
 import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional
 
 from profiles.base import BaseProfile, ProfileConfig
 

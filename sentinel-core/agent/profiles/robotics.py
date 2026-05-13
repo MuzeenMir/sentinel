@@ -8,14 +8,12 @@ non-blocking to avoid interfering with real-time control loops.
 
 from __future__ import annotations
 
-import hashlib
 import logging
-import os
 import signal
 import struct
 import time
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Set
+from typing import Any, Dict, List, Set
 
 from profiles.base import BaseProfile, ProfileConfig
 
@@ -174,7 +172,6 @@ class RoboticsProfile(BaseProfile):
     def _ros2_monitor_loop(self) -> None:
         try:
             import rclpy
-            from rclpy.node import Node
             from std_msgs.msg import String
 
             rclpy.init()

@@ -10,7 +10,7 @@ Environment:
 import os
 import json
 import logging
-from typing import Any, Optional
+from typing import Optional
 
 import requests
 
@@ -20,7 +20,6 @@ logger = logging.getLogger(__name__)
 try:
     from mcp.server.fastmcp import FastMCP
 except ImportError:
-    from mcp.server import Server
     FastMCP = None
 
 BASE_URL = os.environ.get("SENTINEL_API_URL", "http://localhost:8080").rstrip("/")

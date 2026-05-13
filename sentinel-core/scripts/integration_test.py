@@ -10,7 +10,6 @@ Usage:
 """
 
 import argparse
-import json
 import sys
 import time
 import requests
@@ -92,7 +91,7 @@ def phase_health_checks(services: dict) -> dict[str, bool]:
         try:
             r = requests.get(url, timeout=10)
             if r.status_code == 200:
-                ok(f"{name}", f"HTTP 200")
+                ok(f"{name}", "HTTP 200")
                 results[name] = True
             else:
                 fail(f"{name}", f"HTTP {r.status_code}")
@@ -111,7 +110,7 @@ def phase_auth_flow(auth_url: str, gateway_url: str) -> dict:
     ctx: dict = {}
 
     # 2a. Admin login (bootstrap user)
-    print(f"\n  ── 2a. Admin login ──")
+    print("\n  ── 2a. Admin login ──")
     try:
         r = requests.post(
             f"{auth_url}/api/v1/auth/login",
@@ -131,7 +130,7 @@ def phase_auth_flow(auth_url: str, gateway_url: str) -> dict:
         return ctx
 
     # 2b. Register a test analyst
-    print(f"\n  ── 2b. Register test analyst ──")
+    print("\n  ── 2b. Register test analyst ──")
     ts = int(time.time())
     test_user = {
         "username": f"analyst_{ts}",
@@ -155,7 +154,7 @@ def phase_auth_flow(auth_url: str, gateway_url: str) -> dict:
         fail("Register analyst", str(e))
 
     # 2c. Analyst login
-    print(f"\n  ── 2c. Analyst login ──")
+    print("\n  ── 2c. Analyst login ──")
     if ctx.get("analyst_username"):
         try:
             r = requests.post(
@@ -176,7 +175,7 @@ def phase_auth_flow(auth_url: str, gateway_url: str) -> dict:
             fail("Analyst login", str(e))
 
     # 2d. Token verification
-    print(f"\n  ── 2d. Token verification ──")
+    print("\n  ── 2d. Token verification ──")
     token = ctx.get("admin_token")
     if token:
         try:
@@ -194,7 +193,7 @@ def phase_auth_flow(auth_url: str, gateway_url: str) -> dict:
             fail("Token verify", str(e))
 
     # 2e. Access protected profile endpoint
-    print(f"\n  ── 2e. Protected endpoint (profile) ──")
+    print("\n  ── 2e. Protected endpoint (profile) ──")
     token = ctx.get("admin_token")
     if token:
         try:
@@ -211,7 +210,7 @@ def phase_auth_flow(auth_url: str, gateway_url: str) -> dict:
             fail("GET /auth/profile", str(e))
 
     # 2f. Reject unauthenticated request
-    print(f"\n  ── 2f. Reject unauthenticated request ──")
+    print("\n  ── 2f. Reject unauthenticated request ──")
     try:
         r = requests.get(f"{auth_url}/api/v1/auth/profile", timeout=10)
         if r.status_code == 401:
@@ -222,7 +221,7 @@ def phase_auth_flow(auth_url: str, gateway_url: str) -> dict:
         fail("Unauth rejection", str(e))
 
     # 2g. Token refresh
-    print(f"\n  ── 2g. Token refresh ──")
+    print("\n  ── 2g. Token refresh ──")
     refresh = ctx.get("admin_refresh")
     if refresh:
         try:
