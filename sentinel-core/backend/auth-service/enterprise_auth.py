@@ -16,6 +16,7 @@ import logging
 import os
 import secrets
 from datetime import datetime
+from typing import Any, Optional
 from urllib.parse import urlencode
 
 import bcrypt
@@ -31,17 +32,17 @@ from flask_jwt_extended import (
 logger = logging.getLogger(__name__)
 
 # Late-bound references to app.py models — set by register_enterprise_auth()
-_db = None
-_User = None
-_UserRole = None
-_UserStatus = None
+_db: Any = None
+_User: Any = None
+_UserRole: Any = None
+_UserStatus: Any = None
 
 # SSO group→role mapping (JSON env var: {"admins": "admin", "analysts": "security_analyst"})
 SSO_GROUP_ROLE_MAP = json.loads(os.environ.get("SSO_GROUP_ROLE_MAP", "{}"))
 SCIM_BEARER_TOKEN = os.environ.get("SCIM_BEARER_TOKEN")
 
 
-def _map_role_from_groups(groups: list) -> str:
+def _map_role_from_groups(groups: list[Any]) -> str:
     """Map IdP groups to Sentinel role via SSO_GROUP_ROLE_MAP."""
     for group in groups:
         if group in SSO_GROUP_ROLE_MAP:
@@ -50,7 +51,7 @@ def _map_role_from_groups(groups: list) -> str:
 
 
 def _find_or_create_sso_user(
-    email: str, name: str, groups: list = None, tenant_id=None
+    email: str, name: str, groups: Optional[list[Any]] = None, tenant_id: Any = None
 ):
     """Find existing user by email or create via JIT provisioning."""
     user = _User.query.filter_by(email=email).first()

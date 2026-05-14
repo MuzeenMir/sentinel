@@ -4,7 +4,7 @@ iptables vendor integration for Linux firewalls.
 
 import subprocess
 import logging
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 from .base_vendor import BaseVendor
 
 logger = logging.getLogger(__name__)
@@ -21,7 +21,7 @@ class IptablesVendor(BaseVendor):
     def vendor_name(self) -> str:
         return "iptables"
 
-    def __init__(self, config: Dict[str, Any] = None):
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
         super().__init__(config)
         self.chain = config.get("chain", "SENTINEL") if config else "SENTINEL"
         self.table = config.get("table", "filter") if config else "filter"

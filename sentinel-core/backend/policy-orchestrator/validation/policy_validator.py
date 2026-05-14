@@ -210,9 +210,9 @@ class PolicyValidator:
 
         issues: List[Dict[str, Any]] = []
         for _key, group in seen.items():
-            actions = {r.get("action") for r in group}
+            actions = {str(r.get("action", "")) for r in group}
             if len(actions) > 1:
-                ids = [r.get("id", "?") for r in group]
+                ids = [str(r.get("id", "?")) for r in group]
                 issues.append(
                     _issue(
                         "error",

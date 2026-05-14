@@ -24,6 +24,7 @@ from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from functools import wraps
+from typing import Any
 import redis
 import logging
 from enum import Enum
@@ -78,7 +79,7 @@ else:
 app.config["REDIS_URL"] = os.environ.get("REDIS_URL", "redis://localhost:6379")
 
 # Initialize extensions
-db = SQLAlchemy(app)
+db: Any = SQLAlchemy(app)
 jwt_manager = JWTManager(app)
 
 # Redis with connection pooling
