@@ -75,7 +75,7 @@ STATS_CACHE_TTL = 10
 logger = logging.getLogger(__name__)
 
 # Global rate limiting
-rate_limit_counter = {}
+rate_limit_counter: dict[str, int] = {}
 
 
 def require_auth(f):

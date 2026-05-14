@@ -3,7 +3,7 @@ Base vendor class for firewall integrations.
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 
 
 class BaseVendor(ABC):
@@ -14,7 +14,7 @@ class BaseVendor(ABC):
     and implement the required methods.
     """
 
-    def __init__(self, config: Dict[str, Any] = None):
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
         self.config = config or {}
         self._connected = False
 

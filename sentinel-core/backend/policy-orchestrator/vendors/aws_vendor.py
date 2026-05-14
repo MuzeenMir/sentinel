@@ -3,7 +3,7 @@ AWS Security Group vendor integration.
 """
 
 import logging
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 from .base_vendor import BaseVendor
 
 logger = logging.getLogger(__name__)
@@ -29,11 +29,11 @@ class AWSSecurityGroupVendor(BaseVendor):
     def vendor_name(self) -> str:
         return "aws_security_group"
 
-    def __init__(self, config: Dict[str, Any] = None):
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
         super().__init__(config)
         self.region = config.get("region", "us-east-1") if config else "us-east-1"
         self.security_group_id = config.get("security_group_id") if config else None
-        self.ec2_client = None
+        self.ec2_client: Any = None
 
     def connect(self) -> bool:
         """Establish connection to AWS."""
@@ -170,7 +170,7 @@ class AWSSecurityGroupVendor(BaseVendor):
 
     def get_status(self) -> Dict[str, Any]:
         """Get AWS Security Group status."""
-        status = {
+        status: Dict[str, Any] = {
             "vendor": self.vendor_name,
             "connected": self._connected,
             "region": self.region,
@@ -208,7 +208,7 @@ class AWSSecurityGroupVendor(BaseVendor):
         protocol = rule.get("protocol", "tcp").upper()
         aws_protocol = protocol_map.get(protocol, "tcp")
 
-        aws_rule = {"IpProtocol": aws_protocol}
+        aws_rule: Dict[str, Any] = {"IpProtocol": aws_protocol}
 
         # Port range
         port = rule.get("dest_port")
