@@ -774,4 +774,6 @@ if __name__ == "__main__":
     if debug_mode:
         logger.warning("Running in DEBUG mode - DO NOT use in production!")
 
-    app.run(host=bind_host(), port=int(os.environ.get("PORT", "5002")), debug=debug_mode)
+    app.run(
+        host=bind_host(), port=int(os.environ.get("PORT", "5002")), debug=debug_mode
+    )

@@ -83,14 +83,18 @@ def test_docker_compose_rejects_empty_required_secrets():
     assert result.returncode != 0
 
 
-def test_validator_rejects_secret_syntax_that_allows_empty_values(tmp_path, monkeypatch, capsys):
+def test_validator_rejects_secret_syntax_that_allows_empty_values(
+    tmp_path, monkeypatch, capsys
+):
     repo_core = Path(__file__).resolve().parents[2]
     validator = load_validator(repo_core)
 
     for secret in REQUIRED_SECRETS:
         compose = tmp_path / f"{secret}.yml"
         compose.write_text(
-            valid_compose_text().replace(f"${{{secret}:?set {secret}}}", f"${{{secret}?set {secret}}}"),
+            valid_compose_text().replace(
+                f"${{{secret}:?set {secret}}}", f"${{{secret}?set {secret}}}"
+            ),
             encoding="utf-8",
         )
         monkeypatch.setattr(validator, "COMPOSE", compose)
@@ -120,7 +124,9 @@ def test_validator_rejects_unprofiled_host_network_mode(tmp_path, monkeypatch, c
     assert "host network mode is forbidden: xdp-collector" in captured.err
 
 
-def test_validator_rejects_host_network_even_when_profiled(tmp_path, monkeypatch, capsys):
+def test_validator_rejects_host_network_even_when_profiled(
+    tmp_path, monkeypatch, capsys
+):
     repo_core = Path(__file__).resolve().parents[2]
     validator = load_validator(repo_core)
     compose = tmp_path / "compose.yml"
@@ -142,7 +148,9 @@ def test_validator_rejects_host_network_even_when_profiled(tmp_path, monkeypatch
     assert "host network mode is forbidden: xdp-collector" in captured.err
 
 
-def test_validator_rejects_host_network_localhost_kafka_dependency(tmp_path, monkeypatch, capsys):
+def test_validator_rejects_host_network_localhost_kafka_dependency(
+    tmp_path, monkeypatch, capsys
+):
     repo_core = Path(__file__).resolve().parents[2]
     validator = load_validator(repo_core)
     compose = tmp_path / "compose.yml"
@@ -196,7 +204,9 @@ def test_xdp_profile_config_renders_without_stale_localhost_dependencies():
     assert "localhost:5000" not in result.stdout
 
 
-def test_validator_rejects_inline_ports_on_internal_services(tmp_path, monkeypatch, capsys):
+def test_validator_rejects_inline_ports_on_internal_services(
+    tmp_path, monkeypatch, capsys
+):
     repo_core = Path(__file__).resolve().parents[2]
     validator = load_validator(repo_core)
     compose = tmp_path / "compose.yml"
@@ -214,7 +224,9 @@ def test_validator_rejects_inline_ports_on_internal_services(tmp_path, monkeypat
     assert "internal service exposes host ports: postgres" in captured.err
 
 
-def test_validator_rejects_0_0_0_0_host_ports_on_internal_services(tmp_path, monkeypatch, capsys):
+def test_validator_rejects_0_0_0_0_host_ports_on_internal_services(
+    tmp_path, monkeypatch, capsys
+):
     repo_core = Path(__file__).resolve().parents[2]
     validator = load_validator(repo_core)
     compose = tmp_path / "compose.yml"
@@ -240,7 +252,9 @@ def test_validator_rejects_0_0_0_0_host_ports_on_internal_services(tmp_path, mon
     assert "api-gateway" not in captured.err
 
 
-def test_validator_rejects_known_secret_default_fallbacks(tmp_path, monkeypatch, capsys):
+def test_validator_rejects_known_secret_default_fallbacks(
+    tmp_path, monkeypatch, capsys
+):
     repo_core = Path(__file__).resolve().parents[2]
     validator = load_validator(repo_core)
     compose = tmp_path / "compose.yml"
@@ -265,7 +279,9 @@ def test_validator_rejects_known_secret_default_fallbacks(tmp_path, monkeypatch,
         assert f"{secret} must not define a default fallback" in captured.err
 
 
-def test_validator_rejects_missing_installer_checksum_or_https(tmp_path, monkeypatch, capsys):
+def test_validator_rejects_missing_installer_checksum_or_https(
+    tmp_path, monkeypatch, capsys
+):
     repo_core = Path(__file__).resolve().parents[2]
     validator = load_validator(repo_core)
     installer = tmp_path / "install.sh"
@@ -287,7 +303,9 @@ PrivateTmp=true
     assert "agent installer must require https:// downloads" in captured.err
 
 
-def test_validator_rejects_missing_auth_lockout_threshold_env(tmp_path, monkeypatch, capsys):
+def test_validator_rejects_missing_auth_lockout_threshold_env(
+    tmp_path, monkeypatch, capsys
+):
     repo_core = Path(__file__).resolve().parents[2]
     validator = load_validator(repo_core)
     compose = tmp_path / "compose.yml"
@@ -302,7 +320,9 @@ def test_validator_rejects_missing_auth_lockout_threshold_env(tmp_path, monkeypa
     assert "auth-service must declare LOCKOUT_THRESHOLD" in captured.err
 
 
-def test_validator_rejects_missing_viewer_forbidden_api_gateway_test(tmp_path, monkeypatch, capsys):
+def test_validator_rejects_missing_viewer_forbidden_api_gateway_test(
+    tmp_path, monkeypatch, capsys
+):
     repo_core = Path(__file__).resolve().parents[2]
     validator = load_validator(repo_core)
     test_file = tmp_path / "test_api_gateway.py"
@@ -314,7 +334,9 @@ def test_validator_rejects_missing_viewer_forbidden_api_gateway_test(tmp_path, m
     assert "api-gateway tests must include viewer forbidden coverage" in captured.err
 
 
-def test_validator_rejects_missing_systemd_hardening_flags(tmp_path, monkeypatch, capsys):
+def test_validator_rejects_missing_systemd_hardening_flags(
+    tmp_path, monkeypatch, capsys
+):
     repo_core = Path(__file__).resolve().parents[2]
     validator = load_validator(repo_core)
     installer = tmp_path / "install.sh"

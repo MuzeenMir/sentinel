@@ -93,10 +93,14 @@ class SentinelClient:
         if not self._username or not self._password:
             raise AuthenticationError("Either api_key or username/password is required")
 
-        data = self._post("/api/v1/auth/login", json={
-            "username": self._username,
-            "password": self._password,
-        }, auth_required=False)
+        data = self._post(
+            "/api/v1/auth/login",
+            json={
+                "username": self._username,
+                "password": self._password,
+            },
+            auth_required=False,
+        )
 
         self._access_token = data.get("access_token") or data.get("token")
         self._refresh_token = data.get("refresh_token")
@@ -116,9 +120,13 @@ class SentinelClient:
     def _refresh_auth(self) -> None:
         if self._refresh_token:
             try:
-                data = self._post("/api/v1/auth/refresh", json={
-                    "refresh_token": self._refresh_token,
-                }, auth_required=False)
+                data = self._post(
+                    "/api/v1/auth/refresh",
+                    json={
+                        "refresh_token": self._refresh_token,
+                    },
+                    auth_required=False,
+                )
                 self._access_token = data.get("access_token") or data.get("token")
                 self._refresh_token = data.get("refresh_token", self._refresh_token)
                 expires_in = data.get("expires_in", 3600)
@@ -130,7 +138,9 @@ class SentinelClient:
         if self._username and self._password:
             self.authenticate()
         else:
-            raise AuthenticationError("Token expired and no credentials available for refresh")
+            raise AuthenticationError(
+                "Token expired and no credentials available for refresh"
+            )
 
     # ── detection ─────────────────────────────────────────────────────
 
@@ -140,7 +150,9 @@ class SentinelClient:
         data = self._post("/api/v1/detect", json=traffic_data)
         return DetectionResult.from_dict(data)
 
-    def detect_batch(self, traffic_batch: List[Dict[str, Any]]) -> List[DetectionResult]:
+    def detect_batch(
+        self, traffic_batch: List[Dict[str, Any]]
+    ) -> List[DetectionResult]:
         if not traffic_batch:
             raise ValidationError("traffic_batch must be non-empty")
         data = self._post("/api/v1/detect/batch", json={"batch": traffic_batch})
@@ -149,7 +161,9 @@ class SentinelClient:
 
     # ── threats ───────────────────────────────────────────────────────
 
-    def get_threats(self, severity: Optional[str] = None, limit: int = 100) -> List[Threat]:
+    def get_threats(
+        self, severity: Optional[str] = None, limit: int = 100
+    ) -> List[Threat]:
         params: Dict[str, Any] = {"limit": limit}
         if severity:
             params["severity"] = severity
@@ -182,8 +196,12 @@ class SentinelClient:
         protocol: str = "tcp",
         **kwargs: Any,
     ) -> Policy:
-        for field_name, value in [("name", name), ("action", action),
-                                   ("source", source), ("destination", destination)]:
+        for field_name, value in [
+            ("name", name),
+            ("action", action),
+            ("source", source),
+            ("destination", destination),
+        ]:
             if not value:
                 raise ValidationError(f"{field_name} is required")
         payload: Dict[str, Any] = {
@@ -220,11 +238,14 @@ class SentinelClient:
         features: Dict[str, Any],
         prediction: float,
     ) -> Explanation:
-        data = self._post("/api/v1/explain/detection", json={
-            "detection_id": detection_id,
-            "features": features,
-            "prediction": prediction,
-        })
+        data = self._post(
+            "/api/v1/explain/detection",
+            json={
+                "detection_id": detection_id,
+                "features": features,
+                "prediction": prediction,
+            },
+        )
         return Explanation.from_dict(data)
 
     # ── statistics ────────────────────────────────────────────────────
@@ -253,12 +274,17 @@ class SentinelClient:
             headers["Authorization"] = f"Bearer {self._access_token}"
         return headers
 
-    def _get(self, path: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def _get(
+        self, path: str, params: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
         self._ensure_auth()
         url = f"{self._api_url}{path}"
         resp = self._session.get(
-            url, headers=self._headers(), params=params,
-            timeout=self._timeout, verify=self._verify_ssl,
+            url,
+            headers=self._headers(),
+            params=params,
+            timeout=self._timeout,
+            verify=self._verify_ssl,
         )
         return self._handle_response(resp)
 
@@ -272,8 +298,11 @@ class SentinelClient:
             self._ensure_auth()
         url = f"{self._api_url}{path}"
         resp = self._session.post(
-            url, headers=self._headers(auth_required), json=json,
-            timeout=self._timeout, verify=self._verify_ssl,
+            url,
+            headers=self._headers(auth_required),
+            json=json,
+            timeout=self._timeout,
+            verify=self._verify_ssl,
         )
         return self._handle_response(resp)
 

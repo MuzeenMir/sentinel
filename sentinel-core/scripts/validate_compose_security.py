@@ -187,17 +187,23 @@ def main() -> int:
 
     for name, block in blocks.items():
         ports = port_entries(block)
-        has_ports = re.search(r"^    ports:\s*(?:#.*|\S.*)?$", block, flags=re.MULTILINE)
+        has_ports = re.search(
+            r"^    ports:\s*(?:#.*|\S.*)?$", block, flags=re.MULTILINE
+        )
         if name in INTERNAL_SERVICES and has_ports:
             errors.append(f"internal service exposes host ports: {name}")
         if name in INTERNAL_SERVICES:
             for port in ports:
                 if port.startswith("0.0.0.0:"):
-                    errors.append(f"internal service publishes 0.0.0.0 host port: {name}")
+                    errors.append(
+                        f"internal service publishes 0.0.0.0 host port: {name}"
+                    )
                     break
         if name not in INTERNAL_SERVICES | PUBLIC_SERVICES:
             errors.append(f"unclassified compose service: {name}")
-        has_host_network = re.search(r"^    network_mode:\s*['\"]?host['\"]?\s*$", block, flags=re.MULTILINE)
+        has_host_network = re.search(
+            r"^    network_mode:\s*['\"]?host['\"]?\s*$", block, flags=re.MULTILINE
+        )
         if has_host_network:
             errors.append(f"host network mode is forbidden: {name}")
 

@@ -40,12 +40,15 @@ class BaseCustomDetector(ABC):
         if not self.name:
             raise ValidationError("Detector name must be non-empty")
         try:
-            client._post("/api/v1/detectors/register", json={
-                "name": self.name,
-                "type": "custom",
-                "version": getattr(self, "version", "1.0.0"),
-                "description": getattr(self, "description", ""),
-            })
+            client._post(
+                "/api/v1/detectors/register",
+                json={
+                    "name": self.name,
+                    "type": "custom",
+                    "version": getattr(self, "version", "1.0.0"),
+                    "description": getattr(self, "description", ""),
+                },
+            )
             logger.info("Detector '%s' registered successfully", self.name)
             return True
         except APIError as exc:

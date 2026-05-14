@@ -27,23 +27,34 @@ class RoboticsProfile(BaseProfile):
 
     def __init__(self, config: ProfileConfig, event_bus: Any = None):
         super().__init__(config, event_bus)
-        self._can_interface: str = config.extra.get("can_interface", _CAN_INTERFACE_DEFAULT)
+        self._can_interface: str = config.extra.get(
+            "can_interface", _CAN_INTERFACE_DEFAULT
+        )
         self._can_socket: Any = None
         self._ros2_available = False
 
-        self._safety_limits = config.extra.get("safety_limits", {
-            "max_position": [2.0, 2.0, 2.0],
-            "max_velocity": 1.5,
-            "max_acceleration": 5.0,
-        })
+        self._safety_limits = config.extra.get(
+            "safety_limits",
+            {
+                "max_position": [2.0, 2.0, 2.0],
+                "max_velocity": 1.5,
+                "max_acceleration": 5.0,
+            },
+        )
         self._estop_triggered = False
         self._estop_signal = int(config.extra.get("estop_signal", signal.SIGUSR1))
         self._prev_estop_handler: Any = None
 
         self._ota_public_key_path: str = config.extra.get("ota_public_key", "")
-        self._ros2_monitored_topics: List[str] = config.extra.get("ros2_topics", [
-            "/cmd_vel", "/joint_states", "/odom", "/diagnostics",
-        ])
+        self._ros2_monitored_topics: List[str] = config.extra.get(
+            "ros2_topics",
+            [
+                "/cmd_vel",
+                "/joint_states",
+                "/odom",
+                "/diagnostics",
+            ],
+        )
 
         self._known_can_ids: Set[int] = set()
         self._sensor_last_ts: Dict[str, float] = {}
@@ -81,8 +92,12 @@ class RoboticsProfile(BaseProfile):
             self._start_thread("can", self._can_monitor_loop)
         self._start_thread("safety", self._safety_check_loop)
         self._start_thread("sensors", self._sensor_integrity_loop)
-        logger.info("[robotics] profile started — ROS2=%s, CAN=%s, e-stop=signal %d",
-                     self._ros2_available, self._can_socket is not None, self._estop_signal)
+        logger.info(
+            "[robotics] profile started — ROS2=%s, CAN=%s, e-stop=signal %d",
+            self._ros2_available,
+            self._can_socket is not None,
+            self._estop_signal,
+        )
 
     def stop(self) -> None:
         self._running = False
@@ -150,18 +165,21 @@ class RoboticsProfile(BaseProfile):
         self._estop_triggered = True
         self._stats["estop_activations"] += 1
         logger.critical("[robotics] EMERGENCY STOP triggered: %s", reason)
-        self._publish({
-            "event_type": "estop_activated",
-            "severity": "critical",
-            "reason": reason,
-            "timestamp": time.time(),
-        })
+        self._publish(
+            {
+                "event_type": "estop_activated",
+                "severity": "critical",
+                "reason": reason,
+                "timestamp": time.time(),
+            }
+        )
 
     # ── ROS2 monitoring ───────────────────────────────────────────────
 
     def _probe_ros2(self) -> None:
         try:
             import importlib
+
             importlib.import_module("rclpy")
             self._ros2_available = True
             logger.info("[robotics] ROS2 (rclpy) detected")
@@ -180,11 +198,14 @@ class RoboticsProfile(BaseProfile):
             def _topic_callback(topic_name: str):
                 def _cb(msg: Any) -> None:
                     self._stats["ros2_messages"] += 1
-                    self._publish({
-                        "event_type": "ros2_message",
-                        "topic": topic_name,
-                        "timestamp": time.time(),
-                    })
+                    self._publish(
+                        {
+                            "event_type": "ros2_message",
+                            "topic": topic_name,
+                            "timestamp": time.time(),
+                        }
+                    )
+
                 return _cb
 
             for topic in self._ros2_monitored_topics:
@@ -206,6 +227,7 @@ class RoboticsProfile(BaseProfile):
     def _open_can_socket(self) -> None:
         try:
             import socket as sock
+
             AF_CAN = 29
             CAN_RAW = 1
             s = sock.socket(AF_CAN, sock.SOCK_RAW, CAN_RAW)
@@ -214,7 +236,9 @@ class RoboticsProfile(BaseProfile):
             self._can_socket = s
             logger.info("[robotics] CAN socket opened on %s", self._can_interface)
         except Exception as exc:
-            logger.info("[robotics] CAN bus not available (%s); skipping CAN monitoring", exc)
+            logger.info(
+                "[robotics] CAN bus not available (%s); skipping CAN monitoring", exc
+            )
             self._can_socket = None
 
     def _close_can_socket(self) -> None:
@@ -236,13 +260,15 @@ class RoboticsProfile(BaseProfile):
 
                 if can_id not in self._known_can_ids:
                     self._known_can_ids.add(can_id)
-                    self._publish({
-                        "event_type": "can_new_id",
-                        "severity": "medium",
-                        "can_id": f"0x{can_id:03X}",
-                        "dlc": dlc,
-                        "timestamp": time.time(),
-                    })
+                    self._publish(
+                        {
+                            "event_type": "can_new_id",
+                            "severity": "medium",
+                            "can_id": f"0x{can_id:03X}",
+                            "dlc": dlc,
+                            "timestamp": time.time(),
+                        }
+                    )
             except BlockingIOError:
                 time.sleep(0.01)
             except Exception as exc:
@@ -259,15 +285,17 @@ class RoboticsProfile(BaseProfile):
         for i, (p, limit) in enumerate(zip(position, max_pos)):
             if abs(p) > limit:
                 self._stats["safety_violations"] += 1
-                self._publish({
-                    "event_type": "safety_violation",
-                    "severity": "critical",
-                    "violation": "position_exceeded",
-                    "axis": i,
-                    "value": p,
-                    "limit": limit,
-                    "timestamp": time.time(),
-                })
+                self._publish(
+                    {
+                        "event_type": "safety_violation",
+                        "severity": "critical",
+                        "violation": "position_exceeded",
+                        "axis": i,
+                        "value": p,
+                        "limit": limit,
+                        "timestamp": time.time(),
+                    }
+                )
                 self._trigger_estop(f"position axis {i} = {p} exceeds limit {limit}")
                 return False
         return True
@@ -276,14 +304,16 @@ class RoboticsProfile(BaseProfile):
         max_vel = self._safety_limits.get("max_velocity", float("inf"))
         if abs(velocity) > max_vel:
             self._stats["safety_violations"] += 1
-            self._publish({
-                "event_type": "safety_violation",
-                "severity": "critical",
-                "violation": "velocity_exceeded",
-                "value": velocity,
-                "limit": max_vel,
-                "timestamp": time.time(),
-            })
+            self._publish(
+                {
+                    "event_type": "safety_violation",
+                    "severity": "critical",
+                    "violation": "velocity_exceeded",
+                    "value": velocity,
+                    "limit": max_vel,
+                    "timestamp": time.time(),
+                }
+            )
             self._trigger_estop(f"velocity {velocity} exceeds limit {max_vel}")
             return False
         return True
@@ -293,47 +323,58 @@ class RoboticsProfile(BaseProfile):
     def _validate_sensor_data(self) -> List[dict]:
         return []
 
-    def validate_sensor(self, sensor_id: str, value: float, timestamp: float) -> List[dict]:
+    def validate_sensor(
+        self, sensor_id: str, value: float, timestamp: float
+    ) -> List[dict]:
         events: List[dict] = []
         now = time.time()
 
         prev_ts = self._sensor_last_ts.get(sensor_id)
         if prev_ts is not None and timestamp <= prev_ts:
-            events.append({
-                "event_type": "sensor_anomaly",
-                "severity": "high",
-                "sensor_id": sensor_id,
-                "anomaly": "timestamp_regression",
-                "current_ts": timestamp,
-                "previous_ts": prev_ts,
-                "timestamp": now,
-            })
+            events.append(
+                {
+                    "event_type": "sensor_anomaly",
+                    "severity": "high",
+                    "sensor_id": sensor_id,
+                    "anomaly": "timestamp_regression",
+                    "current_ts": timestamp,
+                    "previous_ts": prev_ts,
+                    "timestamp": now,
+                }
+            )
             self._stats["sensor_anomalies"] += 1
 
         if abs(now - timestamp) > 5.0:
-            events.append({
-                "event_type": "sensor_anomaly",
-                "severity": "medium",
-                "sensor_id": sensor_id,
-                "anomaly": "timestamp_drift",
-                "drift_seconds": round(now - timestamp, 3),
-                "timestamp": now,
-            })
+            events.append(
+                {
+                    "event_type": "sensor_anomaly",
+                    "severity": "medium",
+                    "sensor_id": sensor_id,
+                    "anomaly": "timestamp_drift",
+                    "drift_seconds": round(now - timestamp, 3),
+                    "timestamp": now,
+                }
+            )
             self._stats["sensor_anomalies"] += 1
 
         sensor_range = self._sensor_ranges.get(sensor_id)
         if sensor_range:
-            lo, hi = sensor_range.get("min", float("-inf")), sensor_range.get("max", float("inf"))
+            lo, hi = (
+                sensor_range.get("min", float("-inf")),
+                sensor_range.get("max", float("inf")),
+            )
             if value < lo or value > hi:
-                events.append({
-                    "event_type": "sensor_anomaly",
-                    "severity": "high",
-                    "sensor_id": sensor_id,
-                    "anomaly": "value_out_of_range",
-                    "value": value,
-                    "range": [lo, hi],
-                    "timestamp": now,
-                })
+                events.append(
+                    {
+                        "event_type": "sensor_anomaly",
+                        "severity": "high",
+                        "sensor_id": sensor_id,
+                        "anomaly": "value_out_of_range",
+                        "value": value,
+                        "range": [lo, hi],
+                        "timestamp": now,
+                    }
+                )
                 self._stats["sensor_anomalies"] += 1
 
         self._sensor_last_ts[sensor_id] = timestamp
@@ -372,14 +413,19 @@ class RoboticsProfile(BaseProfile):
                 logger.info("[robotics] OTA update signature valid: %s", update_path)
                 return True
             except ImportError:
-                logger.warning("[robotics] cryptography library not available; "
-                               "falling back to hash-only verification")
+                logger.warning(
+                    "[robotics] cryptography library not available; "
+                    "falling back to hash-only verification"
+                )
                 expected_hex = sig_data.decode("ascii", errors="ignore").strip()
                 actual_hex = update_hash.hexdigest()
                 valid = expected_hex == actual_hex
                 if not valid:
-                    logger.warning("[robotics] OTA hash mismatch: expected=%s actual=%s",
-                                   expected_hex[:16], actual_hex[:16])
+                    logger.warning(
+                        "[robotics] OTA hash mismatch: expected=%s actual=%s",
+                        expected_hex[:16],
+                        actual_hex[:16],
+                    )
                 return valid
             except Exception as exc:
                 logger.error("[robotics] OTA signature verification failed: %s", exc)

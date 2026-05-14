@@ -12,7 +12,7 @@ def test_installer_requires_https_control_plane():
     text = install_script()
 
     assert '[[ "$SENTINEL_API_URL" == https://* ]]' in text
-    assert 'curl --proto \'=https\' --tlsv1.2' in text
+    assert "curl --proto '=https' --tlsv1.2" in text
 
 
 def test_installer_requires_and_verifies_sha256():
