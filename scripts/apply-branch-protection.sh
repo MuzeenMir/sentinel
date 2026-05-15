@@ -14,10 +14,14 @@
 #   --repo      Override the target repo (default: MuzeenMir/sentinel).
 #   --branch    Override the protected branch (default: main).
 #
-# Required status checks are listed below and must exist in the repo before
-# applying. This list is kept in sync with .github/workflows/*.yml.
+# Required status checks are sourced from .github/branch-protection.json and
+# must exist in the repo before applying.
 
 set -euo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+BRANCH_PROTECTION_CONFIG="$REPO_ROOT/.github/branch-protection.json"
 
 REPO="MuzeenMir/sentinel"
 BRANCH="main"
@@ -36,18 +40,22 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Status checks must match `name:` from the 8 split workflows.
-# Update here when workflows change.
-REQUIRED_CHECKS=(
-  "lint"
-  "typecheck"
-  "unit"
-  "integration"
-  "e2e-smoke"
-  "security"
-  "build"
-  "sbom"
-)
+if ! command -v jq >/dev/null 2>&1; then
+  echo "jq not installed" >&2
+  exit 2
+fi
+
+if [[ ! -f "$BRANCH_PROTECTION_CONFIG" ]]; then
+  echo "missing branch protection config: $BRANCH_PROTECTION_CONFIG" >&2
+  exit 2
+fi
+
+mapfile -t REQUIRED_CHECKS < <(jq -r '.required_status_checks[]' "$BRANCH_PROTECTION_CONFIG")
+
+if [[ "${#REQUIRED_CHECKS[@]}" -eq 0 ]]; then
+  echo "branch protection config has zero required checks" >&2
+  exit 2
+fi
 
 checks_json=$(printf '%s\n' "${REQUIRED_CHECKS[@]}" | jq -R . | jq -s 'map({context: ., app_id: -1})')
 

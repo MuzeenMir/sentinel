@@ -1,0 +1,9 @@
+{
+  "required_status_checks": [
+    "lint",
+    "typecheck",
+    "unit",
+    "security",
+    "build"
+  ]
+}
