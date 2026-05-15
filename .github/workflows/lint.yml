@@ -39,13 +39,23 @@ jobs:
           ruff check \
             sentinel-core/backend \
             sentinel-core/stream-processing \
-            sentinel-core/training
+            sentinel-core/training \
+            sentinel-core/agent \
+            sentinel-core/sdk \
+            sentinel-core/scripts \
+            sentinel-core/mcp-servers \
+            sentinel-core/check_dependencies.py
       - name: Ruff format check
         run: |
           ruff format --check \
             sentinel-core/backend \
             sentinel-core/stream-processing \
-            sentinel-core/training
+            sentinel-core/training \
+            sentinel-core/agent \
+            sentinel-core/sdk \
+            sentinel-core/scripts \
+            sentinel-core/mcp-servers \
+            sentinel-core/check_dependencies.py
 
   lint-frontend:
     name: lint-frontend
