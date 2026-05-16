@@ -64,7 +64,10 @@ payload=$(jq -n --argjson checks "$checks_json" '{
     strict: true,
     checks: $checks
   },
-  enforce_admins: true,
+  # false: preserves the Mir emergency-override path documented in the
+  # ULTRAPLAN risk register. Phase 0 has a single reviewer (Marcus); locking
+  # admins out entirely would deadlock if no reviewer is available.
+  enforce_admins: false,
   required_pull_request_reviews: {
     dismiss_stale_reviews: true,
     require_code_owner_reviews: true,
