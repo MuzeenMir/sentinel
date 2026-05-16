@@ -43,10 +43,12 @@ class IoTProfile(BaseProfile):
         self._firmware_baselines: Dict[str, str] = {}
         self._cert_paths: List[str] = config.extra.get("cert_paths", [])
         self._monitored_protocols: List[str] = config.extra.get(
-            "monitored_protocols", ["mqtt", "coap"],
+            "monitored_protocols",
+            ["mqtt", "coap"],
         )
         self._heartbeat_interval = config.extra.get(
-            "heartbeat_interval_sec", _DEFAULT_HEARTBEAT_SEC,
+            "heartbeat_interval_sec",
+            _DEFAULT_HEARTBEAT_SEC,
         )
         self._stats = {
             "heartbeats_sent": 0,
@@ -76,8 +78,11 @@ class IoTProfile(BaseProfile):
         self._start_thread("firmware", self._firmware_check_loop)
         self._start_thread("certs", self._cert_lifecycle_loop)
         self._start_thread("protocols", self._protocol_monitor_loop)
-        logger.info("[iot] profile started — firmware files: %d, certs: %d",
-                     len(self._firmware_baselines), len(self._cert_paths))
+        logger.info(
+            "[iot] profile started — firmware files: %d, certs: %d",
+            len(self._firmware_baselines),
+            len(self._cert_paths),
+        )
 
     def stop(self) -> None:
         self._running = False
@@ -119,10 +124,13 @@ class IoTProfile(BaseProfile):
 
     def _connect_mqtt(self) -> None:
         if not self._mqtt_broker:
-            logger.info("[iot] no MQTT broker configured; events will use event bus only")
+            logger.info(
+                "[iot] no MQTT broker configured; events will use event bus only"
+            )
             return
         try:
             import paho.mqtt.client as mqtt
+
             self._mqtt_client = mqtt.Client(
                 client_id=f"sentinel-iot-{self._config.extra.get('device_id', 'unknown')[:12]}",
                 protocol=mqtt.MQTTv5,
@@ -130,13 +138,19 @@ class IoTProfile(BaseProfile):
             if self._mqtt_use_tls:
                 tls_ctx = ssl.create_default_context(cafile=self._mqtt_ca_cert or None)
                 if self._mqtt_client_cert and self._mqtt_client_key:
-                    tls_ctx.load_cert_chain(self._mqtt_client_cert, self._mqtt_client_key)
+                    tls_ctx.load_cert_chain(
+                        self._mqtt_client_cert, self._mqtt_client_key
+                    )
                 self._mqtt_client.tls_set_context(tls_ctx)
             self._mqtt_client.connect(self._mqtt_broker, self._mqtt_port, keepalive=60)
             self._mqtt_client.loop_start()
-            logger.info("[iot] MQTT connected to %s:%d", self._mqtt_broker, self._mqtt_port)
+            logger.info(
+                "[iot] MQTT connected to %s:%d", self._mqtt_broker, self._mqtt_port
+            )
         except Exception as exc:
-            logger.warning("[iot] MQTT connection failed (events via bus only): %s", exc)
+            logger.warning(
+                "[iot] MQTT connection failed (events via bus only): %s", exc
+            )
             self._mqtt_client = None
 
     def _disconnect_mqtt(self) -> None:
@@ -178,24 +192,28 @@ class IoTProfile(BaseProfile):
         for path, expected in list(self._firmware_baselines.items()):
             current = self._hash_file(path)
             if current is None:
-                alerts.append({
-                    "event_type": "firmware_integrity_alert",
-                    "severity": "critical",
-                    "path": path,
-                    "change": "missing",
-                    "timestamp": time.time(),
-                })
+                alerts.append(
+                    {
+                        "event_type": "firmware_integrity_alert",
+                        "severity": "critical",
+                        "path": path,
+                        "change": "missing",
+                        "timestamp": time.time(),
+                    }
+                )
                 self._stats["firmware_alerts"] += 1
             elif current != expected:
-                alerts.append({
-                    "event_type": "firmware_integrity_alert",
-                    "severity": "critical",
-                    "path": path,
-                    "change": "modified",
-                    "expected_hash": expected[:16],
-                    "current_hash": current[:16],
-                    "timestamp": time.time(),
-                })
+                alerts.append(
+                    {
+                        "event_type": "firmware_integrity_alert",
+                        "severity": "critical",
+                        "path": path,
+                        "change": "modified",
+                        "expected_hash": expected[:16],
+                        "current_hash": current[:16],
+                        "timestamp": time.time(),
+                    }
+                )
                 self._firmware_baselines[path] = current
                 self._stats["firmware_alerts"] += 1
         return alerts
@@ -220,22 +238,26 @@ class IoTProfile(BaseProfile):
             if days_left is None:
                 continue
             if days_left <= 0:
-                events.append({
-                    "event_type": "cert_expired",
-                    "severity": "critical",
-                    "cert_path": cert_path,
-                    "days_remaining": days_left,
-                    "timestamp": time.time(),
-                })
+                events.append(
+                    {
+                        "event_type": "cert_expired",
+                        "severity": "critical",
+                        "cert_path": cert_path,
+                        "days_remaining": days_left,
+                        "timestamp": time.time(),
+                    }
+                )
                 self._stats["cert_warnings"] += 1
             elif days_left <= _CERT_RENEWAL_WARN_DAYS:
-                events.append({
-                    "event_type": "cert_expiry_warning",
-                    "severity": "high",
-                    "cert_path": cert_path,
-                    "days_remaining": days_left,
-                    "timestamp": time.time(),
-                })
+                events.append(
+                    {
+                        "event_type": "cert_expiry_warning",
+                        "severity": "high",
+                        "cert_path": cert_path,
+                        "days_remaining": days_left,
+                        "timestamp": time.time(),
+                    }
+                )
                 self._stats["cert_warnings"] += 1
         return events
 
@@ -252,7 +274,9 @@ class IoTProfile(BaseProfile):
             not_after = ctx.get_ca_certs()[0].get("notAfter", "")
             if not not_after:
                 return None
-            expiry = datetime.strptime(not_after, "%b %d %H:%M:%S %Y %Z").replace(tzinfo=timezone.utc)
+            expiry = datetime.strptime(not_after, "%b %d %H:%M:%S %Y %Z").replace(
+                tzinfo=timezone.utc
+            )
             return (expiry - datetime.now(timezone.utc)).days
         except Exception:
             return None
@@ -263,21 +287,25 @@ class IoTProfile(BaseProfile):
         events: List[dict] = []
         for proto in self._monitored_protocols:
             if proto == "mqtt" and self._mqtt_client is not None:
-                events.append({
-                    "event_type": "protocol_status",
-                    "protocol": "mqtt",
-                    "status": "connected",
-                    "messages_sent": self._stats["mqtt_messages_sent"],
-                    "timestamp": time.time(),
-                })
+                events.append(
+                    {
+                        "event_type": "protocol_status",
+                        "protocol": "mqtt",
+                        "status": "connected",
+                        "messages_sent": self._stats["mqtt_messages_sent"],
+                        "timestamp": time.time(),
+                    }
+                )
                 self._stats["protocol_events"] += 1
             elif proto == "coap":
-                events.append({
-                    "event_type": "protocol_status",
-                    "protocol": "coap",
-                    "status": "monitoring",
-                    "timestamp": time.time(),
-                })
+                events.append(
+                    {
+                        "event_type": "protocol_status",
+                        "protocol": "coap",
+                        "status": "monitoring",
+                        "timestamp": time.time(),
+                    }
+                )
                 self._stats["protocol_events"] += 1
         return events
 

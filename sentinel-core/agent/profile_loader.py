@@ -115,8 +115,12 @@ class ProfileLoader:
     @staticmethod
     def _is_business_app() -> bool:
         app_indicators = (
-            "FLASK_APP", "DJANGO_SETTINGS_MODULE", "RAILS_ENV",
-            "NODE_ENV", "SPRING_PROFILES_ACTIVE", "SENTINEL_APP_SIDECAR",
+            "FLASK_APP",
+            "DJANGO_SETTINGS_MODULE",
+            "RAILS_ENV",
+            "NODE_ENV",
+            "SPRING_PROFILES_ACTIVE",
+            "SENTINEL_APP_SIDECAR",
         )
         return any(os.environ.get(var) for var in app_indicators)
 

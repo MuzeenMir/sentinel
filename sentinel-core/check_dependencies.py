@@ -14,7 +14,11 @@ from typing import Dict, List, Optional
 # Known compatibility issues (package, python_version, issue)
 COMPATIBILITY_ISSUES = {
     ("apache-flink", "3.12"): "Does not support Python 3.12 (max 3.11)",
-    ("stable-baselines3", "3.12", "<=2.1.0"): "No Python 3.12 support in versions <=2.1.0",
+    (
+        "stable-baselines3",
+        "3.12",
+        "<=2.1.0",
+    ): "No Python 3.12 support in versions <=2.1.0",
     ("gymnasium", "3.12", "<=0.29.1"): "No Python 3.12 support in versions <=0.29.1",
     ("torch", "3.12", "<2.2.0"): "No Python 3.12 support in versions <2.2.0",
 }
@@ -27,9 +31,11 @@ RECOMMENDED_VERSIONS = {
     "apache-flink": ("1.19.0", "1.20.9", ["3.8", "3.9", "3.10", "3.11"]),
 }
 
+
 @dataclass
 class PackageSpec:
     """Represents a package version specification"""
+
     name: str
     version: Optional[str] = None
     operator: str = "=="  # ==, >=, <=, >, <, ~=
@@ -39,6 +45,7 @@ class PackageSpec:
         if self.version:
             return f"{self.name}{self.operator}{self.version}"
         return self.name
+
 
 class DependencyChecker:
     def __init__(self, project_root: str):
@@ -55,14 +62,18 @@ class DependencyChecker:
             return None
 
         # Match: package_name[extras]operator version
-        match = re.match(r'^([a-zA-Z0-9\-_.]+)(?:\[.*?\])?\s*([><=~!]+)\s*(.+)$', line)
+        match = re.match(r"^([a-zA-Z0-9\-_.]+)(?:\[.*?\])?\s*([><=~!]+)\s*(.+)$", line)
         if match:
             name, operator, version = match.groups()
-            return PackageSpec(name=name.lower(), version=version.strip(),
-                             operator=operator, source=source)
+            return PackageSpec(
+                name=name.lower(),
+                version=version.strip(),
+                operator=operator,
+                source=source,
+            )
 
         # Match: just package name
-        match = re.match(r'^([a-zA-Z0-9\-_.]+)$', line)
+        match = re.match(r"^([a-zA-Z0-9\-_.]+)$", line)
         if match:
             return PackageSpec(name=match.group(1).lower(), source=source)
 
@@ -79,14 +90,17 @@ class DependencyChecker:
                 req_file = service_dir / "requirements.txt"
                 if req_file.exists():
                     self._parse_requirements_file(
-                        req_file,
-                        f"backend/{service_dir.name}/requirements.txt"
+                        req_file, f"backend/{service_dir.name}/requirements.txt"
                     )
 
         # Stream processing
-        flink_req = self.project_root / "stream-processing" / "flink-jobs" / "requirements.txt"
+        flink_req = (
+            self.project_root / "stream-processing" / "flink-jobs" / "requirements.txt"
+        )
         if flink_req.exists():
-            self._parse_requirements_file(flink_req, "stream-processing/flink-jobs/requirements.txt")
+            self._parse_requirements_file(
+                flink_req, "stream-processing/flink-jobs/requirements.txt"
+            )
 
         # Training
         training_req = self.project_root / "training" / "requirements.txt"
@@ -106,7 +120,7 @@ class DependencyChecker:
     def _parse_requirements_file(self, path: Path, source: str):
         """Parse a single requirements file"""
         try:
-            with open(path, 'r') as f:
+            with open(path, "r") as f:
                 for line in f:
                     spec = self.parse_requirement(line, source)
                     if spec:
@@ -122,12 +136,16 @@ class DependencyChecker:
         pkg_json = self.project_root / "frontend" / "admin-console" / "package.json"
         if pkg_json.exists():
             try:
-                with open(pkg_json, 'r') as f:
+                with open(pkg_json, "r") as f:
                     data = json.load(f)
 
-                for dep in {**data.get('dependencies', {}),
-                           **data.get('devDependencies', {})}:
-                    version = data['dependencies'].get(dep) or data['devDependencies'].get(dep)
+                for dep in {
+                    **data.get("dependencies", {}),
+                    **data.get("devDependencies", {}),
+                }:
+                    version = data["dependencies"].get(dep) or data[
+                        "devDependencies"
+                    ].get(dep)
                     self.npm_packages[dep] = version
                     print(f"  ✓ {dep}@{version}")
             except Exception as e:
@@ -161,14 +179,19 @@ class DependencyChecker:
         print("\n🐍 Checking Python version compatibility...")
 
         critical_packages = {
-            "torch", "stable-baselines3", "gymnasium",
-            "apache-flink", "apache-beam"
+            "torch",
+            "stable-baselines3",
+            "gymnasium",
+            "apache-flink",
+            "apache-beam",
         }
 
         for package_name, specs in self.python_packages.items():
             if package_name in critical_packages:
                 for spec in specs:
-                    version_str = f"{spec.operator}{spec.version}" if spec.version else "any"
+                    version_str = (
+                        f"{spec.operator}{spec.version}" if spec.version else "any"
+                    )
 
                     # Check against known issues
                     for py_version in ["3.12", "3.11", "3.10"]:
@@ -183,7 +206,11 @@ class DependencyChecker:
                     if package_name in RECOMMENDED_VERSIONS:
                         rec_min, rec_max, rec_py = RECOMMENDED_VERSIONS[package_name]
                         msg = f"ℹ️  {spec.source}: {package_name}{version_str}"
-                        msg += f" (recommended {rec_min}" + (f"-{rec_max}" if rec_max else "") + ")"
+                        msg += (
+                            f" (recommended {rec_min}"
+                            + (f"-{rec_max}" if rec_max else "")
+                            + ")"
+                        )
                         print(msg)
 
     def check_deprecated_packages(self):
@@ -228,14 +255,16 @@ class DependencyChecker:
 
     def generate_report(self):
         """Generate a comprehensive report"""
-        print("\n" + "="*70)
+        print("\n" + "=" * 70)
         print("SENTINEL DEPENDENCY CHECK REPORT")
-        print("="*70)
+        print("=" * 70)
 
         print("\n📊 Summary:")
         print(f"  Python packages: {len(self.python_packages)}")
         print(f"  NPM packages: {len(self.npm_packages)}")
-        print(f"  Services scanned: {len(set(pkg.source.split('/')[0] for pkg in [s for specs in self.python_packages.values() for s in specs]))}")
+        print(
+            f"  Services scanned: {len(set(pkg.source.split('/')[0] for pkg in [s for specs in self.python_packages.values() for s in specs]))}"
+        )
 
         if self.issues:
             print(f"\n❌ ERRORS ({len(self.issues)}):")
@@ -252,6 +281,7 @@ class DependencyChecker:
 
         return len(self.issues) == 0 and len(self.warnings) == 0
 
+
 def main():
     """Main entry point"""
     project_root = Path(__file__).parent
@@ -266,8 +296,9 @@ def main():
 
     success = checker.generate_report()
 
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     return 0 if success else 1
+
 
 if __name__ == "__main__":
     exit(main())

@@ -142,7 +142,9 @@ class TestSEC02_BruteForceProtection:
         resp = _login(client)
         assert resp.status_code in (401, 403, 429)
 
-    def test_locked_account_rejects_correct_password_before_password_check(self, client):
+    def test_locked_account_rejects_correct_password_before_password_check(
+        self, client
+    ):
         _create_user(client)
         with app.app_context():
             user = User.query.filter_by(username="secuser").first()

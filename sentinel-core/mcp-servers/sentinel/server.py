@@ -34,19 +34,25 @@ def _headers() -> dict:
 
 
 def _get(path: str, params: Optional[dict] = None) -> dict:
-    r = requests.get(f"{BASE_URL}{path}", headers=_headers(), params=params or {}, timeout=15)
+    r = requests.get(
+        f"{BASE_URL}{path}", headers=_headers(), params=params or {}, timeout=15
+    )
     r.raise_for_status()
     return r.json() if r.content else {}
 
 
 def _post(path: str, data: Optional[dict] = None) -> dict:
-    r = requests.post(f"{BASE_URL}{path}", headers=_headers(), json=data or {}, timeout=15)
+    r = requests.post(
+        f"{BASE_URL}{path}", headers=_headers(), json=data or {}, timeout=15
+    )
     r.raise_for_status()
     return r.json() if r.content else {}
 
 
 def _put(path: str, data: Optional[dict] = None) -> dict:
-    r = requests.put(f"{BASE_URL}{path}", headers=_headers(), json=data or {}, timeout=15)
+    r = requests.put(
+        f"{BASE_URL}{path}", headers=_headers(), json=data or {}, timeout=15
+    )
     r.raise_for_status()
     return r.json() if r.content else {}
 
