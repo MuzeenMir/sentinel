@@ -107,7 +107,10 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,scope=${{ matrix.service }},mode=max
-          provenance: mode=max
+          # PR builds use the docker exporter (load: true), which cannot load
+          # the manifest list buildx emits when provenance attestation is on.
+          # Provenance is only meaningful on the registry-pushed main/tag build.
+          provenance: ${{ github.event_name != 'pull_request' && 'mode=max' || 'false' }}
           sbom: false    # SBOM is produced in sbom.yml from the pushed image
       - name: Record digest
         if: github.event_name != 'pull_request'

@@ -36,6 +36,7 @@ services:
     environment:
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:?set JWT_SECRET_KEY}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:?set ADMIN_PASSWORD}
+      - LOCKOUT_THRESHOLD=5
   grafana:
     image: grafana/grafana:10.4.0
     environment:
@@ -82,14 +83,18 @@ def test_docker_compose_rejects_empty_required_secrets():
     assert result.returncode != 0
 
 
-def test_validator_rejects_secret_syntax_that_allows_empty_values(tmp_path, monkeypatch, capsys):
+def test_validator_rejects_secret_syntax_that_allows_empty_values(
+    tmp_path, monkeypatch, capsys
+):
     repo_core = Path(__file__).resolve().parents[2]
     validator = load_validator(repo_core)
 
     for secret in REQUIRED_SECRETS:
         compose = tmp_path / f"{secret}.yml"
         compose.write_text(
-            valid_compose_text().replace(f"${{{secret}:?set {secret}}}", f"${{{secret}?set {secret}}}"),
+            valid_compose_text().replace(
+                f"${{{secret}:?set {secret}}}", f"${{{secret}?set {secret}}}"
+            ),
             encoding="utf-8",
         )
         monkeypatch.setattr(validator, "COMPOSE", compose)
@@ -116,10 +121,12 @@ def test_validator_rejects_unprofiled_host_network_mode(tmp_path, monkeypatch, c
 
     assert validator.main() == 1
     captured = capsys.readouterr()
-    assert "host network service must be behind an explicit profile: xdp-collector" in captured.err
+    assert "host network mode is forbidden: xdp-collector" in captured.err
 
 
-def test_validator_ignores_xdp_outside_profiles_for_host_network(tmp_path, monkeypatch, capsys):
+def test_validator_rejects_host_network_even_when_profiled(
+    tmp_path, monkeypatch, capsys
+):
     repo_core = Path(__file__).resolve().parents[2]
     validator = load_validator(repo_core)
     compose = tmp_path / "compose.yml"
@@ -138,10 +145,12 @@ def test_validator_ignores_xdp_outside_profiles_for_host_network(tmp_path, monke
 
     assert validator.main() == 1
     captured = capsys.readouterr()
-    assert "host network service must be behind an explicit profile: xdp-collector" in captured.err
+    assert "host network mode is forbidden: xdp-collector" in captured.err
 
 
-def test_validator_rejects_host_network_localhost_kafka_dependency(tmp_path, monkeypatch, capsys):
+def test_validator_rejects_host_network_localhost_kafka_dependency(
+    tmp_path, monkeypatch, capsys
+):
     repo_core = Path(__file__).resolve().parents[2]
     validator = load_validator(repo_core)
     compose = tmp_path / "compose.yml"
@@ -162,7 +171,7 @@ def test_validator_rejects_host_network_localhost_kafka_dependency(tmp_path, mon
 
     assert validator.main() == 1
     captured = capsys.readouterr()
-    assert "host network service uses localhost dependency KAFKA_BOOTSTRAP_SERVERS: xdp-collector" in captured.err
+    assert "host network mode is forbidden: xdp-collector" in captured.err
 
 
 def test_xdp_profile_config_renders_without_stale_localhost_dependencies():
@@ -195,7 +204,9 @@ def test_xdp_profile_config_renders_without_stale_localhost_dependencies():
     assert "localhost:5000" not in result.stdout
 
 
-def test_validator_rejects_inline_ports_on_internal_services(tmp_path, monkeypatch, capsys):
+def test_validator_rejects_inline_ports_on_internal_services(
+    tmp_path, monkeypatch, capsys
+):
     repo_core = Path(__file__).resolve().parents[2]
     validator = load_validator(repo_core)
     compose = tmp_path / "compose.yml"
@@ -211,3 +222,136 @@ def test_validator_rejects_inline_ports_on_internal_services(tmp_path, monkeypat
     assert validator.main() == 1
     captured = capsys.readouterr()
     assert "internal service exposes host ports: postgres" in captured.err
+
+
+def test_validator_rejects_0_0_0_0_host_ports_on_internal_services(
+    tmp_path, monkeypatch, capsys
+):
+    repo_core = Path(__file__).resolve().parents[2]
+    validator = load_validator(repo_core)
+    compose = tmp_path / "compose.yml"
+    compose.write_text(
+        valid_compose_text()
+        + """
+  api-gateway:
+    image: sentinel-api-gateway
+    ports:
+      - "0.0.0.0:8080:8080"
+  alert-service:
+    image: sentinel-alert-service
+    ports:
+      - "0.0.0.0:5002:5002"
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(validator, "COMPOSE", compose)
+
+    assert validator.main() == 1
+    captured = capsys.readouterr()
+    assert "internal service publishes 0.0.0.0 host port: alert-service" in captured.err
+    assert "api-gateway" not in captured.err
+
+
+def test_validator_rejects_known_secret_default_fallbacks(
+    tmp_path, monkeypatch, capsys
+):
+    repo_core = Path(__file__).resolve().parents[2]
+    validator = load_validator(repo_core)
+    compose = tmp_path / "compose.yml"
+    compose.write_text(
+        valid_compose_text()
+        + """
+  secret-regression:
+    image: scratch
+    environment:
+      - JWT_SECRET=${JWT_SECRET:-dev}
+      - DATABASE_PASSWORD=${DATABASE_PASSWORD:-dev}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-dev}
+      - AGENT_TOKEN=${AGENT_TOKEN:-dev}
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(validator, "COMPOSE", compose)
+
+    assert validator.main() == 1
+    captured = capsys.readouterr()
+    for secret in ("JWT_SECRET", "DATABASE_PASSWORD", "REDIS_PASSWORD", "AGENT_TOKEN"):
+        assert f"{secret} must not define a default fallback" in captured.err
+
+
+def test_validator_rejects_missing_installer_checksum_or_https(
+    tmp_path, monkeypatch, capsys
+):
+    repo_core = Path(__file__).resolve().parents[2]
+    validator = load_validator(repo_core)
+    installer = tmp_path / "install.sh"
+    installer.write_text(
+        """
+curl -fsSL http://sentinel.example.com/agent -o /tmp/sentinel-agent
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(validator, "INSTALLER", installer, raising=False)
+
+    assert validator.main() == 1
+    captured = capsys.readouterr()
+    assert "agent installer must verify downloads with sha256sum" in captured.err
+    assert "agent installer must require https:// downloads" in captured.err
+
+
+def test_validator_rejects_missing_auth_lockout_threshold_env(
+    tmp_path, monkeypatch, capsys
+):
+    repo_core = Path(__file__).resolve().parents[2]
+    validator = load_validator(repo_core)
+    compose = tmp_path / "compose.yml"
+    compose.write_text(
+        valid_compose_text().replace("      - LOCKOUT_THRESHOLD=5\n", ""),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(validator, "COMPOSE", compose)
+
+    assert validator.main() == 1
+    captured = capsys.readouterr()
+    assert "auth-service must declare LOCKOUT_THRESHOLD" in captured.err
+
+
+def test_validator_rejects_missing_viewer_forbidden_api_gateway_test(
+    tmp_path, monkeypatch, capsys
+):
+    repo_core = Path(__file__).resolve().parents[2]
+    validator = load_validator(repo_core)
+    test_file = tmp_path / "test_api_gateway.py"
+    test_file.write_text("def test_admin_can_mutate():\n    pass\n", encoding="utf-8")
+    monkeypatch.setattr(validator, "API_GATEWAY_TEST", test_file, raising=False)
+
+    assert validator.main() == 1
+    captured = capsys.readouterr()
+    assert "api-gateway tests must include viewer forbidden coverage" in captured.err
+
+
+def test_validator_rejects_missing_systemd_hardening_flags(
+    tmp_path, monkeypatch, capsys
+):
+    repo_core = Path(__file__).resolve().parents[2]
+    validator = load_validator(repo_core)
+    installer = tmp_path / "install.sh"
+    installer.write_text(
+        """
+curl --proto '=https' --tlsv1.2 -fsSL https://sentinel.example.com/agent
+sha256sum -c -
+NoNewPrivileges=yes
+ProtectSystem=strict
+PrivateTmp=true
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(validator, "INSTALLER", installer, raising=False)
+
+    assert validator.main() == 1
+    captured = capsys.readouterr()
+    assert "agent installer systemd unit must set ProtectHome=true" in captured.err

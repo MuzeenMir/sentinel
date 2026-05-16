@@ -24,6 +24,7 @@ from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from functools import wraps
+from typing import Any
 import redis
 import logging
 from enum import Enum
@@ -32,6 +33,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from observability import configure_logging
 from metrics import init_metrics
 from audit_logger import audit_log, AuditCategory
+from _lib.net import bind_host
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -77,7 +79,7 @@ else:
 app.config["REDIS_URL"] = os.environ.get("REDIS_URL", "redis://localhost:6379")
 
 # Initialize extensions
-db = SQLAlchemy(app)
+db: Any = SQLAlchemy(app)
 jwt_manager = JWTManager(app)
 
 # Redis with connection pooling
@@ -970,4 +972,6 @@ if __name__ == "__main__":
     if debug_mode:
         logger.warning("Running in DEBUG mode - DO NOT use in production!")
 
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "5000")), debug=debug_mode)
+    app.run(
+        host=bind_host(), port=int(os.environ.get("PORT", "5000")), debug=debug_mode
+    )

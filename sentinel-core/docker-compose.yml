@@ -66,6 +66,9 @@ services:
       - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:?set ADMIN_PASSWORD}
       - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@yourdomain.com}
+      - LOCKOUT_THRESHOLD=5
+      # Compose bridge peers need the HTTP listener on the container interface.
+      - SENTINEL_BIND_HOST=0.0.0.0
     depends_on:
       postgres:
         condition: service_healthy
@@ -130,6 +133,8 @@ services:
       - HIDS_AGENT_URL=http://hids-agent:5010
       - REDIS_URL=redis://redis:6379
       - INTERNAL_SERVICE_TOKEN=${INTERNAL_SERVICE_TOKEN:?set INTERNAL_SERVICE_TOKEN}
+      # Compose bridge peers need the HTTP listener on the container interface.
+      - SENTINEL_BIND_HOST=0.0.0.0
       # Phase 0 slice 5 — OTel pilot. Empty = telemetry disabled (no-op).
       # Set to `http://tempo:4317` (or an OTLP collector) to enable. Start the
       # `observability` profile locally: `docker compose --profile observability up`.
@@ -158,6 +163,8 @@ services:
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - REDIS_URL=redis://redis:6379
       - AUTH_SERVICE_URL=http://auth-service:5000
+      # Compose bridge peers need the HTTP listener on the container interface.
+      - SENTINEL_BIND_HOST=0.0.0.0
     depends_on:
       kafka:
         condition: service_healthy
@@ -171,18 +178,15 @@ services:
     restart: unless-stopped
 
   # High-speed XDP Collector (bare-metal / privileged container)
-  # XDP uses host networking, so localhost is the Docker host and Compose bridge
-  # service DNS is unavailable after Kafka/auth-service host ports are removed.
-  # Operators enabling this profile must provide externally reachable Kafka and
-  # control-plane endpoints through the XDP_* variables.
+  # XDP is opt-in and privileged, but remains on the Compose bridge network.
+  # Operators can override Kafka/auth endpoints through the XDP_* variables.
   xdp-collector:
     build:
       context: ./backend
       dockerfile: xdp-collector/Dockerfile
     container_name: sentinel-xdp-collector
     profiles: ["xdp"]
-    # XDP requires host networking and privileges to attach to NIC
-    network_mode: "host"
+    # XDP requires privileges to attach to the configured NIC.
     privileged: true
     environment:
       - PORT=5012
@@ -200,6 +204,8 @@ services:
         exec gunicorn app:app -b 0.0.0.0:5012 -k gevent -w 4 --timeout 120 --access-logfile -
     depends_on:
       - auth-service
+    networks:
+      - sentinel-network
     restart: unless-stopped
 
   # Alert Service
@@ -216,6 +222,8 @@ services:
       - SMTP_USER=${SMTP_USER:-}
       - SMTP_PASSWORD=${SMTP_PASSWORD:-}
       - NOTIFICATION_EMAIL=${NOTIFICATION_EMAIL:-admin@example.com}
+      # Compose bridge peers need the HTTP listener on the container interface.
+      - SENTINEL_BIND_HOST=0.0.0.0
     depends_on:
       - redis
       - auth-service
@@ -236,6 +244,8 @@ services:
       - CONFIDENCE_THRESHOLD=0.85
       - BATCH_SIZE=1000
       - AUTH_SERVICE_URL=http://auth-service:5000
+      # Compose bridge peers need the HTTP listener on the container interface.
+      - SENTINEL_BIND_HOST=0.0.0.0
     volumes:
       - ai_models:/models
     depends_on:
@@ -287,6 +297,8 @@ services:
     environment:
       - REDIS_URL=redis://redis:6379
       - AUTH_SERVICE_URL=http://auth-service:5000
+      # Compose bridge peers need the HTTP listener on the container interface.
+      - SENTINEL_BIND_HOST=0.0.0.0
     depends_on:
       - redis
       - auth-service
@@ -309,6 +321,8 @@ services:
       # Shadow mode: decisions logged + tagged shadow=true, NOT enforced.
       # Promotion ladder: shadow → canary → enforce. See docs/RISK-TIERS.md.
       - DRL_SHADOW_MODE=${DRL_SHADOW_MODE:-true}
+      # Compose bridge peers need the HTTP listener on the container interface.
+      - SENTINEL_BIND_HOST=0.0.0.0
     volumes:
       - ai_models:/models
     depends_on:
@@ -331,6 +345,8 @@ services:
       - AI_ENGINE_URL=http://ai-engine:5003
       - DRL_ENGINE_URL=http://drl-engine:5005
       - AUTH_SERVICE_URL=http://auth-service:5000
+      # Compose bridge peers need the HTTP listener on the container interface.
+      - SENTINEL_BIND_HOST=0.0.0.0
     depends_on:
       - redis
       - auth-service
@@ -347,6 +363,8 @@ services:
     environment:
       - REDIS_URL=redis://redis:6379
       - AUTH_SERVICE_URL=http://auth-service:5000
+      # Compose bridge peers need the HTTP listener on the container interface.
+      - SENTINEL_BIND_HOST=0.0.0.0
     depends_on:
       - redis
       - auth-service
@@ -367,6 +385,8 @@ services:
       - FIM_PATHS=/etc/passwd,/etc/shadow,/etc/sudoers,/etc/ssh/sshd_config
       - HOST_ROOT=/host
       - FIM_CHECK_INTERVAL=60
+      # Compose bridge peers need the HTTP listener on the container interface.
+      - SENTINEL_BIND_HOST=0.0.0.0
     volumes:
       - /etc:/host/etc:ro
       - /var/log:/host/var/log:ro
@@ -394,6 +414,8 @@ services:
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - AUTH_SERVICE_URL=http://auth-service:5000
       - HOST_ROOT=/host
+      # Compose bridge peers need the HTTP listener on the container interface.
+      - SENTINEL_BIND_HOST=0.0.0.0
     volumes:
       - /etc:/host/etc:rw
       - /proc:/host/proc:ro

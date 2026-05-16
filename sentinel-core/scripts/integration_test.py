@@ -10,29 +10,28 @@ Usage:
 """
 
 import argparse
-import json
 import sys
 import time
 import requests
 
 # ── Configuration ──────────────────────────────────────────────────────────
 DEFAULT_GATEWAY = "http://localhost:8080"
-DEFAULT_AUTH    = "http://localhost:5000"
+DEFAULT_AUTH = "http://localhost:5000"
 
 SERVICES = {
-    "postgres":          None,               # checked via auth-service startup
-    "auth-service":      "http://localhost:5000/health",
-    "api-gateway":       "http://localhost:8080/health",
-    "data-collector":    "http://localhost:5001/health",
-    "alert-service":     "http://localhost:5002/health",
-    "ai-engine":         "http://localhost:5003/health",
-    "drl-engine":        "http://localhost:5005/health",
-    "xai-service":       "http://localhost:5006/health",
+    "postgres": None,  # checked via auth-service startup
+    "auth-service": "http://localhost:5000/health",
+    "api-gateway": "http://localhost:8080/health",
+    "data-collector": "http://localhost:5001/health",
+    "alert-service": "http://localhost:5002/health",
+    "ai-engine": "http://localhost:5003/health",
+    "drl-engine": "http://localhost:5005/health",
+    "xai-service": "http://localhost:5006/health",
     "compliance-engine": "http://localhost:5007/health",
-    "policy-orchestrator":"http://localhost:5004/health",
-    "hids-agent":        "http://localhost:5010/health",
+    "policy-orchestrator": "http://localhost:5004/health",
+    "hids-agent": "http://localhost:5010/health",
     "hardening-service": "http://localhost:5011/health",
-    "xdp-collector":     "http://localhost:5012/health",
+    "xdp-collector": "http://localhost:5012/health",
 }
 
 PASS = "\033[92m✔\033[0m"
@@ -65,6 +64,7 @@ def info(label: str, detail: str = "") -> None:
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 
+
 def wait_for_health(url: str, service: str, timeout: int = 120) -> bool:
     """Poll a health URL until it returns 200 or timeout expires."""
     deadline = time.time() + timeout
@@ -81,6 +81,7 @@ def wait_for_health(url: str, service: str, timeout: int = 120) -> bool:
 
 # ── Test phases ────────────────────────────────────────────────────────────
 
+
 def phase_health_checks(services: dict) -> dict[str, bool]:
     banner("Phase 1 — Health checks")
     results = {}
@@ -92,7 +93,7 @@ def phase_health_checks(services: dict) -> dict[str, bool]:
         try:
             r = requests.get(url, timeout=10)
             if r.status_code == 200:
-                ok(f"{name}", f"HTTP 200")
+                ok(f"{name}", "HTTP 200")
                 results[name] = True
             else:
                 fail(f"{name}", f"HTTP {r.status_code}")
@@ -111,7 +112,7 @@ def phase_auth_flow(auth_url: str, gateway_url: str) -> dict:
     ctx: dict = {}
 
     # 2a. Admin login (bootstrap user)
-    print(f"\n  ── 2a. Admin login ──")
+    print("\n  ── 2a. Admin login ──")
     try:
         r = requests.post(
             f"{auth_url}/api/v1/auth/login",
@@ -131,7 +132,7 @@ def phase_auth_flow(auth_url: str, gateway_url: str) -> dict:
         return ctx
 
     # 2b. Register a test analyst
-    print(f"\n  ── 2b. Register test analyst ──")
+    print("\n  ── 2b. Register test analyst ──")
     ts = int(time.time())
     test_user = {
         "username": f"analyst_{ts}",
@@ -155,7 +156,7 @@ def phase_auth_flow(auth_url: str, gateway_url: str) -> dict:
         fail("Register analyst", str(e))
 
     # 2c. Analyst login
-    print(f"\n  ── 2c. Analyst login ──")
+    print("\n  ── 2c. Analyst login ──")
     if ctx.get("analyst_username"):
         try:
             r = requests.post(
@@ -176,7 +177,7 @@ def phase_auth_flow(auth_url: str, gateway_url: str) -> dict:
             fail("Analyst login", str(e))
 
     # 2d. Token verification
-    print(f"\n  ── 2d. Token verification ──")
+    print("\n  ── 2d. Token verification ──")
     token = ctx.get("admin_token")
     if token:
         try:
@@ -187,14 +188,17 @@ def phase_auth_flow(auth_url: str, gateway_url: str) -> dict:
             )
             if r.status_code == 200:
                 user_info = r.json().get("user", {})
-                ok("Token verify", f"user={user_info.get('username')} role={user_info.get('role')}")
+                ok(
+                    "Token verify",
+                    f"user={user_info.get('username')} role={user_info.get('role')}",
+                )
             else:
                 fail("Token verify", f"HTTP {r.status_code}")
         except Exception as e:
             fail("Token verify", str(e))
 
     # 2e. Access protected profile endpoint
-    print(f"\n  ── 2e. Protected endpoint (profile) ──")
+    print("\n  ── 2e. Protected endpoint (profile) ──")
     token = ctx.get("admin_token")
     if token:
         try:
@@ -211,7 +215,7 @@ def phase_auth_flow(auth_url: str, gateway_url: str) -> dict:
             fail("GET /auth/profile", str(e))
 
     # 2f. Reject unauthenticated request
-    print(f"\n  ── 2f. Reject unauthenticated request ──")
+    print("\n  ── 2f. Reject unauthenticated request ──")
     try:
         r = requests.get(f"{auth_url}/api/v1/auth/profile", timeout=10)
         if r.status_code == 401:
@@ -222,7 +226,7 @@ def phase_auth_flow(auth_url: str, gateway_url: str) -> dict:
         fail("Unauth rejection", str(e))
 
     # 2g. Token refresh
-    print(f"\n  ── 2g. Token refresh ──")
+    print("\n  ── 2g. Token refresh ──")
     refresh = ctx.get("admin_refresh")
     if refresh:
         try:
@@ -246,10 +250,10 @@ def phase_gateway_flow(gateway_url: str, token: str) -> None:
     banner("Phase 3 — API Gateway proxying")
 
     endpoints = [
-        ("GET", "/health",       None,  [200]),
-        ("GET", "/api/v1/stats", None,  [200, 503]),   # 503 if downstream down
+        ("GET", "/health", None, [200]),
+        ("GET", "/api/v1/stats", None, [200, 503]),  # 503 if downstream down
         ("GET", "/api/v1/threats", None, [200, 503]),
-        ("GET", "/api/v1/alerts",  None, [200, 503]),
+        ("GET", "/api/v1/alerts", None, [200, 503]),
     ]
 
     for method, path, body, expected_codes in endpoints:
@@ -264,7 +268,10 @@ def phase_gateway_flow(gateway_url: str, token: str) -> None:
             if r.status_code in expected_codes:
                 ok(f"{method} {path}", f"HTTP {r.status_code}")
             else:
-                warn(f"{method} {path}", f"HTTP {r.status_code} (expected {expected_codes})")
+                warn(
+                    f"{method} {path}",
+                    f"HTTP {r.status_code} (expected {expected_codes})",
+                )
         except Exception as e:
             fail(f"{method} {path}", str(e))
 
@@ -303,7 +310,9 @@ def phase_security_checks(auth_url: str, gateway_url: str) -> None:
         except Exception:
             break
     if not throttled:
-        warn("Rate limiting", "not triggered within 8 attempts (may need higher volume)")
+        warn(
+            "Rate limiting", "not triggered within 8 attempts (may need higher volume)"
+        )
 
     # No token = 401
     try:
@@ -335,12 +344,17 @@ def phase_security_checks(auth_url: str, gateway_url: str) -> None:
 
 # ── Main ───────────────────────────────────────────────────────────────────
 
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="SENTINEL Integration Tests")
     parser.add_argument("--gateway-url", default=DEFAULT_GATEWAY)
-    parser.add_argument("--auth-url",    default=DEFAULT_AUTH)
-    parser.add_argument("--wait",        type=int, default=0,
-                        help="Seconds to wait for auth-service to become healthy before testing")
+    parser.add_argument("--auth-url", default=DEFAULT_AUTH)
+    parser.add_argument(
+        "--wait",
+        type=int,
+        default=0,
+        help="Seconds to wait for auth-service to become healthy before testing",
+    )
     args = parser.parse_args()
 
     print("\n╔══════════════════════════════════════════════════════╗")
@@ -359,8 +373,8 @@ def main() -> int:
 
     # Phase 1 — health checks
     health_results = phase_health_checks(SERVICES)
-    healthy_count  = sum(health_results.values())
-    total_count    = len(health_results)
+    healthy_count = sum(health_results.values())
+    total_count = len(health_results)
 
     print(f"\n  Health: {healthy_count}/{total_count} services healthy")
 

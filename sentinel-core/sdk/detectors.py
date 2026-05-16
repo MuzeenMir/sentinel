@@ -11,7 +11,7 @@ import logging
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Dict
 
-from sdk.exceptions import APIError, SentinelError, ValidationError
+from sdk.exceptions import APIError, ValidationError
 from sdk.models import DetectionResult
 
 if TYPE_CHECKING:
@@ -40,12 +40,15 @@ class BaseCustomDetector(ABC):
         if not self.name:
             raise ValidationError("Detector name must be non-empty")
         try:
-            client._post("/api/v1/detectors/register", json={
-                "name": self.name,
-                "type": "custom",
-                "version": getattr(self, "version", "1.0.0"),
-                "description": getattr(self, "description", ""),
-            })
+            client._post(
+                "/api/v1/detectors/register",
+                json={
+                    "name": self.name,
+                    "type": "custom",
+                    "version": getattr(self, "version", "1.0.0"),
+                    "description": getattr(self, "description", ""),
+                },
+            )
             logger.info("Detector '%s' registered successfully", self.name)
             return True
         except APIError as exc:

@@ -10,11 +10,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
-import re
-import socket
-import struct
 import time
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
 from profiles.base import BaseProfile, ProfileConfig
@@ -35,11 +31,19 @@ class ServerProfile(BaseProfile):
     def __init__(self, config: ProfileConfig, event_bus: Any = None):
         super().__init__(config, event_bus)
         self._fim_baselines: Dict[str, str] = {}
-        self._fim_paths: List[str] = config.extra.get("fim_paths", [
-            "/etc/passwd", "/etc/shadow", "/etc/sudoers",
-            "/etc/ssh/sshd_config", "/etc/crontab", "/etc/hosts",
-            "/etc/resolv.conf", "/etc/ld.so.preload",
-        ])
+        self._fim_paths: List[str] = config.extra.get(
+            "fim_paths",
+            [
+                "/etc/passwd",
+                "/etc/shadow",
+                "/etc/sudoers",
+                "/etc/ssh/sshd_config",
+                "/etc/crontab",
+                "/etc/hosts",
+                "/etc/resolv.conf",
+                "/etc/ld.so.preload",
+            ],
+        )
         self._known_pids: Set[int] = set()
         self._prev_cpu: Optional[Dict[str, int]] = None
         self._prev_net: Optional[Dict[str, Dict[str, int]]] = None
@@ -73,7 +77,10 @@ class ServerProfile(BaseProfile):
         self._start_thread("fim", self._fim_loop)
         self._start_thread("processes", self._process_loop)
         self._start_thread("connections", self._connection_loop)
-        logger.info("[server] profile started — FIM baseline: %d files", len(self._fim_baselines))
+        logger.info(
+            "[server] profile started — FIM baseline: %d files",
+            len(self._fim_baselines),
+        )
 
     def stop(self) -> None:
         self._running = False
@@ -163,7 +170,13 @@ class ServerProfile(BaseProfile):
                 for line in f:
                     parts = line.split()
                     key = parts[0].rstrip(":")
-                    if key in ("MemTotal", "MemAvailable", "MemFree", "SwapTotal", "SwapFree"):
+                    if key in (
+                        "MemTotal",
+                        "MemAvailable",
+                        "MemFree",
+                        "SwapTotal",
+                        "SwapFree",
+                    ):
                         info[key] = int(parts[1]) * 1024
         except (OSError, IndexError, ValueError):
             return {}
@@ -172,7 +185,9 @@ class ServerProfile(BaseProfile):
         return {
             "total_bytes": total,
             "available_bytes": available,
-            "used_percent": round(100.0 * (1.0 - available / total), 2) if total else 0.0,
+            "used_percent": round(100.0 * (1.0 - available / total), 2)
+            if total
+            else 0.0,
         }
 
     def _disk_usage(self) -> Dict[str, Any]:
@@ -183,7 +198,9 @@ class ServerProfile(BaseProfile):
             return {
                 "total_bytes": total,
                 "free_bytes": free,
-                "used_percent": round(100.0 * (1.0 - free / total), 2) if total else 0.0,
+                "used_percent": round(100.0 * (1.0 - free / total), 2)
+                if total
+                else 0.0,
             }
         except OSError:
             return {}
@@ -234,13 +251,28 @@ class ServerProfile(BaseProfile):
         for path, expected in list(self._fim_baselines.items()):
             current = self._hash_file(path)
             if current is None:
-                alerts.append({"event_type": "fim_alert", "severity": "critical",
-                               "path": path, "change": "deleted", "timestamp": time.time()})
+                alerts.append(
+                    {
+                        "event_type": "fim_alert",
+                        "severity": "critical",
+                        "path": path,
+                        "change": "deleted",
+                        "timestamp": time.time(),
+                    }
+                )
                 self._stats["fim_alerts"] += 1
             elif current != expected:
-                alerts.append({"event_type": "fim_alert", "severity": "high",
-                               "path": path, "change": "modified", "timestamp": time.time(),
-                               "expected_hash": expected[:16], "current_hash": current[:16]})
+                alerts.append(
+                    {
+                        "event_type": "fim_alert",
+                        "severity": "high",
+                        "path": path,
+                        "change": "modified",
+                        "timestamp": time.time(),
+                        "expected_hash": expected[:16],
+                        "current_hash": current[:16],
+                    }
+                )
                 self._fim_baselines[path] = current
                 self._stats["fim_alerts"] += 1
         return alerts
@@ -278,12 +310,14 @@ class ServerProfile(BaseProfile):
         for pid in new_pids:
             info = self._process_info(pid)
             if info:
-                events.append({
-                    "event_type": "new_process",
-                    "timestamp": time.time(),
-                    "pid": pid,
-                    **info,
-                })
+                events.append(
+                    {
+                        "event_type": "new_process",
+                        "timestamp": time.time(),
+                        "pid": pid,
+                        **info,
+                    }
+                )
         self._known_pids = current
         return events
 
@@ -311,8 +345,14 @@ class ServerProfile(BaseProfile):
         conns.extend(self._parse_proc_net(_PROC_NET_TCP6))
         self._stats["connections_tracked"] = len(conns)
         if conns:
-            return [{"event_type": "network_connections", "timestamp": time.time(),
-                      "count": len(conns), "connections": conns[:50]}]
+            return [
+                {
+                    "event_type": "network_connections",
+                    "timestamp": time.time(),
+                    "count": len(conns),
+                    "connections": conns[:50],
+                }
+            ]
         return []
 
     @staticmethod
@@ -330,7 +370,9 @@ class ServerProfile(BaseProfile):
                 state = int(parts[3], 16)
                 if state != 0x0A:
                     continue
-                connections.append({"local": local, "remote": remote, "state": "LISTEN"})
+                connections.append(
+                    {"local": local, "remote": remote, "state": "LISTEN"}
+                )
         except (OSError, ValueError):
             pass
         return connections

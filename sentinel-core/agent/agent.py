@@ -51,7 +51,7 @@ import sys
 import threading
 import time
 import uuid
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -64,6 +64,7 @@ logger = logging.getLogger("sentinel-agent")
 
 # ── Configuration ────────────────────────────────────────────────────
 
+
 @dataclass
 class AgentConfig:
     agent_id: str = field(default_factory=lambda: str(uuid.uuid4()))
@@ -74,10 +75,16 @@ class AgentConfig:
     data_dir: str = "/var/lib/sentinel"
     log_dir: str = "/var/log/sentinel"
     interface: str = "eth0"
-    fim_paths: List[str] = field(default_factory=lambda: [
-        "/etc/passwd", "/etc/shadow", "/etc/sudoers",
-        "/etc/ssh/sshd_config", "/etc/crontab", "/etc/hosts",
-    ])
+    fim_paths: List[str] = field(
+        default_factory=lambda: [
+            "/etc/passwd",
+            "/etc/shadow",
+            "/etc/sudoers",
+            "/etc/ssh/sshd_config",
+            "/etc/crontab",
+            "/etc/hosts",
+        ]
+    )
     fim_interval_sec: int = 60
     hardening_interval_sec: int = 3600
     heartbeat_interval_sec: int = 30
@@ -106,6 +113,7 @@ class AgentConfig:
 
 # ── Agent Statistics ─────────────────────────────────────────────────
 
+
 @dataclass
 class AgentStats:
     started_at: float = field(default_factory=time.time)
@@ -133,6 +141,7 @@ class AgentStats:
 
 
 # ── Event Bus (in-process ring buffer) ───────────────────────────────
+
 
 class EventBus:
     """Thread-safe ring buffer for agent-internal event routing."""
@@ -166,6 +175,7 @@ class EventBus:
 
 # ── Transport Layer ──────────────────────────────────────────────────
 
+
 class Transport:
     """Publishes events to the control plane via Kafka (primary) or HTTPS (fallback)."""
 
@@ -179,14 +189,17 @@ class Transport:
             return
         try:
             from confluent_kafka import Producer
-            self._kafka_producer = Producer({
-                "bootstrap.servers": self._config.kafka_servers,
-                "client.id": f"sentinel-agent-{self._config.agent_id[:8]}",
-                "acks": "all",
-                "retries": 3,
-                "linger.ms": 10,
-                "batch.num.messages": 200,
-            })
+
+            self._kafka_producer = Producer(
+                {
+                    "bootstrap.servers": self._config.kafka_servers,
+                    "client.id": f"sentinel-agent-{self._config.agent_id[:8]}",
+                    "acks": "all",
+                    "retries": 3,
+                    "linger.ms": 10,
+                    "batch.num.messages": 200,
+                }
+            )
             logger.info("Kafka transport initialized: %s", self._config.kafka_servers)
         except Exception as exc:
             logger.warning("Kafka unavailable, using HTTPS fallback: %s", exc)
@@ -213,6 +226,7 @@ class Transport:
             return False
         try:
             import requests
+
             resp = requests.post(
                 f"{self._config.control_plane_url}/api/v1/agent/events",
                 json=event,
@@ -229,6 +243,7 @@ class Transport:
 
 
 # ── FIM Engine ───────────────────────────────────────────────────────
+
 
 class FIMEngine:
     """File Integrity Monitoring via SHA-256 hashing."""
@@ -250,12 +265,19 @@ class FIMEngine:
         for path, expected in self._baselines.items():
             current = self._hash_file(path)
             if current is None:
-                changes.append({"path": path, "change": "deleted", "timestamp": time.time()})
+                changes.append(
+                    {"path": path, "change": "deleted", "timestamp": time.time()}
+                )
             elif current != expected:
-                changes.append({
-                    "path": path, "change": "modified", "timestamp": time.time(),
-                    "expected_hash": expected[:16], "current_hash": current[:16],
-                })
+                changes.append(
+                    {
+                        "path": path,
+                        "change": "modified",
+                        "timestamp": time.time(),
+                        "expected_hash": expected[:16],
+                        "current_hash": current[:16],
+                    }
+                )
                 self._baselines[path] = current
         return changes
 
@@ -272,6 +294,7 @@ class FIMEngine:
 
 
 # ── Policy Enforcer ──────────────────────────────────────────────────
+
 
 class PolicyEnforcer:
     """Applies firewall rules received from the control plane."""
@@ -303,6 +326,7 @@ class PolicyEnforcer:
 
 # ── Main Agent ───────────────────────────────────────────────────────
 
+
 class SentinelAgent:
     """Orchestrates all agent subsystems."""
 
@@ -319,7 +343,11 @@ class SentinelAgent:
         self.event_bus.subscribe(self._on_event)
 
     def start(self) -> None:
-        logger.info("Starting Sentinel Agent %s on %s", self.config.agent_id[:8], self.config.hostname)
+        logger.info(
+            "Starting Sentinel Agent %s on %s",
+            self.config.agent_id[:8],
+            self.config.hostname,
+        )
         logger.info("Kernel: %s %s", platform.system(), platform.release())
         self._running = True
 
@@ -336,9 +364,13 @@ class SentinelAgent:
         if self.config.enable_fim:
             self._start_thread("fim", self._fim_loop)
 
-        logger.info("Agent started -- modules: xdp=%s hids=%s hardening=%s fim=%s",
-                     self.config.enable_xdp, self.config.enable_hids,
-                     self.config.enable_hardening, self.config.enable_fim)
+        logger.info(
+            "Agent started -- modules: xdp=%s hids=%s hardening=%s fim=%s",
+            self.config.enable_xdp,
+            self.config.enable_hids,
+            self.config.enable_hardening,
+            self.config.enable_fim,
+        )
 
     def stop(self) -> None:
         logger.info("Stopping Sentinel Agent")
@@ -405,14 +437,17 @@ class SentinelAgent:
                 continue
             changes = self.fim.check()
             for change in changes:
-                self.event_bus.publish({
-                    "event_type": "fim_alert",
-                    "severity": "high",
-                    **change,
-                })
+                self.event_bus.publish(
+                    {
+                        "event_type": "fim_alert",
+                        "severity": "high",
+                        **change,
+                    }
+                )
 
 
 # ── CLI Entry Point ──────────────────────────────────────────────────
+
 
 def main():
     config_path = os.environ.get("SENTINEL_CONFIG")

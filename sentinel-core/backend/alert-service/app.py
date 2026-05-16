@@ -34,6 +34,7 @@ from integrations.dispatcher import (
     format_leef,
     ADAPTER_REGISTRY,
 )  # noqa: E402
+from _lib.net import bind_host  # noqa: E402
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -773,4 +774,6 @@ if __name__ == "__main__":
     if debug_mode:
         logger.warning("Running in DEBUG mode - DO NOT use in production!")
 
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "5002")), debug=debug_mode)
+    app.run(
+        host=bind_host(), port=int(os.environ.get("PORT", "5002")), debug=debug_mode
+    )

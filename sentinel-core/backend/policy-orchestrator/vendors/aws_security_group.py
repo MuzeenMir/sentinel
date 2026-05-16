@@ -208,11 +208,12 @@ class AWSSecurityGroupAdapter(BaseVendorAdapter):
                         )
                 applied += 1
             except ClientError as exc:
-                code = getattr(
+                error: Dict[str, Any] = getattr(
                     getattr(exc, "response", {}),
                     "get",
                     lambda *a: {},
-                )("Error", {}).get("Code", "")
+                )("Error", {})
+                code = error.get("Code", "")
                 if code == "InvalidPermission.Duplicate":
                     applied += 1
                 else:
@@ -264,11 +265,12 @@ class AWSSecurityGroupAdapter(BaseVendorAdapter):
                     )
                 removed += 1
             except ClientError as exc:
-                code = getattr(
+                error: Dict[str, Any] = getattr(
                     getattr(exc, "response", {}),
                     "get",
                     lambda *a: {},
-                )("Error", {}).get("Code", "")
+                )("Error", {})
+                code = error.get("Code", "")
                 if code == "InvalidPermission.NotFound":
                     removed += 1
                 else:

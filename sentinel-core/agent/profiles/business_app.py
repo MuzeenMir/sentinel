@@ -15,7 +15,7 @@ import re
 import time
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional
 
 from profiles.base import BaseProfile, ProfileConfig
 
@@ -44,23 +44,29 @@ class BusinessAppProfile(BaseProfile):
     def __init__(self, config: ProfileConfig, event_bus: Any = None):
         super().__init__(config, event_bus)
 
-        self._rate_limits: Dict[str, int] = config.extra.get("rate_limits", {
-            "default": 100,
-            "login": 10,
-            "api": 60,
-        })
+        self._rate_limits: Dict[str, int] = config.extra.get(
+            "rate_limits",
+            {
+                "default": 100,
+                "login": 10,
+                "api": 60,
+            },
+        )
         self._rate_window_sec: int = config.extra.get("rate_window_sec", 60)
         self._request_counts: Dict[str, List[float]] = defaultdict(list)
 
         self._session_store: Dict[str, dict] = {}
         self._session_anomaly_threshold: float = config.extra.get(
-            "session_anomaly_threshold", 0.8,
+            "session_anomaly_threshold",
+            0.8,
         )
 
         self._waf_enabled: bool = config.extra.get("waf_enabled", True)
         self._compiled_sqli = [re.compile(p) for p in _OWASP_SQLI_PATTERNS]
         self._compiled_xss = [re.compile(p) for p in _OWASP_XSS_PATTERNS]
-        self._compiled_traversal = [re.compile(p) for p in _OWASP_PATH_TRAVERSAL_PATTERNS]
+        self._compiled_traversal = [
+            re.compile(p) for p in _OWASP_PATH_TRAVERSAL_PATTERNS
+        ]
 
         self._audit_log_path: str = config.extra.get(
             "audit_log_path",
@@ -95,8 +101,12 @@ class BusinessAppProfile(BaseProfile):
         self._load_sbom()
         self._start_thread("sbom", self._sbom_monitor_loop)
         self._start_thread("sessions", self._session_cleanup_loop)
-        logger.info("[business_app] profile started — WAF=%s, rate_limits=%s, SBOM=%s",
-                     self._waf_enabled, self._rate_limits, bool(self._sbom_path))
+        logger.info(
+            "[business_app] profile started — WAF=%s, rate_limits=%s, SBOM=%s",
+            self._waf_enabled,
+            self._rate_limits,
+            bool(self._sbom_path),
+        )
 
     def stop(self) -> None:
         self._running = False
@@ -117,10 +127,15 @@ class BusinessAppProfile(BaseProfile):
                 endpoint = rule.get("endpoint", "default")
                 limit = rule.get("limit", 100)
                 self._rate_limits[endpoint] = limit
-                logger.info("[business_app] rate limit updated: %s = %d/min", endpoint, limit)
+                logger.info(
+                    "[business_app] rate limit updated: %s = %d/min", endpoint, limit
+                )
             elif action == "update_waf":
                 self._waf_enabled = rule.get("enabled", True)
-                logger.info("[business_app] WAF %s", "enabled" if self._waf_enabled else "disabled")
+                logger.info(
+                    "[business_app] WAF %s",
+                    "enabled" if self._waf_enabled else "disabled",
+                )
             elif action == "block_session":
                 session_id = rule.get("session_id", "")
                 if session_id in self._session_store:
@@ -153,22 +168,25 @@ class BusinessAppProfile(BaseProfile):
         limit = self._rate_limits.get(endpoint, self._rate_limits.get("default", 100))
         if len(self._request_counts[key]) > limit:
             self._stats["rate_limited"] += 1
-            self._publish({
-                "event_type": "rate_limit_exceeded",
-                "severity": "medium",
-                "client_ip": client_ip,
-                "endpoint": endpoint,
-                "count": len(self._request_counts[key]),
-                "limit": limit,
-                "timestamp": now,
-            })
+            self._publish(
+                {
+                    "event_type": "rate_limit_exceeded",
+                    "severity": "medium",
+                    "client_ip": client_ip,
+                    "endpoint": endpoint,
+                    "count": len(self._request_counts[key]),
+                    "limit": limit,
+                    "timestamp": now,
+                }
+            )
             return False
         return True
 
     # ── session anomaly detection ─────────────────────────────────────
 
-    def track_session(self, session_id: str, client_ip: str, user_agent: str,
-                      endpoint: str) -> List[dict]:
+    def track_session(
+        self, session_id: str, client_ip: str, user_agent: str, endpoint: str
+    ) -> List[dict]:
         events: List[dict] = []
         now = time.time()
         self._stats["requests_inspected"] += 1
@@ -186,37 +204,43 @@ class BusinessAppProfile(BaseProfile):
             return events
 
         if existing["client_ip"] != client_ip:
-            events.append({
-                "event_type": "session_anomaly",
-                "severity": "high",
-                "anomaly": "ip_change",
-                "session_id": session_id[:16],
-                "original_ip": existing["client_ip"],
-                "new_ip": client_ip,
-                "timestamp": now,
-            })
+            events.append(
+                {
+                    "event_type": "session_anomaly",
+                    "severity": "high",
+                    "anomaly": "ip_change",
+                    "session_id": session_id[:16],
+                    "original_ip": existing["client_ip"],
+                    "new_ip": client_ip,
+                    "timestamp": now,
+                }
+            )
             self._stats["session_anomalies"] += 1
 
         if existing["user_agent"] != user_agent:
-            events.append({
-                "event_type": "session_anomaly",
-                "severity": "high",
-                "anomaly": "user_agent_change",
-                "session_id": session_id[:16],
-                "timestamp": now,
-            })
+            events.append(
+                {
+                    "event_type": "session_anomaly",
+                    "severity": "high",
+                    "anomaly": "user_agent_change",
+                    "session_id": session_id[:16],
+                    "timestamp": now,
+                }
+            )
             self._stats["session_anomalies"] += 1
 
         gap = now - existing["last_seen"]
         if gap > 3600 and existing["request_count"] > 10:
-            events.append({
-                "event_type": "session_anomaly",
-                "severity": "medium",
-                "anomaly": "resumed_after_long_gap",
-                "session_id": session_id[:16],
-                "gap_seconds": round(gap),
-                "timestamp": now,
-            })
+            events.append(
+                {
+                    "event_type": "session_anomaly",
+                    "severity": "medium",
+                    "anomaly": "resumed_after_long_gap",
+                    "session_id": session_id[:16],
+                    "gap_seconds": round(gap),
+                    "timestamp": now,
+                }
+            )
             self._stats["session_anomalies"] += 1
 
         existing["last_seen"] = now
@@ -226,8 +250,14 @@ class BusinessAppProfile(BaseProfile):
 
     # ── WAF (OWASP rules) ────────────────────────────────────────────
 
-    def inspect_request(self, method: str, path: str, headers: Dict[str, str],
-                        body: str = "", query: str = "") -> List[dict]:
+    def inspect_request(
+        self,
+        method: str,
+        path: str,
+        headers: Dict[str, str],
+        body: str = "",
+        query: str = "",
+    ) -> List[dict]:
         if not self._waf_enabled:
             return []
 
@@ -265,10 +295,17 @@ class BusinessAppProfile(BaseProfile):
 
     # ── audit logging ─────────────────────────────────────────────────
 
-    def log_audit(self, method: str, path: str, status_code: int,
-                  client_ip: str, user_id: str = "", duration_ms: float = 0,
-                  request_body: Optional[str] = None,
-                  response_body: Optional[str] = None) -> None:
+    def log_audit(
+        self,
+        method: str,
+        path: str,
+        status_code: int,
+        client_ip: str,
+        user_id: str = "",
+        duration_ms: float = 0,
+        request_body: Optional[str] = None,
+        response_body: Optional[str] = None,
+    ) -> None:
         entry = {
             "timestamp": time.time(),
             "method": method,
@@ -309,13 +346,15 @@ class BusinessAppProfile(BaseProfile):
         events: List[dict] = []
         for pkg, vulns in self._known_vulns.items():
             for vuln_id in vulns:
-                events.append({
-                    "event_type": "dependency_vulnerability",
-                    "severity": "high",
-                    "package": pkg,
-                    "vulnerability_id": vuln_id,
-                    "timestamp": time.time(),
-                })
+                events.append(
+                    {
+                        "event_type": "dependency_vulnerability",
+                        "severity": "high",
+                        "package": pkg,
+                        "vulnerability_id": vuln_id,
+                        "timestamp": time.time(),
+                    }
+                )
                 self._stats["vuln_alerts"] += 1
         return events
 
@@ -343,12 +382,15 @@ class BusinessAppProfile(BaseProfile):
             try:
                 now = time.time()
                 expired = [
-                    sid for sid, s in self._session_store.items()
+                    sid
+                    for sid, s in self._session_store.items()
                     if now - s["last_seen"] > 7200
                 ]
                 for sid in expired:
                     del self._session_store[sid]
                 if expired:
-                    logger.debug("[business_app] cleaned %d expired sessions", len(expired))
+                    logger.debug(
+                        "[business_app] cleaned %d expired sessions", len(expired)
+                    )
             except Exception as exc:
                 logger.error("[business_app] session cleanup error: %s", exc)

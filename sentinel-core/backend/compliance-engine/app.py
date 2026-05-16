@@ -31,6 +31,7 @@ from auth_middleware import require_auth  # noqa: E402
 from tenant_middleware import require_tenant  # noqa: E402
 from observability import configure_logging  # noqa: E402
 from metrics import init_metrics  # noqa: E402
+from _lib.net import bind_host  # noqa: E402
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -256,7 +257,7 @@ def map_policy_to_controls():
 
 if __name__ == "__main__":
     app.run(
-        host="0.0.0.0",
+        host=bind_host(),
         port=int(os.environ.get("PORT", 5007)),
         debug=os.environ.get("FLASK_DEBUG", "false").lower() == "true",
     )

@@ -26,6 +26,7 @@ from auth_middleware import require_auth, require_role  # noqa: E402
 from tenant_middleware import require_tenant, get_tenant_id  # noqa: E402
 from observability import configure_logging  # noqa: E402
 from metrics import init_metrics, DRL_DECISIONS  # noqa: E402
+from _lib.net import bind_host  # noqa: E402
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -492,7 +493,7 @@ def internal_error(e):
 if __name__ == "__main__":
     initialize_agent()
     app.run(
-        host="0.0.0.0",
+        host=bind_host(),
         port=int(os.environ.get("PORT", 5005)),
         debug=os.environ.get("FLASK_DEBUG", "false").lower() == "true",
     )

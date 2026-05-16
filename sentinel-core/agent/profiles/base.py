@@ -84,7 +84,9 @@ class BaseProfile(ABC):
             self._event_bus.publish(event)
 
     def _start_thread(self, name: str, target: callable, daemon: bool = True) -> None:
-        t = threading.Thread(target=target, name=f"profile-{self.name}-{name}", daemon=daemon)
+        t = threading.Thread(
+            target=target, name=f"profile-{self.name}-{name}", daemon=daemon
+        )
         t.start()
         self._threads.append(t)
 

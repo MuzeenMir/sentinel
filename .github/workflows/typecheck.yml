@@ -40,12 +40,11 @@ jobs:
       - name: mypy (Phase 0 allowlist)
         run: |
           set -euo pipefail
-          # Phase 0 scope: only dirs that currently pass mypy run in the gate.
+          # Phase 0 scope: dirs that currently pass lenient mypy run in the gate.
           # Each service owns its own app.py, so we can't scan the full
           # backend/ tree in one call (mypy would report duplicate "app" module).
-          # Legacy services with type-debt (ai-engine, alert-service, auth-service,
-          # data-collector, drl-engine, policy-orchestrator, tests, etc.) get
-          # folded in as Phase 1 consolidates code into backend/_lib/.
+          # Strict-mode cleanup for auth-service, policy-orchestrator, and
+          # api-gateway is deferred to T-005.
           ALLOWLIST=(
             sentinel-core/backend/shared
             sentinel-core/backend/plugins
@@ -53,6 +52,9 @@ jobs:
             sentinel-core/backend/compliance-engine
             sentinel-core/backend/xai-service
             sentinel-core/backend/hids-agent
+            sentinel-core/backend/api-gateway
+            sentinel-core/backend/auth-service
+            sentinel-core/backend/policy-orchestrator
           )
           failed=0
           for d in "${ALLOWLIST[@]}"; do

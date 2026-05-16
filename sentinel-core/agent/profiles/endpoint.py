@@ -7,17 +7,14 @@ logs, and exposes a localhost API for browser-extension communication.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import os
 import re
-import socket
-import threading
 import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional
 
 from profiles.base import BaseProfile, ProfileConfig
 
@@ -36,12 +33,15 @@ class EndpointProfile(BaseProfile):
         self._dns_log_path: str = config.extra.get("dns_log_path", "")
         self._dns_last_pos: int = 0
         self._removable_scan_paths: List[str] = config.extra.get(
-            "removable_scan_paths", ["/media", "/mnt", "/run/media"],
+            "removable_scan_paths",
+            ["/media", "/mnt", "/run/media"],
         )
         self._privacy_mode: bool = config.extra.get("privacy_mode", False)
         self._encryption_key: Optional[bytes] = None
         self._browser_api_enabled: bool = config.extra.get("browser_api_enabled", False)
-        self._browser_api_port: int = int(config.extra.get("browser_api_port", _BROWSER_API_PORT))
+        self._browser_api_port: int = int(
+            config.extra.get("browser_api_port", _BROWSER_API_PORT)
+        )
         self._browser_api_server: Optional[HTTPServer] = None
         self._stats = {
             "usb_events": 0,
@@ -57,7 +57,9 @@ class EndpointProfile(BaseProfile):
 
     @property
     def description(self) -> str:
-        return "Endpoint security (USB, DNS, removable media, privacy mode, browser API)"
+        return (
+            "Endpoint security (USB, DNS, removable media, privacy mode, browser API)"
+        )
 
     # ── lifecycle ─────────────────────────────────────────────────────
 
@@ -73,8 +75,12 @@ class EndpointProfile(BaseProfile):
         self._start_thread("media", self._removable_media_loop)
         if self._browser_api_enabled:
             self._start_thread("browser-api", self._browser_api_loop)
-        logger.info("[endpoint] profile started — USB devices: %d, privacy=%s, browser_api=%s",
-                     len(self._known_usb_devices), self._privacy_mode, self._browser_api_enabled)
+        logger.info(
+            "[endpoint] profile started — USB devices: %d, privacy=%s, browser_api=%s",
+            len(self._known_usb_devices),
+            self._privacy_mode,
+            self._browser_api_enabled,
+        )
 
     def stop(self) -> None:
         self._running = False
@@ -163,24 +169,28 @@ class EndpointProfile(BaseProfile):
 
         for dev_id in new_ids:
             info = current[dev_id]
-            events.append({
-                "event_type": "usb_device_connected",
-                "severity": "medium",
-                "device_id": dev_id,
-                **info,
-                "timestamp": time.time(),
-            })
+            events.append(
+                {
+                    "event_type": "usb_device_connected",
+                    "severity": "medium",
+                    "device_id": dev_id,
+                    **info,
+                    "timestamp": time.time(),
+                }
+            )
             self._stats["usb_events"] += 1
 
         for dev_id in removed_ids:
             info = self._known_usb_devices[dev_id]
-            events.append({
-                "event_type": "usb_device_disconnected",
-                "severity": "low",
-                "device_id": dev_id,
-                **info,
-                "timestamp": time.time(),
-            })
+            events.append(
+                {
+                    "event_type": "usb_device_disconnected",
+                    "severity": "low",
+                    "device_id": dev_id,
+                    **info,
+                    "timestamp": time.time(),
+                }
+            )
             self._stats["usb_events"] += 1
 
         self._known_usb_devices = current
@@ -198,11 +208,13 @@ class EndpointProfile(BaseProfile):
                 for line in f:
                     query = self._parse_dns_log_line(line)
                     if query:
-                        events.append({
-                            "event_type": "dns_query",
-                            "timestamp": time.time(),
-                            **query,
-                        })
+                        events.append(
+                            {
+                                "event_type": "dns_query",
+                                "timestamp": time.time(),
+                                **query,
+                            }
+                        )
                         self._stats["dns_queries_tracked"] += 1
                 self._dns_last_pos = f.tell()
         except (OSError, PermissionError) as exc:
@@ -233,21 +245,25 @@ class EndpointProfile(BaseProfile):
                             continue
                         state = int(parts[3], 16)
                         if state == 0x01:
-                            connections.append({
-                                "local": parts[1],
-                                "remote": parts[2],
-                                "state": "ESTABLISHED",
-                            })
+                            connections.append(
+                                {
+                                    "local": parts[1],
+                                    "remote": parts[2],
+                                    "state": "ESTABLISHED",
+                                }
+                            )
             except (OSError, ValueError):
                 pass
         self._stats["connections_tracked"] = len(connections)
         if connections:
-            return [{
-                "event_type": "endpoint_connections",
-                "timestamp": time.time(),
-                "count": len(connections),
-                "connections": connections[:100],
-            }]
+            return [
+                {
+                    "event_type": "endpoint_connections",
+                    "timestamp": time.time(),
+                    "count": len(connections),
+                    "connections": connections[:100],
+                }
+            ]
         return []
 
     # ── removable media scanning ──────────────────────────────────────
@@ -263,21 +279,34 @@ class EndpointProfile(BaseProfile):
                     continue
                 suspicious = self._scan_directory(mount_point)
                 if suspicious:
-                    events.append({
-                        "event_type": "removable_media_scan",
-                        "severity": "medium",
-                        "mount_point": str(mount_point),
-                        "suspicious_files": suspicious,
-                        "timestamp": time.time(),
-                    })
+                    events.append(
+                        {
+                            "event_type": "removable_media_scan",
+                            "severity": "medium",
+                            "mount_point": str(mount_point),
+                            "suspicious_files": suspicious,
+                            "timestamp": time.time(),
+                        }
+                    )
                     self._stats["media_scans"] += 1
         return events
 
     @staticmethod
     def _scan_directory(path: Path, max_depth: int = 3) -> List[str]:
         suspicious_extensions = {
-            ".exe", ".bat", ".cmd", ".ps1", ".vbs", ".js", ".hta",
-            ".scr", ".pif", ".msi", ".jar", ".py", ".sh",
+            ".exe",
+            ".bat",
+            ".cmd",
+            ".ps1",
+            ".vbs",
+            ".js",
+            ".hta",
+            ".scr",
+            ".pif",
+            ".msi",
+            ".jar",
+            ".py",
+            ".sh",
         }
         suspicious: List[str] = []
         try:
@@ -310,10 +339,13 @@ class EndpointProfile(BaseProfile):
             return entry.encode("utf-8")
         try:
             from hashlib import pbkdf2_hmac
+
             iv = os.urandom(12)
-            key_derived = pbkdf2_hmac("sha256", self._encryption_key, iv, 100_000, dklen=32)
+            key_derived = pbkdf2_hmac(
+                "sha256", self._encryption_key, iv, 100_000, dklen=32
+            )
             data = entry.encode("utf-8")
-            xor_key = (key_derived * ((len(data) // 32) + 1))[:len(data)]
+            xor_key = (key_derived * ((len(data) // 32) + 1))[: len(data)]
             encrypted = bytes(a ^ b for a, b in zip(data, xor_key))
             return iv + encrypted
         except Exception as exc:
@@ -328,7 +360,9 @@ class EndpointProfile(BaseProfile):
         class BrowserAPIHandler(BaseHTTPRequestHandler):
             def do_GET(self) -> None:
                 if self.path == "/health":
-                    self._json_response(200, {"status": "ok", "agent": "sentinel-endpoint"})
+                    self._json_response(
+                        200, {"status": "ok", "agent": "sentinel-endpoint"}
+                    )
                 elif self.path == "/status":
                     self._json_response(200, profile_ref.get_status())
                 else:
@@ -345,11 +379,13 @@ class EndpointProfile(BaseProfile):
                     return
 
                 if self.path == "/report":
-                    profile_ref._publish({
-                        "event_type": "browser_report",
-                        "timestamp": time.time(),
-                        **data,
-                    })
+                    profile_ref._publish(
+                        {
+                            "event_type": "browser_report",
+                            "timestamp": time.time(),
+                            **data,
+                        }
+                    )
                     self._json_response(200, {"accepted": True})
                 else:
                     self._json_response(404, {"error": "not found"})
@@ -366,9 +402,13 @@ class EndpointProfile(BaseProfile):
 
         try:
             self._browser_api_server = HTTPServer(
-                ("127.0.0.1", self._browser_api_port), BrowserAPIHandler,
+                ("127.0.0.1", self._browser_api_port),
+                BrowserAPIHandler,
             )
-            logger.info("[endpoint] browser API listening on 127.0.0.1:%d", self._browser_api_port)
+            logger.info(
+                "[endpoint] browser API listening on 127.0.0.1:%d",
+                self._browser_api_port,
+            )
             self._browser_api_server.serve_forever()
         except Exception as exc:
             logger.error("[endpoint] browser API server error: %s", exc)

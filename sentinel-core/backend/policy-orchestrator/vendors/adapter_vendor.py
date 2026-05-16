@@ -81,9 +81,9 @@ class AdapterVendor(BaseVendor):
     Config must include 'adapter_type': one of iptables, nftables, aws, azure, gcp.
     """
 
-    def __init__(self, config: Dict[str, Any] = None):
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
         super().__init__(config or {})
-        self._adapter = None
+        self._adapter: Any = None
         self._adapter_type = (config or {}).get("adapter_type", "iptables")
 
     @property
