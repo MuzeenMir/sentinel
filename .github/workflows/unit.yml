@@ -2,9 +2,10 @@ name: unit
 
 # Backend pytest + frontend vitest. Coverage gate: 70% floor in Phase 0,
 # ratcheting to 75% per SDP-002 §7 as services consolidate under backend/_lib/
-# (Phase 1). Phase 0 actual line-rate ≈73%; floor keeps a green gate without
-# inflating what's real. Training + performance jobs are informational (not
-# part of the `unit` aggregator).
+# (Phase 1). Phase 0 actual line-rate ≈72% (coverage omit set in pyproject.toml
+# [tool.coverage]); floor keeps a green gate without inflating what's real.
+# Training + performance jobs are informational (not part of the `unit`
+# aggregator).
 
 on:
   push:

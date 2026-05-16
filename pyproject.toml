@@ -35,3 +35,32 @@ no_incremental = true
 explicit_package_bases = true
 namespace_packages = true
 exclude = '(^|/)(ebpf-lib|firewall-adapters|\.test-venv|\.venv|venv|sentinel_env|compiled|__pycache__|node_modules)(/|$)'
+
+# Coverage omit set. sentinel-core/backend/.coveragerc holds the intended
+# rules, but the unit-backend CI job runs coverage from the repo root (it must,
+# to also collect agent/tests), so that nested .coveragerc is never loaded.
+# These rules mirror it here, repo-root-relative, so the line-rate reflects
+# production code rather than scaffolding the job does not exercise:
+#   - plugins/examples/*    — sample plugin code, not shipped.
+#   - migrations/versions/* — Alembic migrations, run-once generated files.
+#   - tests/performance/*   — benchmarks + load tests, run by the unit-perf job.
+#   - test_e2e_pipeline.py  — needs a live stack; --ignore'd by unit-backend.
+[tool.coverage.run]
+omit = [
+    "*/__pycache__/*",
+    "*/site-packages/*",
+    "*/plugins/examples/*",
+    "*/migrations/versions/*",
+    "*/tests/performance/*",
+    "*/tests/test_e2e_pipeline.py",
+]
+
+[tool.coverage.report]
+omit = [
+    "*/__pycache__/*",
+    "*/site-packages/*",
+    "*/plugins/examples/*",
+    "*/migrations/versions/*",
+    "*/tests/performance/*",
+    "*/tests/test_e2e_pipeline.py",
+]
