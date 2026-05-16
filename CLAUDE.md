@@ -21,15 +21,19 @@ Use this file for Claude Code sessions in this repository. Primary application c
 - `collector` ← data-collector + agent-grpc + sensor skeletons (Falco/Suricata/Wazuh/OpenSCAP)
 - `llm-gateway` ← new (Gemma 4, TurboQuant); Phase 1 = shell returning 410
 
-**Phase 0 (active, baseline plan = `.team/specs/2026-05-12-ultraplan-baseline.md`):** stabilize. Status at 2026-05-12:
+**Phase 0 (active, baseline plan = `.team/specs/2026-05-12-ultraplan-baseline.md`):** stabilize. Status at 2026-05-15:
 - ✅ 9 split CI workflows present (build/e2e-smoke/integration/lint/release-please/sbom/security/typecheck/unit)
 - ✅ CODEOWNERS at repo root
 - ✅ CONTRIBUTING.md
 - ✅ B1 admin-RBAC on mutating routes; B2 lockout-before-bcrypt; install.sh supply-chain hardening (SHA256+cosign+HTTPS); install.sh systemd unit hardening (NoNewPrivileges/ProtectSystem/ProtectHome/PrivateTmp)
 - ✅ `.gitattributes` LF normalization + `git add --renormalize .` (Wave 2 W2.2, PR #1 merged 2026-05-12)
 - ✅ `bind_host()` shared helper + 127.0.0.1 default for Flask dev binds (Wave 2 W2.3, PR #3 merged 2026-05-12)
-- ❌ `validate_compose_security.py` 7-finding assertion (Wave 2 W2.4, next)
-- ❌ CI required-checks gate + ruff baseline cleared + B3 unit-file lint test (Wave 3)
+- ✅ `validate_compose_security.py` 7-finding assertion (Wave 2 W2.4, PR #4 merged 2026-05-12)
+- ✅ B3 unit-file lint test — `test_install_systemd_hardening.py` (Wave 3 PR #5 merged 2026-05-13)
+- ✅ ruff `check` baseline cleared — F401/F541 (Wave 3 PR #6 merged 2026-05-13)
+- ✅ mypy lenient baseline cleared for auth-service, policy-orchestrator, and api-gateway (Wave 3 PR #8 merged 2026-05-14)
+- ❌ ruff `format` baseline — PR #9 open
+- ❌ CI required-checks gate config — Wave 3 PR-C pending
 - ❌ branch protection on `main` (Wave 4, Mir)
 - ❌ idempotent migrations, honest README, secrets sweep, SBOM+cosign verify, OTel pilot, `sentinel-core/`→root flatten, commitlint, trunk-based (Wave 6, deferred — separate spec)
 
