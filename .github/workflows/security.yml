@@ -57,7 +57,11 @@ jobs:
           EXIT=0
           for req in sentinel-core/backend/*/requirements.txt; do
             echo "::group::pip-audit $req"
-            pip-audit -r "$req" --no-deps --strict
+            # GHSA-r374-rxx8-8654: paramiko allows SHA-1 in rsakey.py. LOW
+            # severity, and no patched release exists (advisory covers all
+            # versions <= 4.0.0). Re-evaluate when paramiko ships a fix.
+            pip-audit -r "$req" --no-deps --strict \
+              --ignore-vuln GHSA-r374-rxx8-8654
             rc=$?
             [ $rc -ne 0 ] && EXIT=$rc
             echo "::endgroup::"
