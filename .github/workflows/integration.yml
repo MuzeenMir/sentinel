@@ -55,6 +55,8 @@ jobs:
       ADMIN_EMAIL: admin@example.com
       POSTGRES_PASSWORD: integration_pg_password
       DRL_SHADOW_MODE: 'true'
+      INTERNAL_SERVICE_TOKEN: ci-integration-internal-service-token
+      GRAFANA_PASSWORD: ci-integration-grafana-password
     steps:
       - uses: actions/checkout@v4
       - name: Write CI .env
@@ -71,6 +73,8 @@ jobs:
           ADMIN_PASSWORD=${ADMIN_PASSWORD}
           ADMIN_EMAIL=${ADMIN_EMAIL}
           DRL_SHADOW_MODE=${DRL_SHADOW_MODE}
+          INTERNAL_SERVICE_TOKEN=${INTERNAL_SERVICE_TOKEN}
+          GRAFANA_PASSWORD=${GRAFANA_PASSWORD}
           EOF
       - name: Build core images
         run: |
