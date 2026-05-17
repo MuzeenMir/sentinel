@@ -188,7 +188,7 @@ def test_xdp_profile_config_renders_without_stale_localhost_dependencies():
     )
 
     result = subprocess.run(
-        ["docker", "compose", "--profile", "xdp", "config"],
+        ["docker", "compose", "--profile", "xdp", "config", "xdp-collector"],
         cwd=repo_core,
         env=env,
         text=True,
@@ -198,10 +198,19 @@ def test_xdp_profile_config_renders_without_stale_localhost_dependencies():
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "KAFKA_BOOTSTRAP_SERVERS=localhost" not in result.stdout
-    assert "AUTH_SERVICE_URL=http://localhost" not in result.stdout
-    assert "localhost:9092" not in result.stdout
-    assert "localhost:5000" not in result.stdout
+    xdp_service = result.stdout.split("\n  xdp-collector:", 1)[1].split(
+        "\n  zookeeper:", 1
+    )[0]
+    assert "KAFKA_BOOTSTRAP_SERVERS: kafka:29092" in xdp_service
+    assert "AUTH_SERVICE_URL: http://auth-service:5000" in xdp_service
+    assert "REDIS_URL: redis://redis:6379" in xdp_service
+    assert "kafka:" in xdp_service
+    assert "condition: service_healthy" in xdp_service
+    assert "redis:" in xdp_service
+    assert "KAFKA_BOOTSTRAP_SERVERS=localhost" not in xdp_service
+    assert "AUTH_SERVICE_URL=http://localhost" not in xdp_service
+    assert "localhost:9092" not in xdp_service
+    assert "localhost:5000" not in xdp_service
 
 
 def test_validator_rejects_inline_ports_on_internal_services(

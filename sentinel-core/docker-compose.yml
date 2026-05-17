@@ -193,17 +193,21 @@ services:
       - XDP_ENABLED=true
       - XDP_INTERFACE=eth0
       - XDP_QUEUE_COUNT=1
-      - KAFKA_BOOTSTRAP_SERVERS=${XDP_KAFKA_BOOTSTRAP_SERVERS:-}
-      - AUTH_SERVICE_URL=${XDP_AUTH_SERVICE_URL:-}
+      - KAFKA_BOOTSTRAP_SERVERS=${XDP_KAFKA_BOOTSTRAP_SERVERS:-kafka:29092}
+      - AUTH_SERVICE_URL=${XDP_AUTH_SERVICE_URL:-http://auth-service:5000}
+      - REDIS_URL=redis://redis:6379
     command:
       - /bin/sh
       - -c
       - >
-        : "$${KAFKA_BOOTSTRAP_SERVERS:?set XDP_KAFKA_BOOTSTRAP_SERVERS when using profile xdp}";
-        : "$${AUTH_SERVICE_URL:?set XDP_AUTH_SERVICE_URL when using profile xdp}";
         exec gunicorn app:app -b 0.0.0.0:5012 -k gevent -w 4 --timeout 120 --access-logfile -
     depends_on:
-      - auth-service
+      auth-service:
+        condition: service_started
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_started
     networks:
       - sentinel-network
     restart: unless-stopped
