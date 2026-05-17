@@ -11,3 +11,4 @@ gunicorn>=22.0.0
 gevent>=23.9.1
 python-dotenv>=1.0.0
 prometheus-client>=0.17.1
+requests>=2.31.0

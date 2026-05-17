@@ -130,6 +130,8 @@ _models_initialized = False
 def _ensure_models_loaded():
     """Lazy-init models on first request (needed for gunicorn where __main__ block is skipped)."""
     global _models_initialized
+    if request.endpoint == "health_check":
+        return
     if not _models_initialized:
         initialize_models()
         _models_initialized = True
