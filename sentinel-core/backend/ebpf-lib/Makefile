@@ -3,6 +3,7 @@
 #
 # Usage:
 #   make all          - compile all eBPF programs
+#   make xdp          - compile the XDP flow monitor only
 #   make vmlinux      - generate vmlinux.h from BTF
 #   make sign         - sign all compiled objects
 #   make clean        - remove compiled objects
@@ -32,9 +33,11 @@ LSM_SRCS        := $(wildcard programs/lsm/*.c)
 ALL_SRCS := $(XDP_SRCS) $(TRACEPOINT_SRCS) $(LSM_SRCS)
 ALL_OBJS := $(patsubst programs/%.c,$(OUTDIR)/%.o,$(ALL_SRCS))
 
-.PHONY: all clean vmlinux sign
+.PHONY: all clean vmlinux sign xdp
 
 all: $(OUTDIR) $(ALL_OBJS)
+
+xdp: $(OUTDIR) $(OUTDIR)/xdp/xdp_flow.o
 
 $(OUTDIR):
 	mkdir -p $(OUTDIR)/xdp $(OUTDIR)/tracepoint $(OUTDIR)/lsm

@@ -3,6 +3,10 @@
 
 #include "../common/types.h"
 
+#ifndef ETH_P_IP
+#define ETH_P_IP 0x0800
+#endif
+
 /* ── Maps ─────────────────────────────────────────────────────────── */
 
 struct {

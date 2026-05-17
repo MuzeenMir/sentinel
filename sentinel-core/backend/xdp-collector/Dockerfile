@@ -6,8 +6,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         curl \
         iproute2 \
         libelf1 \
+        libbpf-dev \
         clang \
         llvm \
+        bpftool \
+        make \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -16,6 +19,8 @@ COPY auth_middleware.py observability.py metrics.py resilience.py tenant_middlew
 COPY integrations/ integrations/
 COPY _lib/ _lib/
 COPY ebpf-lib/ ebpf_lib/
+
+RUN make -C ebpf_lib xdp
 
 COPY xdp-collector/requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip \

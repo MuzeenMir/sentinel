@@ -65,13 +65,17 @@ egress cannot be functionally verified yet.
 ## Supported Shape
 
 Do not re-add `network_mode: host` for this issue. The verified bridge behavior
-is correct for userspace dependencies. Full XDP support needs a separate kernel
-artifact path:
+is correct for userspace dependencies. Full XDP support needs a compiled kernel
+artifact path and live verification on a compatible host:
 
-- Build and sign `backend/ebpf-lib/compiled/xdp/xdp_flow.o` on a compatible
-  Linux host with BTF, or provide it through a trusted artifact pipeline.
-- Mount or copy the compiled object into `/app/ebpf_lib/compiled/xdp/xdp_flow.o`
-  in the collector container.
+- Build `backend/ebpf-lib/compiled/xdp/xdp_flow.o` with `make xdp`. The
+  `xdp-collector` image builds this object at `/app/ebpf_lib/compiled/xdp/xdp_flow.o`,
+  which is the loader's default runtime path.
+- If `SENTINEL_EBPF_SIGN_KEY` is configured, the loader requires a matching
+  HMAC signature file beside the object. Without that key, loader signature
+  verification is explicitly disabled for development mode. Kernel module
+  signing does not sign eBPF ELF objects, but kernel lockdown or BPF policy can
+  still reject BPF program loading on hardened hosts.
 - Run on a host/NIC that supports XDP attachment.
 - Re-run the bridge profile verification and confirm:
   - `/health` reports `"xdp_loaded": true`.
