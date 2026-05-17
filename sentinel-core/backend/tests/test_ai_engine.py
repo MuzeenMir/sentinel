@@ -384,6 +384,21 @@ class TestHealthCheck:
             resp = bare_client.get("/health")
             assert resp.status_code == 200
 
+    def test_health_does_not_trigger_lazy_model_initialization(
+        self, mock_redis, mock_detectors, mock_ensemble
+    ):
+        """Container healthchecks must stay lightweight and never load ML models."""
+        ai_app._models_initialized = False
+        try:
+            with patch.object(ai_app, "initialize_models") as init_models:
+                with ai_app.app.test_client() as c:
+                    resp = c.get("/health")
+
+            assert resp.status_code == 200
+            init_models.assert_not_called()
+        finally:
+            ai_app._models_initialized = True
+
 
 # ===================================================================
 # Model status

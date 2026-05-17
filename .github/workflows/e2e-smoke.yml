@@ -59,7 +59,7 @@ jobs:
         run: |
           docker compose build \
             postgres redis db-migrate auth-service api-gateway \
-            ai-engine drl-engine policy-orchestrator alert-service
+            data-collector ai-engine drl-engine policy-orchestrator alert-service
       - name: Postgres + Redis up
         run: docker compose up -d postgres redis
       - name: Wait for Postgres
@@ -86,7 +86,25 @@ jobs:
         run: |
           docker compose up -d \
             auth-service api-gateway \
-            ai-engine drl-engine policy-orchestrator alert-service
+            data-collector ai-engine drl-engine policy-orchestrator alert-service
+      - name: Wait for runtime services healthy (<=120s)
+        run: |
+          set -euo pipefail
+          for container in sentinel-data-collector sentinel-ai-engine sentinel-policy-orchestrator; do
+            for i in $(seq 1 60); do
+              status=$(docker inspect -f '{{.State.Health.Status}}' "$container" 2>/dev/null || true)
+              if [ "$status" = "healthy" ]; then
+                echo "$container healthy after ${i} attempts"
+                break
+              fi
+              if [ "$i" = "60" ]; then
+                echo "::error::$container never became healthy (last status: ${status:-missing})"
+                docker compose logs "$container" || true
+                exit 1
+              fi
+              sleep 2
+            done
+          done
       - name: Wait for api-gateway healthy (<=120s)
         run: |
           for i in $(seq 1 60); do
@@ -110,6 +128,7 @@ jobs:
           echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
       - name: Authenticated GET /api/v1/threats
         run: |
+          set -euo pipefail
           curl -sf -H "Authorization: Bearer ${{ steps.login.outputs.token }}" \
             http://localhost:8080/api/v1/threats | head -c 500
       - name: Authenticated GET /api/v1/statistics
