@@ -55,13 +55,59 @@ jobs:
         run: |
           set +e
           EXIT=0
-          for req in sentinel-core/backend/*/requirements.txt; do
-            echo "::group::pip-audit $req"
+          PIP_AUDIT_IGNORES=(
             # GHSA-r374-rxx8-8654: paramiko allows SHA-1 in rsakey.py. LOW
             # severity, and no patched release exists (advisory covers all
             # versions <= 4.0.0). Re-evaluate when paramiko ships a fix.
-            pip-audit -r "$req" --no-deps --strict \
-              --ignore-vuln GHSA-r374-rxx8-8654
+            --ignore-vuln GHSA-r374-rxx8-8654
+
+            # PIP-AUDIT-IGNORE: PYSEC-2024-271 / CVE-2024-1681
+            # Package: flask-cors 6.0.2
+            # Reason: log-injection advisory has no fixed version; production
+            # Flask debug mode remains disabled and T-015 tightens CORS origins.
+            # Revisit: 2026-08-01 or when flask-cors >6.0.2 clears this advisory.
+            --ignore-vuln PYSEC-2024-271
+
+            # PIP-AUDIT-IGNORE: PYSEC-2025-183 / CVE-2025-45768
+            # Package: PyJWT 2.12.x
+            # Reason: disputed key-strength advisory has no fixed version; we
+            # are already on 2.12.x, which is the PYSEC-2026-120 fixed line.
+            # Revisit: 2026-08-01, on PyJWT fixed release, or with T-013 secret validation.
+            --ignore-vuln PYSEC-2025-183
+
+            # PIP-AUDIT-IGNORE: PYSEC-2024-277 / CVE-2024-34997
+            # Package: joblib 1.5.3
+            # Reason: disputed trusted-content pickle loader advisory; Phase 0
+            # uses only local trusted model artifacts.
+            # Revisit: 2026-08-01, on joblib fixed release, or before untrusted model ingestion.
+            --ignore-vuln PYSEC-2024-277
+
+            # PyTorch trust-boundary set; see T-011 acceptance "PyTorch advisory set".
+            --ignore-vuln PYSEC-2025-189
+            # PyTorch trust-boundary set; see T-011 acceptance "PyTorch advisory set".
+            --ignore-vuln PYSEC-2025-190
+            # PyTorch trust-boundary set; see T-011 acceptance "PyTorch advisory set".
+            --ignore-vuln PYSEC-2025-191
+            # PyTorch trust-boundary set; see T-011 acceptance "PyTorch advisory set".
+            --ignore-vuln PYSEC-2025-192
+            # PyTorch trust-boundary set; see T-011 acceptance "PyTorch advisory set".
+            --ignore-vuln PYSEC-2025-193
+            # PyTorch trust-boundary set; see T-011 acceptance "PyTorch advisory set".
+            --ignore-vuln PYSEC-2025-194
+            # PyTorch trust-boundary set; see T-011 acceptance "PyTorch advisory set".
+            --ignore-vuln PYSEC-2025-195
+            # PyTorch trust-boundary set; see T-011 acceptance "PyTorch advisory set".
+            --ignore-vuln PYSEC-2025-196
+            # PyTorch trust-boundary set; see T-011 acceptance "PyTorch advisory set".
+            --ignore-vuln PYSEC-2025-197
+            # PyTorch trust-boundary set; see T-011 acceptance "PyTorch advisory set".
+            --ignore-vuln PYSEC-2025-210
+            # PyTorch trust-boundary set; see T-011 acceptance "PyTorch advisory set".
+            --ignore-vuln PYSEC-2026-139
+          )
+          for req in sentinel-core/backend/*/requirements.txt; do
+            echo "::group::pip-audit $req"
+            pip-audit -r "$req" --no-deps --strict "${PIP_AUDIT_IGNORES[@]}"
             rc=$?
             [ $rc -ne 0 ] && EXIT=$rc
             echo "::endgroup::"
