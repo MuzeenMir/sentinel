@@ -27,6 +27,11 @@ spec:
             - name: SERVICE_NAME
               value: "api-gateway"
             {{- include "sentinel.commonEnv" . | nindent 12 }}
+            - name: INTERNAL_SERVICE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: sentinel-auth-secrets
+                  key: internal-service-token
             - name: AI_ENGINE_URL
               value: "http://{{ include "sentinel.fullname" . }}-ai-engine:5003"
             - name: DRL_ENGINE_URL

@@ -697,7 +697,7 @@ class TestStatisticsEndpoint:
         resp = client.get("/api/v1/stats", headers=AUTH_HEADER)
 
         assert resp.status_code == 503
-        assert "INTERNAL_SERVICE_TOKEN" in resp.get_json()["error"]
+        assert resp.get_json() == {"error": "Statistics service misconfigured"}
         mock_get.assert_not_called()
 
     @patch("requests.get")

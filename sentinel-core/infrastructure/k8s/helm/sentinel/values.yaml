@@ -207,6 +207,7 @@ agent:
 # ── Auth secrets (required — override via --set or values-prod.yaml) ──
 auth:
   jwtSecretKey: ""  # REQUIRED: set via --set auth.jwtSecretKey=<value>
+  internalServiceToken: ""  # REQUIRED: set via --set auth.internalServiceToken=<value>
 
 # ── External Dependencies ────────────────────────────────────────────
 

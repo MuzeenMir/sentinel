@@ -558,7 +558,7 @@ def get_statistics():
         return jsonify(stats), 200
     except RuntimeError as e:
         logger.error(f"Stats retrieval refused: {e}")
-        return jsonify({"error": str(e)}), 503
+        return jsonify({"error": "Statistics service misconfigured"}), 503
     except Exception as e:
         logger.error(f"Stats retrieval error: {e}")
         return jsonify({"error": "Statistics retrieval failed"}), 500
