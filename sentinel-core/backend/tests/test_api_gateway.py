@@ -1548,3 +1548,33 @@ class TestGatewayProxySecurity:
 
         assert resp.status_code == 404
         mock_get.assert_not_called()
+
+
+# ===================================================================
+# CORS configuration (G3)
+# ===================================================================
+
+
+class TestCorsConfig:
+    def test_origins_are_explicit_not_wildcard(self):
+        origins = gw._load_cors_origins()
+        assert origins
+        assert "*" not in origins
+
+    def test_origins_parsed_from_env(self, monkeypatch):
+        monkeypatch.setenv("CORS_ORIGINS", "https://a.example, https://b.example")
+        assert gw._load_cors_origins() == [
+            "https://a.example",
+            "https://b.example",
+        ]
+
+    def test_fail_fast_in_production_when_unset(self, monkeypatch):
+        monkeypatch.delenv("CORS_ORIGINS", raising=False)
+        monkeypatch.setenv("SENTINEL_ENV", "production")
+        with pytest.raises(RuntimeError):
+            gw._load_cors_origins()
+
+    def test_dev_default_when_unset(self, monkeypatch):
+        monkeypatch.delenv("CORS_ORIGINS", raising=False)
+        monkeypatch.delenv("SENTINEL_ENV", raising=False)
+        assert gw._load_cors_origins() == ["http://localhost:3000"]
