@@ -1409,7 +1409,14 @@ class TestGatewayProxySecurity:
 
     @pytest.mark.parametrize(
         "path",
-        ["../admin", "..%2fadmin", "%2e%2e/admin", "/etc/passwd", r"users\admin"],
+        [
+            "../admin",
+            "..%2fadmin",
+            "%2e%2e/admin",
+            "/etc/passwd",
+            r"users\admin",
+            "a.b",
+        ],
     )
     @patch("requests.get")
     def test_auth_proxy_rejects_traversal_path(self, mock_get, path):
@@ -1424,6 +1431,19 @@ class TestGatewayProxySecurity:
     def test_auth_proxy_valid_path_still_forwards_authorization(self, mock_get, client):
         mock_get.return_value = _mock_response(200, {"username": "alice"})
         resp = client.get("/api/v1/auth/profile", headers=AUTH_HEADER)
+
+        assert resp.status_code == 200
+        assert (
+            mock_get.call_args.kwargs["headers"].get("Authorization")
+            == "Bearer valid-token"
+        )
+
+    @patch("requests.get")
+    def test_auth_proxy_valid_hyphen_path_still_forwards_authorization(
+        self, mock_get, client
+    ):
+        mock_get.return_value = _mock_response(200, {"ok": True})
+        resp = client.get("/api/v1/auth/change-password", headers=AUTH_HEADER)
 
         assert resp.status_code == 200
         assert (
