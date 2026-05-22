@@ -133,6 +133,7 @@ services:
       - HIDS_AGENT_URL=http://hids-agent:5010
       - REDIS_URL=redis://redis:6379
       - INTERNAL_SERVICE_TOKEN=${INTERNAL_SERVICE_TOKEN:?set INTERNAL_SERVICE_TOKEN}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000}
       # Compose bridge peers need the HTTP listener on the container interface.
       - SENTINEL_BIND_HOST=0.0.0.0
       # Phase 0 slice 5 — OTel pilot. Empty = telemetry disabled (no-op).
@@ -174,7 +175,11 @@ services:
         condition: service_started
     networks:
       - sentinel-network
-    privileged: true  # Required for raw socket access
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+    security_opt:
+      - no-new-privileges:true
     restart: unless-stopped
 
   # High-speed XDP Collector (bare-metal / privileged container)
@@ -404,7 +409,13 @@ services:
         condition: service_started
     networks:
       - sentinel-network
-    privileged: true
+    cap_add:
+      - BPF
+      - PERFMON
+      - SYS_ADMIN
+      - SYS_RESOURCE
+    security_opt:
+      - no-new-privileges:true
     restart: unless-stopped
 
   # System Hardening Service (eBPF runtime enforcement + CIS benchmarks)
