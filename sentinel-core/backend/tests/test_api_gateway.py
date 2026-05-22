@@ -234,9 +234,12 @@ class TestRequireAuth:
 
     @patch("requests.get", return_value=_mock_response(200, {"threats": []}))
     @patch("requests.post", side_effect=_auth_verify_ok)
-    def test_token_via_query_param(self, _post, _get, client):
-        resp = client.get("/api/v1/threats?token=valid-token")
+    def test_token_via_query_param(self, _post, mock_get, client):
+        resp = client.get("/api/v1/threats?token=valid-token&foo=bar")
         assert resp.status_code == 200
+        sent = mock_get.call_args.kwargs["params"]
+        assert sent.get("foo") == "bar"
+        assert "token" not in sent
 
 
 # ===================================================================
@@ -342,6 +345,19 @@ class TestThreatEndpoints:
             "severity" in str(call_kwargs) or call_kwargs[1].get("params") is not None
         )
 
+    @patch(
+        "requests.get",
+        return_value=_mock_response(200, {"threats": [{"id": 1}], "total": 1}),
+    )
+    @patch("requests.post", side_effect=_auth_verify_ok)
+    def test_get_threats_strips_token_query_param(self, _post, mock_get, client):
+        resp = client.get("/api/v1/threats?token=valid-token&foo=bar")
+
+        assert resp.status_code == 200
+        sent = mock_get.call_args.kwargs["params"]
+        assert sent.get("foo") == "bar"
+        assert "token" not in sent
+
 
 # ===================================================================
 # Alert endpoints
@@ -354,6 +370,16 @@ class TestAlertEndpoints:
     def test_get_alerts(self, _post, _get, client):
         resp = client.get("/api/v1/alerts", headers=AUTH_HEADER)
         assert resp.status_code == 200
+
+    @patch("requests.get", return_value=_mock_response(200, {"alerts": []}))
+    @patch("requests.post", side_effect=_auth_verify_ok)
+    def test_get_alerts_strips_token_query_param(self, _post, mock_get, client):
+        resp = client.get("/api/v1/alerts?token=valid-token&status=open")
+
+        assert resp.status_code == 200
+        sent = mock_get.call_args.kwargs["params"]
+        assert sent.get("status") == "open"
+        assert "token" not in sent
 
     @patch(
         "requests.get", return_value=_mock_response(200, {"id": 7, "severity": "high"})
@@ -1406,6 +1432,16 @@ class TestGatewayProxySecurity:
             mock_get.call_args.kwargs["headers"].get("Authorization")
             == "Bearer valid-token"
         )
+
+    @patch("requests.get")
+    def test_auth_proxy_strips_token_query_param(self, mock_get, client):
+        mock_get.return_value = _mock_response(200, {"users": []})
+        resp = client.get("/api/v1/auth/users?token=secret&foo=bar")
+
+        assert resp.status_code == 200
+        sent = mock_get.call_args.kwargs["params"]
+        assert sent.get("foo") == "bar"
+        assert "token" not in sent
 
     @pytest.mark.parametrize(
         "path",

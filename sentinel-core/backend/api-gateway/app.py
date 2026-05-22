@@ -312,8 +312,10 @@ def auth_proxy(path):
     # Path segment reaches only the auth service per /api/v1/auth/ route prefix.
     try:
         if request.method == "GET":
+            params = request.args.to_dict(flat=True)
+            params.pop("token", None)
             # nosemgrep: ssrf-requests
-            response = requests.get(auth_url, params=request.args, headers=headers)
+            response = requests.get(auth_url, params=params, headers=headers)
         elif request.method == "POST":
             # nosemgrep: ssrf-requests
             response = requests.post(auth_url, json=request.json, headers=headers)
@@ -359,10 +361,12 @@ def get_threats():
     """Get detected threats"""
     try:
         # Query data collector for threat data
+        params = request.args.to_dict(flat=True)
+        params.pop("token", None)
         response = requests.get(
             f"{app.config['DATA_COLLECTOR_URL']}/api/v1/threats",
             headers={"Authorization": request.headers.get("Authorization")},
-            params=request.args,
+            params=params,
         )
 
         return jsonify(response.json()), response.status_code
@@ -414,10 +418,12 @@ def create_threat():
 def get_alerts():
     """Get system alerts"""
     try:
+        params = request.args.to_dict(flat=True)
+        params.pop("token", None)
         response = requests.get(
             f"{app.config['ALERT_SERVICE_URL']}/api/v1/alerts",
             headers={"Authorization": request.headers.get("Authorization")},
-            params=request.args,
+            params=params,
         )
 
         return jsonify(response.json()), response.status_code
