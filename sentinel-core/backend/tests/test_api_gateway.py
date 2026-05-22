@@ -1481,3 +1481,34 @@ class TestGatewayProxySecurity:
         sent = mock_get.call_args.kwargs["params"]
         assert "token" not in sent
         assert sent.get("foo") == "bar"
+
+    @patch("requests.get")
+    @patch("requests.post", side_effect=_auth_verify_ok)
+    def test_policy_route_valid_id_proxies(self, _post, mock_get, client):
+        mock_get.return_value = _mock_response(200, {"id": "policy-123"})
+        resp = client.get("/api/v1/policies/policy-123", headers=AUTH_HEADER)
+
+        assert resp.status_code == 200
+        assert mock_get.call_args.args[0] == (
+            "http://policy-orchestrator:5004/api/v1/policies/policy-123"
+        )
+
+    @pytest.mark.parametrize("policy_id", ["..", "%2e%2e"])
+    @patch("requests.get")
+    @patch("requests.post", side_effect=_auth_verify_ok)
+    def test_policy_route_rejects_traversal_id(
+        self, _post, mock_get, client, policy_id
+    ):
+        resp = client.get(f"/api/v1/policies/{policy_id}", headers=AUTH_HEADER)
+
+        assert resp.status_code == 400
+        assert resp.get_json() == {"error": "Invalid proxy path"}
+        mock_get.assert_not_called()
+
+    @patch("requests.get")
+    @patch("requests.post", side_effect=_auth_verify_ok)
+    def test_policy_route_slash_id_does_not_reach_proxy(self, _post, mock_get, client):
+        resp = client.get("/api/v1/policies/foo%2Fbar", headers=AUTH_HEADER)
+
+        assert resp.status_code == 404
+        mock_get.assert_not_called()

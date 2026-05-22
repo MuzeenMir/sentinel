@@ -9,7 +9,6 @@ from flask_limiter.util import get_remote_address
 from functools import wraps
 import logging
 import time
-from urllib.parse import urljoin
 import redis
 import json
 
@@ -75,6 +74,7 @@ STATS_CACHE_TTL = 10
 
 logger = logging.getLogger(__name__)
 _AUTH_PATH_RE = re.compile(r"[A-Za-z0-9_\-/]+")
+_PROXY_SUFFIX_RE = re.compile(r"[A-Za-z0-9_\-/]+")
 
 # Global rate limiting
 rate_limit_counter: dict[str, int] = {}
@@ -644,11 +644,12 @@ def validate_json_request(required_fields=None):
 # Helper: proxy request to a backend service
 def _proxy_to(base_url, path_suffix, methods=None):
     """Forward request to backend; path_suffix is appended to base_url (no leading slash)."""
-    url = urljoin(base_url.rstrip("/") + "/", path_suffix.lstrip("/"))
-    allowed_prefix = base_url.rstrip("/") + "/"
-    if not url.startswith(allowed_prefix):
-        logger.error("Proxy path rejected: constructed URL escaped allowed base prefix")
+    suffix = path_suffix.strip("/")
+    if not _PROXY_SUFFIX_RE.fullmatch(suffix):
+        logger.error("Proxy path rejected: invalid path suffix")
         return jsonify({"error": "Invalid proxy path"}), 400
+    clean_suffix = "/".join(tok for tok in suffix.split("/") if tok)
+    url = base_url.rstrip("/") + "/" + clean_suffix
 
     headers = {"Authorization": request.headers.get("Authorization", "")}
     tenant_id = getattr(g, "tenant_id", None)
