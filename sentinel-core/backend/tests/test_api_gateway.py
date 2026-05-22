@@ -1389,3 +1389,29 @@ class TestGetRequestStats:
         with gw.app.app_context():
             stats = gw.get_request_stats()
         assert stats == {}
+
+
+# ===================================================================
+# Gateway proxy security (G4 auth header forwarding, G5 token stripping)
+# ===================================================================
+
+
+class TestGatewayProxySecurity:
+    @patch("requests.get")
+    def test_auth_proxy_forwards_authorization_header(self, mock_get, client):
+        mock_get.return_value = _mock_response(200, {"users": []})
+        resp = client.get("/api/v1/auth/users", headers=AUTH_HEADER)
+        assert resp.status_code == 200
+        assert (
+            mock_get.call_args.kwargs["headers"].get("Authorization")
+            == "Bearer valid-token"
+        )
+
+    @patch("requests.get")
+    def test_proxy_to_strips_token_query_param(self, mock_get):
+        mock_get.return_value = _mock_response(200, {"ok": True})
+        with gw.app.test_request_context("/x?token=secret&foo=bar"):
+            gw._proxy_to("http://svc:5000", "/api/v1/things")
+        sent = mock_get.call_args.kwargs["params"]
+        assert "token" not in sent
+        assert sent.get("foo") == "bar"
