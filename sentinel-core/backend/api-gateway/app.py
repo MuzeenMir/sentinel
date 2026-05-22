@@ -25,7 +25,19 @@ from _lib.net import bind_host
 
 # Initialize Flask app
 app = Flask(__name__)
-CORS(app)
+
+
+def _load_cors_origins():
+    """Return the explicit CORS allowlist; fail fast in production if unset."""
+    origins = os.environ.get("CORS_ORIGINS", "").strip()
+    if not origins:
+        if os.environ.get("SENTINEL_ENV") == "production":
+            raise RuntimeError("CORS_ORIGINS is required in production")
+        return ["http://localhost:3000"]
+    return [o.strip() for o in origins.split(",") if o.strip()]
+
+
+CORS(app, resources={r"/api/*": {"origins": _load_cors_origins()}})
 configure_logging(service_name="api-gateway")
 # Phase 0 slice 5 — OTel pilot. No-op when OTEL_EXPORTER_OTLP_ENDPOINT unset.
 init_telemetry(app, service_name="api-gateway")

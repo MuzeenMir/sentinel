@@ -133,6 +133,7 @@ services:
       - HIDS_AGENT_URL=http://hids-agent:5010
       - REDIS_URL=redis://redis:6379
       - INTERNAL_SERVICE_TOKEN=${INTERNAL_SERVICE_TOKEN:?set INTERNAL_SERVICE_TOKEN}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000}
       # Compose bridge peers need the HTTP listener on the container interface.
       - SENTINEL_BIND_HOST=0.0.0.0
       # Phase 0 slice 5 — OTel pilot. Empty = telemetry disabled (no-op).
