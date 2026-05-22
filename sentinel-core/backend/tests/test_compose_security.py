@@ -124,6 +124,26 @@ def test_validator_rejects_unprofiled_host_network_mode(tmp_path, monkeypatch, c
     assert "host network mode is forbidden: xdp-collector" in captured.err
 
 
+def test_validator_rejects_unexpected_privileged_service(tmp_path, monkeypatch, capsys):
+    repo_core = Path(__file__).resolve().parents[2]
+    validator = load_validator(repo_core)
+    compose = tmp_path / "compose.yml"
+    compose.write_text(
+        valid_compose_text()
+        + """
+  data-collector:
+    image: sentinel-data-collector
+    privileged: true
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(validator, "COMPOSE", compose)
+
+    assert validator.main() == 1
+    captured = capsys.readouterr()
+    assert "privileged mode is not allowed: data-collector" in captured.err
+
+
 def test_validator_rejects_host_network_even_when_profiled(
     tmp_path, monkeypatch, capsys
 ):
