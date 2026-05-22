@@ -1,6 +1,7 @@
 import os
 import sys
 import requests
+import re
 from flask import Flask, request, jsonify, g, Response
 from flask_cors import CORS
 from flask_limiter import Limiter
@@ -8,7 +9,6 @@ from flask_limiter.util import get_remote_address
 from functools import wraps
 import logging
 import time
-from urllib.parse import urljoin
 import redis
 import json
 
@@ -85,6 +85,8 @@ STATS_CACHE_KEY = "sentinel:gateway:stats_cache"
 STATS_CACHE_TTL = 10
 
 logger = logging.getLogger(__name__)
+_AUTH_PATH_RE = re.compile(r"[A-Za-z0-9_\-/]+")
+_PROXY_SUFFIX_RE = re.compile(r"[A-Za-z0-9_\-/]+")
 
 # Global rate limiting
 rate_limit_counter: dict[str, int] = {}
@@ -308,23 +310,31 @@ def health_check():
 @app.route("/api/v1/auth/<path:path>", methods=["GET", "POST", "PUT", "DELETE"])
 def auth_proxy(path):
     """Proxy authentication requests to auth service"""
+    if path.startswith("/") or not _AUTH_PATH_RE.fullmatch(path):
+        return jsonify({"error": "Invalid path"}), 400
+
     auth_url = f"{app.config['AUTH_SERVICE_URL']}/api/v1/auth/{path}"
+
+    headers = {}
+    auth_header = request.headers.get("Authorization")
+    if auth_header:
+        headers["Authorization"] = auth_header
 
     # Host is app.config['AUTH_SERVICE_URL'] — trusted config, not user input.
     # Path segment reaches only the auth service per /api/v1/auth/ route prefix.
     try:
         if request.method == "GET":
             # nosemgrep: ssrf-requests
-            response = requests.get(auth_url, params=request.args)
+            response = requests.get(auth_url, params=request.args, headers=headers)
         elif request.method == "POST":
             # nosemgrep: ssrf-requests
-            response = requests.post(auth_url, json=request.json)
+            response = requests.post(auth_url, json=request.json, headers=headers)
         elif request.method == "PUT":
             # nosemgrep: ssrf-requests
-            response = requests.put(auth_url, json=request.json)
+            response = requests.put(auth_url, json=request.json, headers=headers)
         elif request.method == "DELETE":
             # nosemgrep: ssrf-requests
-            response = requests.delete(auth_url)
+            response = requests.delete(auth_url, headers=headers)
 
         return jsonify(response.json()), response.status_code
 
@@ -646,20 +656,28 @@ def validate_json_request(required_fields=None):
 # Helper: proxy request to a backend service
 def _proxy_to(base_url, path_suffix, methods=None):
     """Forward request to backend; path_suffix is appended to base_url (no leading slash)."""
-    url = urljoin(base_url.rstrip("/") + "/", path_suffix.lstrip("/"))
+    suffix = path_suffix.strip("/")
+    if not _PROXY_SUFFIX_RE.fullmatch(suffix):
+        logger.error("Proxy path rejected: invalid path suffix")
+        return jsonify({"error": "Invalid proxy path"}), 400
+    clean_suffix = "/".join(tok for tok in suffix.split("/") if tok)
+    url = base_url.rstrip("/") + "/" + clean_suffix
+
     headers = {"Authorization": request.headers.get("Authorization", "")}
     tenant_id = getattr(g, "tenant_id", None)
     if tenant_id:
         headers["X-Tenant-ID"] = str(tenant_id)
+    params = request.args.to_dict(flat=True)
+    params.pop("token", None)
     try:
         if request.method == "GET":
-            resp = requests.get(url, headers=headers, params=request.args, timeout=30)
+            resp = requests.get(url, headers=headers, params=params, timeout=30)
         elif request.method == "POST":
             resp = requests.post(
                 url,
                 headers=headers,
                 json=request.get_json(silent=True),
-                params=request.args,
+                params=params,
                 timeout=30,
             )
         elif request.method == "PUT":
