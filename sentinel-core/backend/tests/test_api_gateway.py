@@ -1407,11 +1407,57 @@ class TestGatewayProxySecurity:
             == "Bearer valid-token"
         )
 
+    @pytest.mark.parametrize(
+        "path",
+        ["../admin", "..%2fadmin", "%2e%2e/admin", "/etc/passwd", r"users\admin"],
+    )
+    @patch("requests.get")
+    def test_auth_proxy_rejects_traversal_path(self, mock_get, path):
+        with gw.app.test_request_context(f"/api/v1/auth/{path}"):
+            resp, status = gw.auth_proxy(path)
+
+        assert status == 400
+        assert resp.get_json() == {"error": "Invalid path"}
+        mock_get.assert_not_called()
+
+    @patch("requests.get")
+    def test_auth_proxy_valid_path_still_forwards_authorization(self, mock_get, client):
+        mock_get.return_value = _mock_response(200, {"username": "alice"})
+        resp = client.get("/api/v1/auth/profile", headers=AUTH_HEADER)
+
+        assert resp.status_code == 200
+        assert (
+            mock_get.call_args.kwargs["headers"].get("Authorization")
+            == "Bearer valid-token"
+        )
+
     @patch("requests.get")
     def test_proxy_to_strips_token_query_param(self, mock_get):
         mock_get.return_value = _mock_response(200, {"ok": True})
         with gw.app.test_request_context("/x?token=secret&foo=bar"):
             gw._proxy_to("http://svc:5000", "/api/v1/things")
+        sent = mock_get.call_args.kwargs["params"]
+        assert "token" not in sent
+        assert sent.get("foo") == "bar"
+
+    @patch("requests.get")
+    def test_proxy_to_rejects_path_that_escapes_base(self, mock_get):
+        with gw.app.test_request_context("/x"):
+            resp, status = gw._proxy_to("http://svc:5000/api/v1", "../../admin")
+
+        assert status == 400
+        assert resp.get_json() == {"error": "Invalid proxy path"}
+        mock_get.assert_not_called()
+
+    @patch("requests.get")
+    def test_proxy_to_valid_suffix_still_strips_token(self, mock_get):
+        mock_get.return_value = _mock_response(200, {"ok": True})
+        with gw.app.test_request_context("/x?token=secret&foo=bar"):
+            resp, status = gw._proxy_to("http://svc:5000/api/v1", "things")
+
+        assert status == 200
+        assert resp.get_json() == {"ok": True}
+        assert mock_get.call_args.args[0] == "http://svc:5000/api/v1/things"
         sent = mock_get.call_args.kwargs["params"]
         assert "token" not in sent
         assert sent.get("foo") == "bar"

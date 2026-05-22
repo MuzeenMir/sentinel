@@ -8,7 +8,7 @@ from flask_limiter.util import get_remote_address
 from functools import wraps
 import logging
 import time
-from urllib.parse import urljoin
+from urllib.parse import unquote, urljoin
 import redis
 import json
 
@@ -139,6 +139,26 @@ def track_request(endpoint, method):
     key = f"api_requests:{endpoint}:{method}:{timestamp}"
     redis_client.incr(key)
     redis_client.expire(key, 3600)  # Expire after 1 hour
+
+
+def _safe_path(segment):
+    """Return True when a route segment cannot escape its proxy prefix."""
+
+    def has_unsafe_path_part(value):
+        return (
+            ".." in value
+            or "\\" in value
+            or value.startswith(("/", "\\"))
+            or any(ord(char) < 32 or ord(char) == 127 for char in value)
+        )
+
+    if not isinstance(segment, str):
+        return False
+    if has_unsafe_path_part(segment):
+        return False
+
+    decoded = unquote(segment)
+    return not has_unsafe_path_part(decoded)
 
 
 def get_request_stats():
@@ -296,6 +316,9 @@ def health_check():
 @app.route("/api/v1/auth/<path:path>", methods=["GET", "POST", "PUT", "DELETE"])
 def auth_proxy(path):
     """Proxy authentication requests to auth service"""
+    if not _safe_path(path):
+        return jsonify({"error": "Invalid path"}), 400
+
     auth_url = f"{app.config['AUTH_SERVICE_URL']}/api/v1/auth/{path}"
 
     headers = {}
@@ -640,6 +663,11 @@ def validate_json_request(required_fields=None):
 def _proxy_to(base_url, path_suffix, methods=None):
     """Forward request to backend; path_suffix is appended to base_url (no leading slash)."""
     url = urljoin(base_url.rstrip("/") + "/", path_suffix.lstrip("/"))
+    allowed_prefix = base_url.rstrip("/") + "/"
+    if not url.startswith(allowed_prefix):
+        logger.error(f"Proxy path escaped base: {url}")
+        return jsonify({"error": "Invalid proxy path"}), 400
+
     headers = {"Authorization": request.headers.get("Authorization", "")}
     tenant_id = getattr(g, "tenant_id", None)
     if tenant_id:
