@@ -234,9 +234,12 @@ class TestRequireAuth:
 
     @patch("requests.get", return_value=_mock_response(200, {"threats": []}))
     @patch("requests.post", side_effect=_auth_verify_ok)
-    def test_token_via_query_param(self, _post, _get, client):
-        resp = client.get("/api/v1/threats?token=valid-token")
+    def test_token_via_query_param(self, _post, mock_get, client):
+        resp = client.get("/api/v1/threats?token=valid-token&foo=bar")
         assert resp.status_code == 200
+        sent = mock_get.call_args.kwargs["params"]
+        assert sent.get("foo") == "bar"
+        assert "token" not in sent
 
 
 # ===================================================================
@@ -342,6 +345,19 @@ class TestThreatEndpoints:
             "severity" in str(call_kwargs) or call_kwargs[1].get("params") is not None
         )
 
+    @patch(
+        "requests.get",
+        return_value=_mock_response(200, {"threats": [{"id": 1}], "total": 1}),
+    )
+    @patch("requests.post", side_effect=_auth_verify_ok)
+    def test_get_threats_strips_token_query_param(self, _post, mock_get, client):
+        resp = client.get("/api/v1/threats?token=valid-token&foo=bar")
+
+        assert resp.status_code == 200
+        sent = mock_get.call_args.kwargs["params"]
+        assert sent.get("foo") == "bar"
+        assert "token" not in sent
+
 
 # ===================================================================
 # Alert endpoints
@@ -354,6 +370,16 @@ class TestAlertEndpoints:
     def test_get_alerts(self, _post, _get, client):
         resp = client.get("/api/v1/alerts", headers=AUTH_HEADER)
         assert resp.status_code == 200
+
+    @patch("requests.get", return_value=_mock_response(200, {"alerts": []}))
+    @patch("requests.post", side_effect=_auth_verify_ok)
+    def test_get_alerts_strips_token_query_param(self, _post, mock_get, client):
+        resp = client.get("/api/v1/alerts?token=valid-token&status=open")
+
+        assert resp.status_code == 200
+        sent = mock_get.call_args.kwargs["params"]
+        assert sent.get("status") == "open"
+        assert "token" not in sent
 
     @patch(
         "requests.get", return_value=_mock_response(200, {"id": 7, "severity": "high"})
@@ -1389,3 +1415,166 @@ class TestGetRequestStats:
         with gw.app.app_context():
             stats = gw.get_request_stats()
         assert stats == {}
+
+
+# ===================================================================
+# Gateway proxy security (G4 auth header forwarding, G5 token stripping)
+# ===================================================================
+
+
+class TestGatewayProxySecurity:
+    @patch("requests.get")
+    def test_auth_proxy_forwards_authorization_header(self, mock_get, client):
+        mock_get.return_value = _mock_response(200, {"users": []})
+        resp = client.get("/api/v1/auth/users", headers=AUTH_HEADER)
+        assert resp.status_code == 200
+        assert (
+            mock_get.call_args.kwargs["headers"].get("Authorization")
+            == "Bearer valid-token"
+        )
+
+    @patch("requests.get")
+    def test_auth_proxy_strips_token_query_param(self, mock_get, client):
+        mock_get.return_value = _mock_response(200, {"users": []})
+        resp = client.get("/api/v1/auth/users?token=secret&foo=bar")
+
+        assert resp.status_code == 200
+        sent = mock_get.call_args.kwargs["params"]
+        assert sent.get("foo") == "bar"
+        assert "token" not in sent
+
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "../admin",
+            "..%2fadmin",
+            "%2e%2e/admin",
+            "/etc/passwd",
+            r"users\admin",
+            "a.b",
+        ],
+    )
+    @patch("requests.get")
+    def test_auth_proxy_rejects_traversal_path(self, mock_get, path):
+        with gw.app.test_request_context(f"/api/v1/auth/{path}"):
+            resp, status = gw.auth_proxy(path)
+
+        assert status == 400
+        assert resp.get_json() == {"error": "Invalid path"}
+        mock_get.assert_not_called()
+
+    @patch("requests.get")
+    def test_auth_proxy_valid_path_still_forwards_authorization(self, mock_get, client):
+        mock_get.return_value = _mock_response(200, {"username": "alice"})
+        resp = client.get("/api/v1/auth/profile", headers=AUTH_HEADER)
+
+        assert resp.status_code == 200
+        assert (
+            mock_get.call_args.kwargs["headers"].get("Authorization")
+            == "Bearer valid-token"
+        )
+
+    @patch("requests.get")
+    def test_auth_proxy_valid_hyphen_path_still_forwards_authorization(
+        self, mock_get, client
+    ):
+        mock_get.return_value = _mock_response(200, {"ok": True})
+        resp = client.get("/api/v1/auth/change-password", headers=AUTH_HEADER)
+
+        assert resp.status_code == 200
+        assert (
+            mock_get.call_args.kwargs["headers"].get("Authorization")
+            == "Bearer valid-token"
+        )
+
+    @patch("requests.get")
+    def test_proxy_to_strips_token_query_param(self, mock_get):
+        mock_get.return_value = _mock_response(200, {"ok": True})
+        with gw.app.test_request_context("/x?token=secret&foo=bar"):
+            gw._proxy_to("http://svc:5000", "/api/v1/things")
+        sent = mock_get.call_args.kwargs["params"]
+        assert "token" not in sent
+        assert sent.get("foo") == "bar"
+
+    @patch("requests.get")
+    def test_proxy_to_rejects_path_that_escapes_base(self, mock_get):
+        with gw.app.test_request_context("/x"):
+            resp, status = gw._proxy_to("http://svc:5000/api/v1", "../../admin")
+
+        assert status == 400
+        assert resp.get_json() == {"error": "Invalid proxy path"}
+        mock_get.assert_not_called()
+
+    @patch("requests.get")
+    def test_proxy_to_valid_suffix_still_strips_token(self, mock_get):
+        mock_get.return_value = _mock_response(200, {"ok": True})
+        with gw.app.test_request_context("/x?token=secret&foo=bar"):
+            resp, status = gw._proxy_to("http://svc:5000/api/v1", "things")
+
+        assert status == 200
+        assert resp.get_json() == {"ok": True}
+        assert mock_get.call_args.args[0] == "http://svc:5000/api/v1/things"
+        sent = mock_get.call_args.kwargs["params"]
+        assert "token" not in sent
+        assert sent.get("foo") == "bar"
+
+    @patch("requests.get")
+    @patch("requests.post", side_effect=_auth_verify_ok)
+    def test_policy_route_valid_id_proxies(self, _post, mock_get, client):
+        mock_get.return_value = _mock_response(200, {"id": "policy-123"})
+        resp = client.get("/api/v1/policies/policy-123", headers=AUTH_HEADER)
+
+        assert resp.status_code == 200
+        assert mock_get.call_args.args[0] == (
+            "http://policy-orchestrator:5004/api/v1/policies/policy-123"
+        )
+
+    @pytest.mark.parametrize("policy_id", ["..", "%2e%2e"])
+    @patch("requests.get")
+    @patch("requests.post", side_effect=_auth_verify_ok)
+    def test_policy_route_rejects_traversal_id(
+        self, _post, mock_get, client, policy_id
+    ):
+        resp = client.get(f"/api/v1/policies/{policy_id}", headers=AUTH_HEADER)
+
+        assert resp.status_code == 400
+        assert resp.get_json() == {"error": "Invalid proxy path"}
+        mock_get.assert_not_called()
+
+    @patch("requests.get")
+    @patch("requests.post", side_effect=_auth_verify_ok)
+    def test_policy_route_slash_id_does_not_reach_proxy(self, _post, mock_get, client):
+        resp = client.get("/api/v1/policies/foo%2Fbar", headers=AUTH_HEADER)
+
+        assert resp.status_code == 404
+        mock_get.assert_not_called()
+
+
+# ===================================================================
+# CORS configuration (G3)
+# ===================================================================
+
+
+class TestCorsConfig:
+    def test_origins_are_explicit_not_wildcard(self):
+        origins = gw._load_cors_origins()
+        assert origins
+        assert "*" not in origins
+
+    def test_origins_parsed_from_env(self, monkeypatch):
+        monkeypatch.setenv("CORS_ORIGINS", "https://a.example, https://b.example")
+        assert gw._load_cors_origins() == [
+            "https://a.example",
+            "https://b.example",
+        ]
+
+    def test_fail_fast_in_production_when_unset(self, monkeypatch):
+        monkeypatch.delenv("CORS_ORIGINS", raising=False)
+        monkeypatch.setenv("SENTINEL_ENV", "production")
+        with pytest.raises(RuntimeError):
+            gw._load_cors_origins()
+
+    def test_dev_default_when_unset(self, monkeypatch):
+        monkeypatch.delenv("CORS_ORIGINS", raising=False)
+        monkeypatch.delenv("SENTINEL_ENV", raising=False)
+        assert gw._load_cors_origins() == ["http://localhost:3000"]
