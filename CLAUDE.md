@@ -4,7 +4,7 @@ Use this file for Claude Code sessions in this repository. Primary application c
 
 ## Active baseline plan (2026-05-12)
 
-**Read first:** `.team/specs/2026-05-12-ultraplan-baseline.md` — current path-to-baseline plan.
+**Read first:** `docs/superpowers/plans/2026-05-07-phase-0-security-stabilization.md` — current path-to-baseline plan; closure status in `sentinel-core/docs/reviews/phase-0-critical-fixes.md`.
 **Branch:** `fix/dragon-scale-stabilize-2026-05-11`.
 **Owner:** Marcus (CTO) · Executor: Kai (Codex) · Approver: Mir.
 
@@ -21,7 +21,7 @@ Use this file for Claude Code sessions in this repository. Primary application c
 - `collector` ← data-collector + agent-grpc + sensor skeletons (Falco/Suricata/Wazuh/OpenSCAP)
 - `llm-gateway` ← new (Gemma 4, TurboQuant); Phase 1 = shell returning 410
 
-**Phase 0 (active, baseline plan = `.team/specs/2026-05-12-ultraplan-baseline.md`):** stabilize. Status at 2026-05-16:
+**Phase 0 (active, baseline plan = `docs/superpowers/plans/2026-05-07-phase-0-security-stabilization.md`):** stabilize. Status at 2026-05-16:
 - ✅ 9 split CI workflows present (build/e2e-smoke/integration/lint/release-please/sbom/security/typecheck/unit)
 - ✅ CODEOWNERS at repo root
 - ✅ CONTRIBUTING.md
@@ -35,7 +35,7 @@ Use this file for Claude Code sessions in this repository. Primary application c
 - ✅ ruff `format` baseline cleared + lint scope expanded (Wave 3 PR #9 merged 2026-05-16)
 - ✅ CI required-checks gate config — branch-protection.json + typecheck lenient allowlist (Wave 3 PR #10 merged 2026-05-16)
 - ✅ CI green-up on stabilize branch — build provenance, dependency CVEs, coverage gate (Wave 3 follow-up 2026-05-16)
-- ❌ branch protection on `main` (Wave 4, Mir — apply after PR #2 merges to main)
+- ✅ branch protection on `main` (confirmed active — see `sentinel-core/docs/reviews/phase-0-critical-fixes.md`)
 - ❌ idempotent migrations, honest README, secrets sweep, SBOM+cosign verify, OTel pilot, `sentinel-core/`→root flatten, commitlint, trunk-based (Wave 6, deferred — separate spec)
 
 Exit: 7 consecutive green days on `main`.
