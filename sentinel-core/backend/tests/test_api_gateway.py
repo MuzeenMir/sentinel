@@ -688,7 +688,24 @@ class TestProxyToHelper:
 class TestStatisticsEndpoint:
     @patch("requests.get")
     @patch("requests.post", side_effect=_auth_verify_ok)
-    def test_stats_aggregates_downstream(self, _post, mock_get, client, _patch_redis):
+    def test_stats_returns_503_when_internal_service_token_empty(
+        self, _post, mock_get, client, _patch_redis, monkeypatch
+    ):
+        monkeypatch.delenv("INTERNAL_SERVICE_TOKEN", raising=False)
+        _patch_redis.get.return_value = None
+
+        resp = client.get("/api/v1/stats", headers=AUTH_HEADER)
+
+        assert resp.status_code == 503
+        assert "INTERNAL_SERVICE_TOKEN" in resp.get_json()["error"]
+        mock_get.assert_not_called()
+
+    @patch("requests.get")
+    @patch("requests.post", side_effect=_auth_verify_ok)
+    def test_stats_aggregates_downstream(
+        self, _post, mock_get, client, _patch_redis, monkeypatch
+    ):
+        monkeypatch.setenv("INTERNAL_SERVICE_TOKEN", "test-internal-token")
         _patch_redis.get.return_value = None
 
         def get_router(*args, **kwargs):
@@ -725,7 +742,10 @@ class TestStatisticsEndpoint:
 
     @patch("requests.get")
     @patch("requests.post", side_effect=_auth_verify_ok)
-    def test_stats_via_statistics_alias(self, _post, mock_get, client, _patch_redis):
+    def test_stats_via_statistics_alias(
+        self, _post, mock_get, client, _patch_redis, monkeypatch
+    ):
+        monkeypatch.setenv("INTERNAL_SERVICE_TOKEN", "test-internal-token")
         _patch_redis.get.return_value = None
         mock_get.return_value = _mock_response(200, {})
         resp = client.get("/api/v1/statistics", headers=AUTH_HEADER)
@@ -754,8 +774,9 @@ class TestStatisticsEndpoint:
     )
     @patch("requests.post", side_effect=_auth_verify_ok)
     def test_stats_downstream_failures_graceful(
-        self, _post, _get, client, _patch_redis
+        self, _post, _get, client, _patch_redis, monkeypatch
     ):
+        monkeypatch.setenv("INTERNAL_SERVICE_TOKEN", "test-internal-token")
         _patch_redis.get.return_value = None
         resp = client.get("/api/v1/stats", headers=AUTH_HEADER)
         assert resp.status_code == 200
@@ -1250,7 +1271,10 @@ class TestValidateJsonRequest:
 
 class TestFetchDownstreamStats:
     @patch("requests.get")
-    def test_returns_aggregated_stats(self, mock_get, client, _patch_redis):
+    def test_returns_aggregated_stats(
+        self, mock_get, client, _patch_redis, monkeypatch
+    ):
+        monkeypatch.setenv("INTERNAL_SERVICE_TOKEN", "test-internal-token")
         _patch_redis.get.return_value = None
 
         def router(*args, **kwargs):
@@ -1301,7 +1325,8 @@ class TestFetchDownstreamStats:
         "requests.get",
         side_effect=_requests_lib.exceptions.ConnectionError("everything broken"),
     )
-    def test_graceful_degradation(self, _get, client, _patch_redis):
+    def test_graceful_degradation(self, _get, client, _patch_redis, monkeypatch):
+        monkeypatch.setenv("INTERNAL_SERVICE_TOKEN", "test-internal-token")
         _patch_redis.get.return_value = None
         with gw.app.app_context():
             result = gw._fetch_downstream_stats()
@@ -1310,7 +1335,10 @@ class TestFetchDownstreamStats:
         assert result["policies_total"] == 0
 
     @patch("requests.get")
-    def test_partial_downstream_failure(self, mock_get, client, _patch_redis):
+    def test_partial_downstream_failure(
+        self, mock_get, client, _patch_redis, monkeypatch
+    ):
+        monkeypatch.setenv("INTERNAL_SERVICE_TOKEN", "test-internal-token")
         _patch_redis.get.return_value = None
 
         def router(*args, **kwargs):
