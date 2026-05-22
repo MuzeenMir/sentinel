@@ -174,7 +174,11 @@ services:
         condition: service_started
     networks:
       - sentinel-network
-    privileged: true  # Required for raw socket access
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+    security_opt:
+      - no-new-privileges:true
     restart: unless-stopped
 
   # High-speed XDP Collector (bare-metal / privileged container)
@@ -404,7 +408,13 @@ services:
         condition: service_started
     networks:
       - sentinel-network
-    privileged: true
+    cap_add:
+      - BPF
+      - PERFMON
+      - SYS_ADMIN
+      - SYS_RESOURCE
+    security_opt:
+      - no-new-privileges:true
     restart: unless-stopped
 
   # System Hardening Service (eBPF runtime enforcement + CIS benchmarks)

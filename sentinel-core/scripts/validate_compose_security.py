@@ -68,6 +68,9 @@ INTERNAL_SERVICES = {
 
 PUBLIC_SERVICES = {"api-gateway", "admin-console", "tempo"}
 
+# Services permitted to run privileged: true (genuine kernel-attach needs).
+PRIVILEGED_ALLOWED = {"xdp-collector", "hardening-service"}
+
 SYSTEMD_HARDENING_FLAGS = (
     "NoNewPrivileges=yes",
     "ProtectSystem=strict",
@@ -206,6 +209,11 @@ def main() -> int:
         )
         if has_host_network:
             errors.append(f"host network mode is forbidden: {name}")
+        has_privileged = re.search(
+            r"^\s*privileged:\s*true\s*$", block, flags=re.MULTILINE
+        )
+        if has_privileged and name not in PRIVILEGED_ALLOWED:
+            errors.append(f"privileged mode is not allowed: {name}")
 
     if errors:
         for error in errors:
