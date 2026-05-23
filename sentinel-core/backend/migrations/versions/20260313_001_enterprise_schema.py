@@ -467,4 +467,10 @@ def downgrade():
         "rl_agent_states",
         "system_config",
     ]:
-        op.execute(f"ALTER TABLE IF EXISTS {table} DROP COLUMN IF EXISTS tenant_id")
+        # CASCADE so any RLS policy referencing tenant_id (restored by T-014c's
+        # downgrade as part of the byte-for-byte init.sql policy restoration)
+        # drops with the column. Without CASCADE Postgres errors with
+        # "DependentObjectsStillExist". Exposed by fresh_db_check.sh round-trip.
+        op.execute(
+            f"ALTER TABLE IF EXISTS {table} DROP COLUMN IF EXISTS tenant_id CASCADE"
+        )
