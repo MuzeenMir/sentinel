@@ -36,6 +36,7 @@ jobs:
       - name: Install Alembic + psycopg
         run: pip install alembic==1.13.2 'psycopg[binary]==3.2.1' SQLAlchemy==2.0.32
       - name: fresh_db_check
+        working-directory: sentinel-core
         run: bash scripts/fresh_db_check.sh
 
   integration-compose:

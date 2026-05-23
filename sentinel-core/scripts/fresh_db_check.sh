@@ -3,8 +3,10 @@
 #
 # Per Phase 0 plan
 # (docs/superpowers/plans/2026-05-07-phase-0-security-stabilization.md Task 6
-# step 7) and T-014e ticket. Spins up an empty postgres:13 container, seeds it
-# with init.sql, then runs:
+# step 7) and T-014e / T-030 tickets. Spins up an empty postgres:13 container
+# (Alembic owns the full schema post-T-030; init.sql is extensions-only and
+# applied automatically by the Postgres entrypoint, so we no longer apply it
+# from this script), then runs:
 #
 #     alembic upgrade head
 #     alembic downgrade base
@@ -24,7 +26,6 @@ set -euo pipefail
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 REPO_ROOT="$( cd "${SCRIPT_DIR}/.." && pwd )"
 MIGRATIONS_DIR="${REPO_ROOT}/backend/migrations"
-INIT_SQL="${REPO_ROOT}/init.sql"
 VENV_DIR="${REPO_ROOT}/.venv-fresh-db-check"
 
 CONTAINER_NAME="sentinel-fresh-db-check-$$"
@@ -45,7 +46,6 @@ trap cleanup EXIT INT TERM
 
 command -v docker >/dev/null 2>&1 || { echo "ERROR: docker not on PATH" >&2; exit 1; }
 command -v python3 >/dev/null 2>&1 || { echo "ERROR: python3 not on PATH" >&2; exit 1; }
-[ -f "${INIT_SQL}" ] || { echo "ERROR: ${INIT_SQL} not found" >&2; exit 1; }
 [ -d "${MIGRATIONS_DIR}" ] || { echo "ERROR: ${MIGRATIONS_DIR} not a directory" >&2; exit 1; }
 
 echo "==> Starting ${PG_IMAGE} as ${CONTAINER_NAME} on port ${PG_PORT}"
@@ -74,10 +74,6 @@ if [ -z "${READY}" ]; then
   docker logs "${CONTAINER_NAME}" >&2 || true
   exit 1
 fi
-
-echo "==> Applying init.sql"
-docker exec -i "${CONTAINER_NAME}" \
-  psql -v ON_ERROR_STOP=1 -U "${PG_USER}" -d "${PG_DB}" < "${INIT_SQL}"
 
 if [ ! -d "${VENV_DIR}" ]; then
   echo "==> Creating venv at ${VENV_DIR}"
