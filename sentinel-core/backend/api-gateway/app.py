@@ -186,14 +186,7 @@ def _fetch_downstream_stats():
         "policies_by_action": {},
     }
 
-    internal_service_token = os.environ.get("INTERNAL_SERVICE_TOKEN", "").strip()
-    headers = {}
-    if internal_service_token:
-        headers["Authorization"] = f"Bearer {internal_service_token}"
-    else:
-        logger.warning(
-            "INTERNAL_SERVICE_TOKEN is unset; downstream stats requests will be unauthenticated"
-        )
+    headers = _internal_service_headers()
 
     try:
         resp = requests.get(
@@ -236,6 +229,17 @@ def _fetch_downstream_stats():
 
     redis_client.set(STATS_CACHE_KEY, json.dumps(result), ex=STATS_CACHE_TTL)
     return result
+
+
+def _internal_service_headers():
+    """Build headers for internal downstream service calls."""
+    internal_service_token = os.environ.get("INTERNAL_SERVICE_TOKEN", "").strip()
+    if not internal_service_token:
+        raise RuntimeError(
+            "INTERNAL_SERVICE_TOKEN is unset; gateway refuses to make "
+            "unauthenticated downstream calls"
+        )
+    return {"Authorization": f"Bearer {internal_service_token}"}
 
 
 # ---------------------------------------------------------------------------
@@ -580,6 +584,9 @@ def get_statistics():
             "timestamp": time.time(),
         }
         return jsonify(stats), 200
+    except RuntimeError as e:
+        logger.error(f"Stats retrieval refused: {e}")
+        return jsonify({"error": "Statistics service misconfigured"}), 503
     except Exception as e:
         logger.error(f"Stats retrieval error: {e}")
         return jsonify({"error": "Statistics retrieval failed"}), 500
