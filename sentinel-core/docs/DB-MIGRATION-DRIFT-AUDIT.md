@@ -1,5 +1,20 @@
 # DB Migration Drift Audit
 
+> **⚠ SUPERSEDED 2026-05-23.** The drift defects (D-1..D-7) catalogued in this
+> document are closed by **T-014** (PRs #27 `2e27f87`, #28 `b22fd0b`, #29 `f495ef0`,
+> #30 `0cd41dd`, #31 `6daef20`) and **T-030** (PR #33 `6085027`). Alembic is now
+> the sole schema source-of-truth: `20260417_001_consolidate_schema.py` creates
+> the foundation tables (`users`, `token_blacklist`, `audit_log`,
+> `compliance_assessments`) idempotently; `init.sql` is reduced to
+> `CREATE EXTENSION IF NOT EXISTS pgcrypto`; `auth-service/app.py`'s
+> `db.create_all()` codepath remains only as a v1 startup safety net and is
+> wired behind the `USE_V2_*` flags for Phase 1 sunset. CI gate
+> `integration-migrations` proves the chain is idempotent against a fresh
+> Postgres on every PR. **Read** `sentinel-core/docs/reviews/phase-0-critical-fixes.md`
+> (Closure Addendum 2026-05-23) for the authoritative current state. This
+> document is preserved as the historical record of the drift that motivated
+> the T-014 / T-030 work.
+
 *Date: 2026-04-17*
 *Scope: `init.sql` vs `backend/migrations/versions/*.py` vs SQLAlchemy ORM `db.create_all()`*
 
