@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.1.1](https://github.com/MuzeenMir/sentinel/compare/v1.1.0...v1.1.1) (2026-05-23)
+
+
+### Bug Fixes
+
+* **migrations:** create users/audit_log base tables in 20260417_001 (T-030) ([#33](https://github.com/MuzeenMir/sentinel/issues/33)) ([6085027](https://github.com/MuzeenMir/sentinel/commit/6085027ad5b5d23ed1a1290a6a37a3b13dfe53fa))
+
+
+### Documentation
+
+* **migrations:** flip phase-0 closure review to all-green; add 2026-05-23 addendum ([#35](https://github.com/MuzeenMir/sentinel/issues/35)) ([bc8313c](https://github.com/MuzeenMir/sentinel/commit/bc8313c2c875edd3fdb5366945e062d9b6befa91))
+
 ## [1.1.0](https://github.com/MuzeenMir/sentinel/compare/v1.0.1...v1.1.0) (2026-05-23)
 
 
