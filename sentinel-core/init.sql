@@ -99,19 +99,11 @@ CREATE INDEX idx_compliance_tenant    ON compliance_assessments (tenant_id);
 CREATE INDEX idx_compliance_framework ON compliance_assessments (framework);
 CREATE INDEX idx_compliance_assessed  ON compliance_assessments (assessed_at);
 
--- ─── Row-Level Security policies (disabled by default) ──────────────────────
--- Enable per-table with:  ALTER TABLE <table> ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY tenant_isolation_users ON users
-    USING (tenant_id = current_setting('app.current_tenant_id', TRUE)::BIGINT);
-
-CREATE POLICY tenant_isolation_audit ON audit_log
-    USING (tenant_id = current_setting('app.current_tenant_id', TRUE)::BIGINT);
-
-CREATE POLICY tenant_isolation_policy ON policy_decisions
-    USING (tenant_id = current_setting('app.current_tenant_id', TRUE)::BIGINT);
-
-CREATE POLICY tenant_isolation_compliance ON compliance_assessments
-    USING (tenant_id = current_setting('app.current_tenant_id', TRUE)::BIGINT);
+-- Row-Level Security policies + tenant isolation now owned by Alembic
+-- migration 20260417_003_enable_rls (T-014c). init.sql intentionally leaves
+-- them out; downgrading past T-014c restores the legacy policies as part of
+-- the byte-for-byte rollback path. Foundation table CREATEs above remain
+-- because the Alembic chain (20260304_001, 20260313_001, 20260417_*)
+-- references them.
 
 COMMIT;
