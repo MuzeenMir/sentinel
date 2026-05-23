@@ -132,9 +132,7 @@ def upgrade() -> None:
             ),
         )
 
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS idx_audit_tenant ON audit_log (tenant_id)"
-    )
+    op.execute("CREATE INDEX IF NOT EXISTS idx_audit_tenant ON audit_log (tenant_id)")
     op.execute("CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_log (user_id)")
     op.execute(
         "CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_log (timestamp)"
