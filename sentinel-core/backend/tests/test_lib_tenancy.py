@@ -32,9 +32,9 @@ def _pg_conn():
 
 def _captured_call(conn):
     """Extract the (sql_text, params) of the single execute call on ``conn``."""
-    assert conn.execute.call_count == 1, (
-        f"expected exactly one execute call, got {conn.execute.call_count}"
-    )
+    assert (
+        conn.execute.call_count == 1
+    ), f"expected exactly one execute call, got {conn.execute.call_count}"
     args, kwargs = conn.execute.call_args
     sql = str(args[0])
     params = args[1] if len(args) > 1 else kwargs.get("parameters") or {}

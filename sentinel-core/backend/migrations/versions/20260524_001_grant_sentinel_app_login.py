@@ -33,7 +33,7 @@ from typing import Sequence, Union
 from alembic import op
 
 
-revision: str = "20260524_001_grant_sentinel_app_login"
+revision: str = "20260524_001_app_login"
 down_revision: Union[str, None] = "20260417_003_enable_rls"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -60,9 +60,7 @@ def upgrade() -> None:
         )
 
     quoted_pwd = _dollar_quote(pwd)
-    op.execute(
-        f"ALTER ROLE sentinel_app WITH LOGIN PASSWORD {quoted_pwd}"
-    )
+    op.execute(f"ALTER ROLE sentinel_app WITH LOGIN PASSWORD {quoted_pwd}")
 
 
 def downgrade() -> None:
