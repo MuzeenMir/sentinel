@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.3](https://github.com/MuzeenMir/sentinel/compare/v1.1.2...v1.1.3) (2026-05-24)
+
+
+### Documentation
+
+* **repo:** add QUICKSTART.md covering Win11 + Ubuntu 24 ([#39](https://github.com/MuzeenMir/sentinel/issues/39)) ([2815ecb](https://github.com/MuzeenMir/sentinel/commit/2815ecb1773fe69cd9357a63b6e09478690ef95c))
+
 ## [1.1.2](https://github.com/MuzeenMir/sentinel/compare/v1.1.1...v1.1.2) (2026-05-24)
 
 
