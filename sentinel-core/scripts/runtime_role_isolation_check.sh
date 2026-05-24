@@ -126,20 +126,24 @@ fi
 echo "        OK — permission denied"
 
 # ───────────────────────────── Assertion 2 + 3 ─────────────────────────
+# psql -1 wraps the -c payload in a single implicit transaction so
+# set_config(is_local=true) scopes the GUC for the count(*) that follows.
+# Without -1 we'd need explicit BEGIN/COMMIT, whose command tags get
+# emitted to stdout in -t -A mode and confuse `tail`.
+STEP=2
 for TID in 1 2; do
   EXPECTED_COUNT=$([ "${TID}" -eq 1 ] && echo 2 || echo 1)
-  echo "==> [${TID}/4] sentinel_app with app.tenant_id=${TID} sees ${EXPECTED_COUNT} user row(s)"
-  COUNT=$(psql_as_app -v ON_ERROR_STOP=1 -t -A -c "
-    BEGIN;
+  echo "==> [${STEP}/4] sentinel_app with app.tenant_id=${TID} sees ${EXPECTED_COUNT} user row(s)"
+  COUNT=$(psql_as_app -v ON_ERROR_STOP=1 -t -A -1 -c "
     SELECT set_config('app.tenant_id', '${TID}', true);
     SELECT count(*) FROM users;
-    COMMIT;
   " | tail -1 | tr -d ' ')
   if [ "${COUNT}" != "${EXPECTED_COUNT}" ]; then
-    echo "FAIL: tenant ${TID} saw ${COUNT} rows, expected ${EXPECTED_COUNT}" >&2
+    echo "FAIL: tenant ${TID} saw '${COUNT}' rows, expected ${EXPECTED_COUNT}" >&2
     exit 1
   fi
   echo "        OK — ${COUNT} rows"
+  STEP=$((STEP + 1))
 done
 
 # ───────────────────────────── Assertion 4 ─────────────────────────────
