@@ -21,7 +21,7 @@ Use this file for Claude Code sessions in this repository. Primary application c
 - `collector` ← data-collector + agent-grpc + sensor skeletons (Falco/Suricata/Wazuh/OpenSCAP)
 - `llm-gateway` ← new (Gemma 4, TurboQuant); Phase 1 = shell returning 410
 
-**Phase 0 (active, baseline plan = `docs/superpowers/plans/2026-05-07-phase-0-security-stabilization.md`):** stabilize. Status at 2026-05-16:
+**Phase 0 (CLOSED 2026-05-23, baseline plan = `docs/superpowers/plans/2026-05-07-phase-0-security-stabilization.md`):** stabilize. Closure review: `sentinel-core/docs/reviews/phase-0-critical-fixes.md` (Closure Addendum 2026-05-23). All source-spec closure gaps G1–G7 + G9 closed in code on `main`; CI green; **7-day green clock window 2026-05-23 → 2026-05-30** (exit window). v1.1.1 released. Status:
 - ✅ 9 split CI workflows present (build/e2e-smoke/integration/lint/release-please/sbom/security/typecheck/unit)
 - ✅ CODEOWNERS at repo root
 - ✅ CONTRIBUTING.md
@@ -35,10 +35,20 @@ Use this file for Claude Code sessions in this repository. Primary application c
 - ✅ ruff `format` baseline cleared + lint scope expanded (Wave 3 PR #9 merged 2026-05-16)
 - ✅ CI required-checks gate config — branch-protection.json + typecheck lenient allowlist (Wave 3 PR #10 merged 2026-05-16)
 - ✅ CI green-up on stabilize branch — build provenance, dependency CVEs, coverage gate (Wave 3 follow-up 2026-05-16)
-- ✅ branch protection on `main` (confirmed active — see `sentinel-core/docs/reviews/phase-0-critical-fixes.md`)
-- ❌ idempotent migrations, honest README, secrets sweep, SBOM+cosign verify, OTel pilot, `sentinel-core/`→root flatten, commitlint, trunk-based (Wave 6, deferred — separate spec)
+- ✅ branch protection on `main` (active — required checks `lint,typecheck,unit,security,build`; T-029 promoting `integration-migrations` separately)
+- ✅ G1–G7 + G9 closure-review deltas — T-013..T-020, T-014a..T-014e + T-030 (PR #33 squash `6085027`) — Alembic owns the full schema; `init.sql` reduced to `CREATE EXTENSION IF NOT EXISTS pgcrypto`
+- ✅ idempotent migrations, secrets sweep (gitleaks gating), SBOM (CycloneDX), commitlint enforced — Wave 6 carried into Phase 0 closure
+- 🟡 OTel pilot landed in `api-gateway` (Phase 0 scope); broad rollout = Phase 1
+- 🟡 honest README, `sentinel-core/`→root flatten — deferred to Phase 1 / not blocking exit
 
-Exit: 7 consecutive green days on `main`.
+Phase 1 carry-overs (filed in TASKS.md, do not reset the 7-day clock):
+- T-027 (SSO/SAML secret encryption-at-rest)
+- T-028 (runtime `sentinel_app` `SET ROLE` per request — closes the audit-append-only constraint at runtime)
+- T-029 (promote `integration-migrations` to required check)
+- T-021 (xdp-collector multi-stage Dockerfile)
+- G6 runtime cap behavior unverified on Docker host
+
+Exit gate: 7 consecutive green days on `main` (2026-05-23 → 2026-05-30).
 
 **Phase 1 (8 wks, blocked on Phase 0):** consolidate behind `USE_V2_*` JWT flags — shared `backend/_lib/` (cim, tenancy, otel, audit, llm_client), Helm scaffold, PG16 + pgvector + RLS, Kafka 3 per-tenant topics, Redis 7, Tempo. Exit: `sentinel-internal` canary runs 14 days on v2 with zero P0/P1 regressions.
 
@@ -88,7 +98,6 @@ SENTINEL is a server/endpoint security platform: telemetry collection, AI-assist
 - Full specifications may live in `sentinel-core/docs/specifications/` (often gitignored; distributed separately).
 - Quick refs: `sentinel-core/docs/security.md`, `sentinel-core/docs/api-reference.md`, `sentinel-core/docs/ml-models.md`
 - Human overview: `sentinel-core/readme.md`
-- Cursor-oriented agent summary: `AGENTS.md` (root)
 
 ## Common commands
 

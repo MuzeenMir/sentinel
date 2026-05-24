@@ -131,6 +131,14 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # NOTE (T-030 audit): the OLD_INIT_POLICIES restored below intentionally use
+    # the legacy `app.current_tenant_id` GUC name (matching the byte-for-byte
+    # init.sql shipped pre-T-014c). The upgrade path uses `app.tenant_id`. If
+    # an operator partially downgrades from head to between 002 and 003 (rare
+    # — `alembic downgrade base` is the supported recovery path), runtime RLS
+    # isolation will be broken until `alembic upgrade head` re-applies the
+    # current policies. Downgrade is for migration-rollback safety, not for
+    # serving traffic; do not run app workloads against a half-downgraded DB.
     op.execute(
         "REVOKE USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public FROM sentinel_app"
     )
