@@ -4,6 +4,7 @@
     "typecheck",
     "unit",
     "security",
-    "build"
+    "build",
+    "integration-migrations"
   ]
 }
