@@ -46,6 +46,8 @@ Security platform for server/endpoint telemetry, AI-assisted detection, policy o
 
 ## Quick start
 
+> **First-time setup?** Read [`QUICKSTART.md`](QUICKSTART.md) — covers Windows 11 (Docker Desktop + WSL2) and Ubuntu 24.04 with smoke-test commands and common failure modes. The snippet below is the TL;DR for users already familiar with the stack.
+
 ### Prerequisites
 
 - Docker & Docker Compose v2+
