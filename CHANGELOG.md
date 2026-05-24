@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.2](https://github.com/MuzeenMir/sentinel/compare/v1.1.1...v1.1.2) (2026-05-24)
+
+
+### Documentation
+
+* **repo:** phase-0 polish — refresh CLAUDE.md, supersede drift audit ([#36](https://github.com/MuzeenMir/sentinel/issues/36)) ([de18c53](https://github.com/MuzeenMir/sentinel/commit/de18c53bd00cb675b2081bd15888a8ac433cccfa))
+
 ## [1.1.1](https://github.com/MuzeenMir/sentinel/compare/v1.1.0...v1.1.1) (2026-05-23)
 
 
