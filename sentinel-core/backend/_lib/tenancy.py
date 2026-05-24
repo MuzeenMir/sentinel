@@ -36,6 +36,7 @@ never reaches this listener.
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any
 
 from flask import g, has_request_context
@@ -44,9 +45,34 @@ from sqlalchemy import event, text
 logger = logging.getLogger(__name__)
 
 
+def _default_tenant_id() -> int | None:
+    """Read ``DEFAULT_TENANT_ID`` from env at call time (not import) so tests
+    that ``monkeypatch.setenv`` see the change."""
+    raw = os.environ.get("DEFAULT_TENANT_ID")
+    if not raw:
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        return None
+
+
 def apply_tenant_to_connection(connection: Any) -> None:
-    """Issue ``SELECT set_config('app.tenant_id', :tid, true)`` on ``connection``
-    if a Flask request is in scope and ``g.tenant_id`` is set.
+    """Issue ``SELECT set_config('app.tenant_id', :tid, true)`` on ``connection``.
+
+    Tenant ID resolution order:
+
+    1. Flask ``g.tenant_id`` (set by ``tenant_middleware`` after auth resolves
+       the caller). Authoritative for tenant-scoped, authenticated routes.
+    2. ``DEFAULT_TENANT_ID`` env var. Single-tenant fallback that lets
+       pre-auth routes (e.g. ``/auth/login``) still satisfy RLS so the
+       initial admin lookup succeeds. Multi-tenant deployments leave this
+       unset; pre-auth lookups then need a tenant hint in the request.
+
+    Skipped if not in a Flask request context (background jobs / module
+    import); those paths must call ``apply_tenant_to_connection`` directly
+    after manually setting ``g.tenant_id`` or via ``set_config`` themselves.
+    Skipped on non-PostgreSQL dialects.
 
     Exposed for direct invocation (e.g. in tests) and called by the
     ``after_begin`` listener installed via :func:`install_set_local_listener`.
@@ -56,6 +82,8 @@ def apply_tenant_to_connection(connection: Any) -> None:
     if not has_request_context():
         return
     tid = getattr(g, "tenant_id", None)
+    if tid is None:
+        tid = _default_tenant_id()
     if tid is None:
         return
     connection.execute(

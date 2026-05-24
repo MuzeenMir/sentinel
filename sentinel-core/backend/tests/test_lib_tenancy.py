@@ -57,7 +57,38 @@ def test_skips_without_request_context():
     conn.execute.assert_not_called()
 
 
-def test_skips_without_tenant_id():
+def test_skips_without_tenant_id(monkeypatch):
+    monkeypatch.delenv("DEFAULT_TENANT_ID", raising=False)
+    conn = _pg_conn()
+    app = Flask(__name__)
+    with app.test_request_context("/"):
+        apply_tenant_to_connection(conn)
+    conn.execute.assert_not_called()
+
+
+def test_falls_back_to_default_tenant_env(monkeypatch):
+    monkeypatch.setenv("DEFAULT_TENANT_ID", "1")
+    conn = _pg_conn()
+    app = Flask(__name__)
+    with app.test_request_context("/"):
+        apply_tenant_to_connection(conn)
+    _, params = _captured_call(conn)
+    assert params == {"tid": "1"}
+
+
+def test_g_tenant_id_overrides_default_env(monkeypatch):
+    monkeypatch.setenv("DEFAULT_TENANT_ID", "1")
+    conn = _pg_conn()
+    app = Flask(__name__)
+    with app.test_request_context("/"):
+        g.tenant_id = 42
+        apply_tenant_to_connection(conn)
+    _, params = _captured_call(conn)
+    assert params == {"tid": "42"}
+
+
+def test_malformed_default_env_treated_as_unset(monkeypatch):
+    monkeypatch.setenv("DEFAULT_TENANT_ID", "not-a-number")
     conn = _pg_conn()
     app = Flask(__name__)
     with app.test_request_context("/"):

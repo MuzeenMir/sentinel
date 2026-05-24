@@ -7,6 +7,7 @@ from pathlib import Path
 
 REQUIRED_SECRETS = (
     "POSTGRES_PASSWORD",
+    "SENTINEL_APP_DB_PASSWORD",
     "JWT_SECRET_KEY",
     "ADMIN_PASSWORD",
     "GRAFANA_PASSWORD",
@@ -31,6 +32,10 @@ services:
     image: postgres:13
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+  db-migrate:
+    image: sentinel-db-migrate
+    environment:
+      - SENTINEL_APP_DB_PASSWORD=${SENTINEL_APP_DB_PASSWORD:?set SENTINEL_APP_DB_PASSWORD}
   auth-service:
     image: sentinel-auth-service
     environment:
@@ -66,6 +71,7 @@ def test_docker_compose_rejects_empty_required_secrets():
     repo_core = Path(__file__).resolve().parents[2]
     env = {
         "POSTGRES_PASSWORD": "",
+        "SENTINEL_APP_DB_PASSWORD": "",
         "JWT_SECRET_KEY": "",
         "ADMIN_PASSWORD": "",
         "GRAFANA_PASSWORD": "",
@@ -200,6 +206,7 @@ def test_xdp_profile_config_renders_without_stale_localhost_dependencies():
     env.update(
         {
             "POSTGRES_PASSWORD": "x",
+            "SENTINEL_APP_DB_PASSWORD": "a",
             "JWT_SECRET_KEY": "y",
             "ADMIN_PASSWORD": "z",
             "GRAFANA_PASSWORD": "g",

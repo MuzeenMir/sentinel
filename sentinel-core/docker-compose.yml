@@ -68,6 +68,11 @@ services:
       # T-028: runtime DSN uses sentinel_app (NOSUPERUSER NOBYPASSRLS).
       # Per-request SET LOCAL app.tenant_id is issued by _lib/tenancy.
       - DATABASE_URL=postgresql://sentinel_app:${SENTINEL_APP_DB_PASSWORD:?set SENTINEL_APP_DB_PASSWORD}@sentinel-postgres:5432/${POSTGRES_DB:-sentinel}
+      # T-028: single-tenant fallback for pre-auth DB lookups (e.g. login
+      # before the JWT is parsed). Multi-tenant deploys leave this unset.
+      - DEFAULT_TENANT_ID=${DEFAULT_TENANT_ID:-1}
+      # T-028: bootstrap admin row writes to this tenant_id.
+      - BOOTSTRAP_TENANT_ID=${BOOTSTRAP_TENANT_ID:-1}
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:?set JWT_SECRET_KEY}
       - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}

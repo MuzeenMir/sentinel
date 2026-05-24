@@ -907,10 +907,35 @@ def revoked_token_callback(jwt_header, jwt_payload):
 
 
 def _bootstrap_initial_admin():
-    """Create DB tables and initial admin from environment variables if no admin exists."""
+    """Create DB tables and initial admin from environment variables if no admin exists.
+
+    Runs at module import (gunicorn worker boot). Since this is outside any
+    Flask request, the ``_lib.tenancy`` after_begin listener does NOT fire,
+    so RLS sees no ``app.tenant_id`` and the WITH CHECK clause on the
+    ``users`` policy rejects the admin INSERT. We bind the bootstrap tenant
+    explicitly via ``set_config`` and tag the admin row with that tenant.
+
+    BOOTSTRAP_TENANT_ID env var overrides the default (1). The bootstrap
+    tenant doesn't need a row in the ``tenants`` table — ``users.tenant_id``
+    has no FK enforcement. Tenancy admin operations create real tenant rows
+    later via the management API.
+    """
+    from sqlalchemy import text as _sql_text
+
+    bootstrap_tid = int(os.environ.get("BOOTSTRAP_TENANT_ID", "1"))
+
     with app.app_context():
         try:
             db.create_all()
+
+            # Bind tenant context for the RLS policies. set_config with
+            # is_local=true scopes the GUC to the current transaction; the
+            # SELECT below auto-begins the tx, and the subsequent INSERT
+            # rides the same tx until commit.
+            db.session.execute(
+                _sql_text("SELECT set_config('app.tenant_id', :tid, true)"),
+                {"tid": str(bootstrap_tid)},
+            )
 
             if User.query.filter(User.role == UserRole.ADMIN).first() is None:
                 # Get admin credentials from environment (required for production)
@@ -932,6 +957,7 @@ def _bootstrap_initial_admin():
                     role=UserRole.ADMIN,
                     status=UserStatus.ACTIVE,
                     password_hash="",
+                    tenant_id=bootstrap_tid,
                 )
                 # Directly set hash for initial admin (bypasses validation)
                 hashed = bcrypt.hashpw(pwd.encode("utf-8"), bcrypt.gensalt())
