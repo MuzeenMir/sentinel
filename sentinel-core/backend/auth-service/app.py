@@ -34,6 +34,7 @@ from observability import configure_logging
 from metrics import init_metrics
 from audit_logger import audit_log, AuditCategory
 from _lib.net import bind_host
+from _lib.tenancy import install_set_local_listener
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -80,6 +81,10 @@ app.config["REDIS_URL"] = os.environ.get("REDIS_URL", "redis://localhost:6379")
 
 # Initialize extensions
 db: Any = SQLAlchemy(app)
+# T-028: bind tenant context into every SQLAlchemy transaction so the RLS
+# policies installed by migration 20260417_003 enforce isolation at the
+# PostgreSQL level. No-op on non-PG dialects (SQLite test paths).
+install_set_local_listener(db)
 jwt_manager = JWTManager(app)
 
 # Redis with connection pooling

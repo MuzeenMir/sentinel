@@ -215,9 +215,19 @@ postgresql:
   enabled: true
   auth:
     database: sentinel_db
+    # Migration role (Alembic). Owns tables, BYPASSRLS. Not consumed by app
+    # services at request time. Populated into connection-string-migration in
+    # the sentinel-db-credentials Secret for future migration Jobs.
     username: sentinel
     password: ""  # REQUIRED: set via --set postgresql.auth.password=<value>
     existingSecret: sentinel-db-credentials
+  # T-028: runtime role used by all app services. NOSUPERUSER NOBYPASSRLS,
+  # scoped grants, INSERT/SELECT-only on audit_log. Created by migration
+  # 20260417_003 and granted LOGIN+password by migration 20260524_001 sourced
+  # from this value.
+  runtime:
+    username: sentinel_app
+    password: ""  # REQUIRED: set via --set postgresql.runtime.password=<value>
   primary:
     persistence:
       size: 50Gi

@@ -84,6 +84,10 @@ fi
 
 ALEMBIC="${VENV_DIR}/bin/alembic"
 export DATABASE_URL="postgresql://${PG_USER}:${PG_PASS}@localhost:${PG_PORT}/${PG_DB}"
+# T-028 migration 20260524_001 requires SENTINEL_APP_DB_PASSWORD. Throwaway
+# value is fine — this script only validates the round-trip; the runtime
+# role's password is exercised by runtime_role_isolation_check.sh.
+export SENTINEL_APP_DB_PASSWORD="${SENTINEL_APP_DB_PASSWORD:-freshdbcheckapp}"
 
 cd "${MIGRATIONS_DIR}"
 echo "==> alembic upgrade head"

@@ -33,6 +33,7 @@ jobs:
       ADMIN_PASSWORD: Admin@123!SmokeTest
       ADMIN_EMAIL: admin@example.com
       POSTGRES_PASSWORD: smoke_pg_password
+      SENTINEL_APP_DB_PASSWORD: smoke_sentinel_app_password
       DRL_SHADOW_MODE: 'true'
       INTERNAL_SERVICE_TOKEN: ci-smoke-internal-service-token
       GRAFANA_PASSWORD: ci-smoke-grafana-password
@@ -47,6 +48,7 @@ jobs:
           POSTGRES_HOST=sentinel-postgres
           POSTGRES_PORT=5432
           DATABASE_URL=postgresql://sentinel:${POSTGRES_PASSWORD}@sentinel-postgres:5432/sentinel_db
+          SENTINEL_APP_DB_PASSWORD=${SENTINEL_APP_DB_PASSWORD}
           JWT_SECRET_KEY=${JWT_SECRET_KEY}
           ADMIN_USERNAME=${ADMIN_USERNAME}
           ADMIN_PASSWORD=${ADMIN_PASSWORD}
