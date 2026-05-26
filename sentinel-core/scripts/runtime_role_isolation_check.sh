@@ -98,6 +98,19 @@ psql_as_owner() {
   docker exec "${CONTAINER_NAME}" psql -U "${PG_USER}" -d "${PG_DB}" "$@"
 }
 
+echo "==> [schema] audit_log has T-031 PG-only audit columns"
+SCHEMA_COLUMNS=$(psql_as_owner -t -A -c "
+  SELECT string_agg(column_name, ',' ORDER BY column_name)
+  FROM information_schema.columns
+  WHERE table_schema = 'public'
+    AND table_name = 'audit_log'
+    AND column_name IN ('event_id', 'category', 'event_hash', 'prev_event_hash')
+")
+if [ "${SCHEMA_COLUMNS}" != "category,event_hash,event_id,prev_event_hash" ]; then
+  echo "FAIL: audit_log T-031 columns missing: ${SCHEMA_COLUMNS}" >&2
+  exit 1
+fi
+
 echo "==> Seeding two tenants' users as superuser (BYPASSRLS)"
 psql_as_owner -v ON_ERROR_STOP=1 -c "
   INSERT INTO users (username, email, password_hash, tenant_id)
