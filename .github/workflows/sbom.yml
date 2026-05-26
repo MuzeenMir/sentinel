@@ -85,7 +85,21 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Install cosign
+      - name: Install cosign (attempt 1)
+        id: cosign-install-1
+        continue-on-error: true
+        uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: v2.4.0
+      - name: Install cosign (attempt 2 — retry on transient CDN failure)
+        if: steps.cosign-install-1.outcome == 'failure'
+        id: cosign-install-2
+        continue-on-error: true
+        uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: v2.4.0
+      - name: Install cosign (attempt 3 — final)
+        if: steps.cosign-install-1.outcome == 'failure' && steps.cosign-install-2.outcome == 'failure'
         uses: sigstore/cosign-installer@v3
         with:
           cosign-release: v2.4.0
