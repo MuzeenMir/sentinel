@@ -156,6 +156,15 @@ def create_policy():
                 }
             ), 409
 
+        # Audit BEFORE policy persistence and vendor side effects (T-031
+        # audit-then-act ordering). If audit fails the policy is never created
+        # and no firewall rule is pushed downstream.
+        audit_log(
+            AuditCategory.POLICY,
+            "policy_created",
+            detail={"name": data.get("name"), "action": data.get("action")},
+        )
+
         # Create policy
         policy = policy_engine.create_policy(data, rules)
 
@@ -183,12 +192,6 @@ def create_policy():
             policy["apply_results"] = apply_results
 
         POLICIES_APPLIED.labels(action=data.get("action", "unknown")).inc()
-        audit_log(
-            AuditCategory.POLICY,
-            "policy_created",
-            detail={"name": data.get("name"), "action": data.get("action")},
-            redis_client=redis_client,
-        )
         return jsonify(
             {"message": "Policy created successfully", "policy": policy}
         ), 201

@@ -226,6 +226,12 @@ orch_app.redis_client = _fake_redis
 
 
 @pytest.fixture(autouse=True)
+def _stub_audit_log(monkeypatch):
+    """Stub audit_log() so unit tests don't need a real PG connection (T-031)."""
+    monkeypatch.setattr(orch_app, "audit_log", lambda *a, **k: "audit_stub")
+
+
+@pytest.fixture(autouse=True)
 def _reset():
     _redis_kv.clear()
     _redis_sets.clear()
@@ -1092,3 +1098,91 @@ class TestPolicyEngineStatistics:
 class TestPolicyEngineIsReady:
     def test_ready_by_default(self):
         assert orch_app.policy_engine.is_ready() is True
+
+
+class TestT031_AuditBeforeSideEffects:
+    """T-031: audit_log() must run before policy persistence + vendor apply."""
+
+    def test_create_policy_audits_before_policy_persist_and_vendor_apply(
+        self, client, monkeypatch
+    ):
+        calls = []
+
+        def audit_side_effect(*_args, **_kwargs):
+            calls.append("audit")
+
+        def create_side_effect(*_args, **_kwargs):
+            calls.append("create")
+            return {
+                "id": "pol_test",
+                "name": "Block SSH",
+                "rules": [],
+                "action": "DENY",
+            }
+
+        def apply_side_effect(*_args, **_kwargs):
+            calls.append("apply")
+            return {"success": True, "message": "applied"}
+
+        monkeypatch.setattr(orch_app, "audit_log", audit_side_effect)
+        monkeypatch.setattr(
+            orch_app.policy_engine,
+            "create_policy",
+            MagicMock(side_effect=create_side_effect),
+        )
+        monkeypatch.setattr(
+            orch_app.policy_engine, "check_conflicts", MagicMock(return_value=[])
+        )
+        _mock_vendor.apply_rules.side_effect = apply_side_effect
+
+        resp = client.post(
+            "/api/v1/policies",
+            data=json.dumps(
+                {
+                    "name": "Block SSH",
+                    "action": "DENY",
+                    "vendors": ["iptables"],
+                    "source": {"ip": "10.0.0.5"},
+                    "destination": {"port": 22},
+                    "protocol": "TCP",
+                }
+            ),
+            content_type="application/json",
+        )
+
+        assert resp.status_code == 201
+        assert calls == ["audit", "create", "apply"]
+
+    def test_create_policy_fails_when_audit_raises(self, client, monkeypatch):
+        from audit_logger import AuditLogError
+
+        create_mock = MagicMock()
+        apply_mock = MagicMock()
+
+        def audit_side_effect(*_args, **_kwargs):
+            raise AuditLogError("pg down")
+
+        monkeypatch.setattr(orch_app, "audit_log", audit_side_effect)
+        monkeypatch.setattr(orch_app.policy_engine, "create_policy", create_mock)
+        _mock_vendor.apply_rules = apply_mock
+
+        resp = client.post(
+            "/api/v1/policies",
+            data=json.dumps(
+                {
+                    "name": "Block SSH",
+                    "action": "DENY",
+                    "vendors": ["iptables"],
+                    "source": {"ip": "10.0.0.5"},
+                    "destination": {"port": 22},
+                    "protocol": "TCP",
+                }
+            ),
+            content_type="application/json",
+        )
+
+        # Audit before side-effects: when audit raises, the policy is never
+        # persisted and no vendor rule is pushed.
+        assert resp.status_code == 500
+        create_mock.assert_not_called()
+        apply_mock.assert_not_called()
