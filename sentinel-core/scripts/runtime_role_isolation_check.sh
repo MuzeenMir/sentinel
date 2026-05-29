@@ -168,4 +168,52 @@ if [ "${COUNT}" != "0" ]; then
 fi
 echo "        OK — 0 rows"
 
+# ─────────────────────────── T-031 audit assertions ──────────────────────
+# 1) sentinel_app can insert an audit row with tenant context set.
+# 2) tenant 2 cannot see tenant 1's audit row (cross-tenant isolation).
+# 3) UPDATE on audit_log stays denied even by the runtime role (regression
+#    guard for the role-level REVOKE matrix).
+echo "==> [audit] sentinel_app can insert audit_log row with tenant context"
+psql_as_app -v ON_ERROR_STOP=1 -1 -c "
+  SELECT set_config('app.tenant_id', '1', true);
+  INSERT INTO audit_log (
+    tenant_id, action, category,
+    resource_id, details, timestamp, event_hash
+  )
+  VALUES (
+    1, 'runtime_check', 'system',
+    'runtime-role-check', '{}'::jsonb, NOW(), repeat('a', 64)
+  );
+" >/dev/null || {
+  echo "FAIL: sentinel_app could not INSERT into audit_log with tenant context" >&2
+  exit 1
+}
+echo "        OK — insert succeeded"
+
+echo "==> [audit] tenant 2 cannot read tenant 1 audit row"
+COUNT=$(psql_as_app -v ON_ERROR_STOP=1 -t -A -1 -c "
+  SELECT set_config('app.tenant_id', '2', true);
+  SELECT count(*) FROM audit_log WHERE action = 'runtime_check';
+" | tail -1 | tr -d ' ')
+if [ "${COUNT}" != "0" ]; then
+  echo "FAIL: tenant 2 saw ${COUNT} tenant 1 audit rows, expected 0" >&2
+  exit 1
+fi
+echo "        OK — 0 rows"
+
+echo "==> [audit] sentinel_app cannot UPDATE audit_log row it just inserted"
+ERR=$(psql_as_app -v ON_ERROR_STOP=1 -c "
+  UPDATE audit_log SET action = 'tampered' WHERE action = 'runtime_check'
+" 2>&1)
+RC=$?
+if [ "${RC}" -eq 0 ]; then
+  echo "FAIL: UPDATE audit_log succeeded as sentinel_app post-insert" >&2
+  exit 1
+fi
+if ! echo "${ERR}" | grep -qi "permission denied"; then
+  echo "FAIL: expected 'permission denied' for UPDATE audit_log; got: ${ERR}" >&2
+  exit 1
+fi
+echo "        OK — UPDATE blocked by REVOKE matrix"
+
 echo "runtime_role_isolation_check.sh: PASS"

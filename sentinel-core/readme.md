@@ -152,6 +152,29 @@ Infrastructure is **scaffolded, not production-validated**. Before running in pr
 4. Wire real secrets management (AWS Secrets Manager or Vault).
 5. Observability: OTel pilot lives in `api-gateway` (Phase 0); broad rollout is Phase 1.
 
+### Audit log migration for v2.0.0+ (T-031)
+
+The shared SOC2 audit path uses PostgreSQL `audit_log` as the only audit
+storage surface — protected at the role level by the `sentinel_app` REVOKE
+matrix (`INSERT, SELECT` only; `UPDATE, DELETE, TRUNCATE` revoked).
+
+Operators upgrading from a Redis-backed audit deployment must run the
+one-shot backfill before promoting v2.0.0+:
+
+```shell
+python scripts/migrate_audit_redis_to_pg.py \
+    --redis-url "$REDIS_URL" \
+    --database-url "$DATABASE_URL" \
+    --delete-after-verify
+```
+
+Verification gate before Redis deletion:
+`new_inserts + pre_existing_matches == successfully_parsed_records`.
+
+Skipped malformed records are quarantined in
+`scripts/migrate_audit_redis_to_pg.skipped.jsonl` for SOC review. Use
+`--dry-run` to insert into PG without deleting Redis keys.
+
 ## Development
 
 ### Backend services
