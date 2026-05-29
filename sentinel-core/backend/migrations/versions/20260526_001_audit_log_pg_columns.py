@@ -82,7 +82,9 @@ def upgrade() -> None:
         op.alter_column("audit_log", "event_hash", nullable=False)
 
     if not _has_column(bind, "audit_log", "prev_event_hash"):
-        op.add_column("audit_log", sa.Column("prev_event_hash", sa.Text(), nullable=True))
+        op.add_column(
+            "audit_log", sa.Column("prev_event_hash", sa.Text(), nullable=True)
+        )
 
     op.execute("""
         DO $$

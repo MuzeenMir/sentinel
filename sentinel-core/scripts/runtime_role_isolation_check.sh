@@ -202,10 +202,12 @@ fi
 echo "        OK — 0 rows"
 
 echo "==> [audit] sentinel_app cannot UPDATE audit_log row it just inserted"
+set +e
 ERR=$(psql_as_app -v ON_ERROR_STOP=1 -c "
   UPDATE audit_log SET action = 'tampered' WHERE action = 'runtime_check'
 " 2>&1)
 RC=$?
+set -e
 if [ "${RC}" -eq 0 ]; then
   echo "FAIL: UPDATE audit_log succeeded as sentinel_app post-insert" >&2
   exit 1
