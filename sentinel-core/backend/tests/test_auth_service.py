@@ -54,6 +54,12 @@ WEAK_PASSWORD = "weak"
 
 
 @pytest.fixture(autouse=True)
+def _stub_audit_log(monkeypatch):
+    """Stub audit_log() so unit tests don't need a real PG connection (T-031)."""
+    monkeypatch.setattr(auth_mod, "audit_log", lambda *a, **k: "audit_stub")
+
+
+@pytest.fixture(autouse=True)
 def setup_db():
     """Create fresh database tables for each test."""
     app.config["TESTING"] = True

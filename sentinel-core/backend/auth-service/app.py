@@ -32,7 +32,7 @@ from enum import Enum
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from observability import configure_logging
 from metrics import init_metrics
-from audit_logger import audit_log, AuditCategory
+from audit_logger import audit_log, AuditCategory, AuditLogError
 from _lib.net import bind_host
 from _lib.tenancy import install_set_local_listener
 
@@ -280,6 +280,20 @@ def increment_failed_login(user):
     db.session.commit()
 
 
+def _audit_fail_soft(*args, **kwargs) -> None:
+    """Call audit_log() but swallow AuditLogError.
+
+    Use for paths where the security outcome (deny, durable revocation) is more
+    important than the audit row. Login deny + logout fall here per the T-031
+    call-site policy: a failed audit must not amplify a brute-force attack via
+    audit DoS, and a token revocation must remain durable even if PG is down.
+    """
+    try:
+        audit_log(*args, **kwargs)
+    except AuditLogError:
+        logger.exception("Audit log unavailable for fail-soft event")
+
+
 def reset_login_attempts(user):
     """Reset failed login attempts after successful login"""
     user.failed_login_attempts = 0
@@ -355,16 +369,21 @@ def register():
             ), 400
 
         db.session.add(user)
+        db.session.flush()
+        try:
+            audit_log(
+                AuditCategory.AUTH,
+                "user_registered",
+                actor=f"user:{user.id}",
+                detail={"username": user.username, "role": user.role.value},
+            )
+        except AuditLogError:
+            db.session.rollback()
+            logger.exception("Audit failure blocked user registration")
+            return jsonify({"error": "Audit log unavailable"}), 500
         db.session.commit()
 
         logger.info(f"New user registered: {user.username}")
-        audit_log(
-            AuditCategory.AUTH,
-            "user_registered",
-            actor=f"user:{user.id}",
-            detail={"username": user.username, "role": user.role.value},
-            redis_client=redis_client,
-        )
 
         return jsonify(
             {"message": "User registered successfully", "user": user.to_dict()}
@@ -407,24 +426,22 @@ def login():
             if user.status != UserStatus.ACTIVE:
                 redis_client.incr(f"failed_login_ip:{ip_addr}")
                 redis_client.expire(f"failed_login_ip:{ip_addr}", 3600)
-                audit_log(
+                _audit_fail_soft(
                     AuditCategory.AUTH,
                     "login_blocked_inactive",
                     actor=f"user:{username}",
                     detail={"ip": ip_addr, "status": user.status.value},
-                    redis_client=redis_client,
                 )
                 return jsonify({"error": "Account is inactive or suspended"}), 403
 
             if login_attempts_exceeded(user):
                 redis_client.incr(f"failed_login_ip:{ip_addr}")
                 redis_client.expire(f"failed_login_ip:{ip_addr}", 3600)
-                audit_log(
+                _audit_fail_soft(
                     AuditCategory.AUTH,
                     "login_blocked_locked",
                     actor=f"user:{username}",
                     detail={"ip": ip_addr},
-                    redis_client=redis_client,
                 )
                 remaining_time = (
                     int((user.locked_until - datetime.utcnow()).total_seconds())
@@ -446,14 +463,27 @@ def login():
                 increment_failed_login(user)
             redis_client.incr(f"failed_login_ip:{ip_addr}")
             redis_client.expire(f"failed_login_ip:{ip_addr}", 3600)
-            audit_log(
+            _audit_fail_soft(
                 AuditCategory.AUTH,
                 "login_failed",
                 actor=f"user:{username}",
                 detail={"ip": ip_addr},
-                redis_client=redis_client,
             )
             return jsonify({"error": "Invalid credentials"}), 401
+
+        # Audit before token issuance (fail-closed audit-then-act ordering).
+        try:
+            audit_log(
+                AuditCategory.AUTH,
+                "login_success",
+                actor=f"user:{user.id}",
+                tenant_id=user.tenant_id,
+                detail={"username": user.username, "ip": ip_addr},
+            )
+        except AuditLogError:
+            db.session.rollback()
+            logger.exception("Audit failure blocked login")
+            return jsonify({"error": "Audit log unavailable"}), 500
 
         # Reset login attempts and update last login
         reset_login_attempts(user)
@@ -485,13 +515,6 @@ def login():
         )
 
         logger.info(f"Successful login for user: {user.username} from IP: {ip_addr}")
-        audit_log(
-            AuditCategory.AUTH,
-            "login_success",
-            actor=f"user:{user.id}",
-            detail={"username": user.username, "ip": ip_addr},
-            redis_client=redis_client,
-        )
 
         return jsonify(
             {
@@ -643,11 +666,10 @@ def logout():
         redis_client.setex(f"token_blacklist:{jti}", 86400, "revoked")
 
         logger.info(f"User logged out: {user_id}")
-        audit_log(
+        _audit_fail_soft(
             AuditCategory.AUTH,
             "logout",
             actor=f"user:{user_id}",
-            redis_client=redis_client,
         )
 
         return jsonify({"message": "Successfully logged out"}), 200
@@ -739,16 +761,21 @@ def update_user(user_id):
         if "status" in data:
             user.status = getattr(UserStatus, data["status"].upper())
 
+        db.session.flush()
+        try:
+            audit_log(
+                AuditCategory.CONFIG_CHANGE,
+                "user_updated",
+                detail={"target_user": user.username, "changes": data},
+            )
+        except AuditLogError:
+            db.session.rollback()
+            logger.exception("Audit failure blocked user update")
+            return jsonify({"error": "Audit log unavailable"}), 500
         db.session.commit()
 
         logger.info(
             f"User updated by admin: {get_current_user().username} updated {user.username}"
-        )
-        audit_log(
-            AuditCategory.CONFIG_CHANGE,
-            "user_updated",
-            detail={"target_user": user.username, "changes": data},
-            redis_client=redis_client,
         )
 
         return jsonify(
@@ -756,6 +783,7 @@ def update_user(user_id):
         ), 200
 
     except Exception as e:
+        db.session.rollback()
         logger.error(f"Update user error: {str(e)}")
         return jsonify({"error": "Internal server error"}), 500
 
@@ -782,14 +810,19 @@ def create_tenant():
             retention_days=data.get("retention_days", 90),
         )
         db.session.add(tenant)
+        db.session.flush()
+        try:
+            audit_log(
+                AuditCategory.CONFIG_CHANGE,
+                "tenant_created",
+                detail={"tenant_name": tenant.name, "plan": tenant.plan},
+            )
+        except AuditLogError:
+            db.session.rollback()
+            logger.exception("Audit failure blocked tenant create")
+            return jsonify({"error": "Audit log unavailable"}), 500
         db.session.commit()
         logger.info(f"Tenant created: {tenant.name}")
-        audit_log(
-            AuditCategory.CONFIG_CHANGE,
-            "tenant_created",
-            detail={"tenant_name": tenant.name, "plan": tenant.plan},
-            redis_client=redis_client,
-        )
         return jsonify({"tenant": tenant.to_dict()}), 201
     except Exception as e:
         db.session.rollback()
@@ -848,14 +881,19 @@ def deactivate_tenant(tenant_pk):
     try:
         tenant = Tenant.query.get_or_404(tenant_pk)
         tenant.status = "deactivated"
+        db.session.flush()
+        try:
+            audit_log(
+                AuditCategory.CONFIG_CHANGE,
+                "tenant_deactivated",
+                detail={"tenant_name": tenant.name},
+            )
+        except AuditLogError:
+            db.session.rollback()
+            logger.exception("Audit failure blocked tenant deactivation")
+            return jsonify({"error": "Audit log unavailable"}), 500
         db.session.commit()
         logger.info(f"Tenant deactivated: {tenant.name}")
-        audit_log(
-            AuditCategory.CONFIG_CHANGE,
-            "tenant_deactivated",
-            detail={"tenant_name": tenant.name},
-            redis_client=redis_client,
-        )
         return jsonify({"message": "Tenant deactivated"}), 200
     except Exception as e:
         db.session.rollback()

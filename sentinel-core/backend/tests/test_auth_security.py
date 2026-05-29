@@ -62,6 +62,15 @@ def fresh_db():
     _mock_redis.get.return_value = None
 
 
+@pytest.fixture(autouse=True)
+def _stub_audit_log(monkeypatch):
+    """Stub audit_log() so unit tests don't need a real PG connection.
+
+    Individual tests override via `patch.object(auth_mod, "audit_log", ...)`.
+    """
+    monkeypatch.setattr(auth_mod, "audit_log", lambda *a, **k: "audit_stub")
+
+
 @pytest.fixture
 def client():
     return app.test_client()
@@ -395,4 +404,90 @@ class TestSEC10_PasswordChangeAuth:
             headers=_auth(token),
             json={"current_password": VALID_PASSWORD, "new_password": "NewSecure@2"},
         )
+        assert resp.status_code == 200
+
+
+class TestT031_AuditFailurePolicy:
+    """T-031: Fail-closed audit policy for committed admin mutations.
+
+    Admin role/status updates must NOT durably change the target row when the
+    PG audit sink raises AuditLogError. This proves the audit_log row precedes
+    the durable state change (audit-then-act ordering).
+    """
+
+    def test_admin_user_update_rolls_back_when_audit_insert_fails(self, client):
+        _create_user(client, username="admin_user", role="admin")
+        _create_user(client, username="target", role="viewer")
+        token = _login(client, "admin_user").get_json()["access_token"]
+
+        with app.app_context():
+            target = User.query.filter_by(username="target").first()
+            target_id = target.id
+
+        with patch.object(
+            auth_mod,
+            "audit_log",
+            side_effect=auth_mod.AuditLogError("pg down"),
+        ):
+            resp = client.put(
+                f"/api/v1/auth/users/{target_id}",
+                json={"role": "admin"},
+                headers=_auth(token),
+            )
+
+        assert resp.status_code == 500
+        with app.app_context():
+            target = db.session.get(User, target_id)
+            assert target.role == UserRole.VIEWER
+
+    def test_register_rolls_back_when_audit_insert_fails(self, client):
+        with patch.object(
+            auth_mod,
+            "audit_log",
+            side_effect=auth_mod.AuditLogError("pg down"),
+        ):
+            resp = client.post(
+                "/api/v1/auth/register",
+                json={
+                    "username": "newuser",
+                    "email": "new@test.local",
+                    "password": VALID_PASSWORD,
+                    "role": "viewer",
+                },
+            )
+
+        assert resp.status_code == 500
+        with app.app_context():
+            user = User.query.filter_by(username="newuser").first()
+            assert user is None
+
+    def test_login_failed_fails_soft_when_audit_unavailable(self, client):
+        _create_user(client)
+        with patch.object(
+            auth_mod,
+            "audit_log",
+            side_effect=auth_mod.AuditLogError("pg down"),
+        ):
+            resp = client.post(
+                "/api/v1/auth/login",
+                json={"username": "secuser", "password": "WrongPassword1!"},
+            )
+
+        # Login deny path stays denied even if audit fails (fail-soft-deny).
+        assert resp.status_code == 401
+
+    def test_logout_succeeds_when_audit_unavailable(self, client):
+        _create_user(client)
+        token = _login(client, "secuser").get_json()["access_token"]
+        with patch.object(
+            auth_mod,
+            "audit_log",
+            side_effect=auth_mod.AuditLogError("pg down"),
+        ):
+            resp = client.post(
+                "/api/v1/auth/logout",
+                headers=_auth(token),
+            )
+
+        # Token revocation is durable even if audit fails (fail-soft-secure).
         assert resp.status_code == 200
