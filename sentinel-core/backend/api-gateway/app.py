@@ -1051,7 +1051,6 @@ def get_audit_events():
     offset = request.args.get("offset", 0, type=int)
 
     records = query_audit_log(
-        redis_client,
         category=category,
         start_time=start_time,
         end_time=end_time,
@@ -1066,7 +1065,7 @@ def get_audit_events():
 @require_auth
 def audit_statistics():
     """Get audit log statistics for SOC2 compliance dashboard."""
-    stats = get_audit_stats(redis_client)
+    stats = get_audit_stats()
     return jsonify(stats), 200
 
 
