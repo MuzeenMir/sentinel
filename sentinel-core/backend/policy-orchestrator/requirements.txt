@@ -11,6 +11,9 @@ gunicorn>=22.0.0
 # Redis
 redis>=5.0.1
 
+# PostgreSQL (audit_logger PG sink — T-031)
+psycopg2-binary>=2.9.9
+
 # API Clients for firewall vendors
 requests>=2.31.0
 paramiko==3.5.1  # For SSH-based firewall management (>=3.4.0 fixes GHSA-45x7-px36-x8w8)

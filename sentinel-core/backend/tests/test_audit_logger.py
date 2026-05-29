@@ -1,24 +1,25 @@
 """
-Tests for the SENTINEL SOC2 audit logger.
+Tests for the SENTINEL SOC2 audit logger (PG-backed, T-031).
 
 Validates:
-- audit_log() records to Redis sorted sets with integrity hashes
-- query_audit_log() filters by category, time range, and actor
-- get_audit_stats() returns counts by category
+- audit_log() inserts into PG audit_log, sets app.tenant_id, commits
+- query_audit_log() reads from PG with filters
+- get_audit_stats() reads from PG with category counts
+- audit_log() rolls back + logs structured failure with PII redaction
 - verify_integrity() detects tampered records
-- Fallback to stdout when Redis is unavailable
+- _compute_integrity_hash() is deterministic
 """
 
 import json
 import os
 import sys
-import time
+
 import pytest
 from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from audit_logger import (
+from audit_logger import (  # noqa: E402
     AuditCategory,
     audit_log,
     query_audit_log,
@@ -29,48 +30,61 @@ from audit_logger import (
 
 
 # ---------------------------------------------------------------------------
-# Fake Redis that stores sorted sets and hashes in-memory
+# PG fakes — replace Redis sorted-set fakes from pre-T-031.
 # ---------------------------------------------------------------------------
 
 
-class FakeRedis:
-    def __init__(self):
-        self.sorted_sets = {}  # key -> list of (score, member)
-        self.hashes = {}  # key -> dict
-        self.expiry = {}
+class FakeCursor:
+    def __init__(self, rows=None):
+        self.rows = list(rows) if rows is not None else []
+        self.statements = []
+        self.params = []
 
-    def zadd(self, key, mapping):
-        if key not in self.sorted_sets:
-            self.sorted_sets[key] = []
-        for member, score in mapping.items():
-            self.sorted_sets[key].append((score, member))
-        self.sorted_sets[key].sort(key=lambda x: x[0])
+    def execute(self, sql, params=None):
+        self.statements.append(str(sql))
+        self.params.append(params or {})
 
-    def zrangebyscore(self, key, min_score, max_score, start=0, num=100):
-        entries = self.sorted_sets.get(key, [])
-        filtered = [m for s, m in entries if min_score <= s <= max_score]
-        return filtered[start : start + num]
+    def fetchall(self):
+        return list(self.rows)
 
-    def hincrby(self, key, field, amount=1):
-        if key not in self.hashes:
-            self.hashes[key] = {}
-        current = int(self.hashes[key].get(field, 0))
-        self.hashes[key][field] = str(current + amount)
+    def fetchone(self):
+        return self.rows[0] if self.rows else None
 
-    def hgetall(self, key):
-        return dict(self.hashes.get(key, {}))
+    def __enter__(self):
+        return self
 
-    def expire(self, key, seconds):
-        self.expiry[key] = seconds
+    def __exit__(self, *_exc):
+        return False
 
 
-@pytest.fixture
-def fake_redis():
-    return FakeRedis()
+class FakeConnection:
+    def __init__(self, cursor):
+        self.cursor_obj = cursor
+        self.committed = False
+        self.rolled_back = False
+        self.closed = False
+
+    def cursor(self, *_args, **_kwargs):
+        return self.cursor_obj
+
+    def commit(self):
+        self.committed = True
+
+    def rollback(self):
+        self.rolled_back = True
+
+    def close(self):
+        self.closed = True
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exc):
+        return False
 
 
 # ===================================================================
-# AuditCategory enum
+# AuditCategory enum — unchanged by T-031
 # ===================================================================
 
 
@@ -95,248 +109,319 @@ class TestAuditCategory:
 
 
 # ===================================================================
-# audit_log()
+# audit_log() — PG insert path
 # ===================================================================
 
 
-class TestAuditLog:
-    def test_returns_record_id(self, fake_redis):
+class TestAuditLogPG:
+    def test_returns_record_id(self, monkeypatch):
+        cursor = FakeCursor()
+        conn = FakeConnection(cursor)
+        monkeypatch.setenv("DATABASE_URL", "postgresql://sentinel_app:test@db/sentinel")
+        monkeypatch.setattr("audit_logger._connect_pg", lambda: conn)
+
         with patch("audit_logger._in_request_context", return_value=False):
             rid = audit_log(
                 AuditCategory.AUTH,
                 "login_success",
                 actor="user:1",
-                redis_client=fake_redis,
+                tenant_id=7,
             )
+
         assert rid is not None
         assert rid.startswith("audit_")
 
-    def test_stores_in_category_sorted_set(self, fake_redis):
+    def test_audit_log_inserts_into_postgres_and_not_redis(self, monkeypatch):
+        cursor = FakeCursor()
+        conn = FakeConnection(cursor)
+        redis_client = MagicMock()
+        monkeypatch.setenv("DATABASE_URL", "postgresql://sentinel_app:test@db/sentinel")
+        monkeypatch.setattr("audit_logger._connect_pg", lambda: conn)
+
+        with patch("audit_logger._in_request_context", return_value=False):
+            rid = audit_log(
+                AuditCategory.AUTH,
+                "login_success",
+                actor="user:1",
+                tenant_id=7,
+                resource="auth-service",
+                detail={"ip": "127.0.0.1"},
+                redis_client=redis_client,
+            )
+
+        assert rid.startswith("audit_")
+        assert any("INSERT INTO audit_log" in sql for sql in cursor.statements)
+        assert any("set_config('app.tenant_id'" in sql for sql in cursor.statements)
+        assert conn.committed is True
+        redis_client.zadd.assert_not_called()
+
+    def test_audit_log_sets_tenant_context_before_insert(self, monkeypatch):
+        cursor = FakeCursor()
+        conn = FakeConnection(cursor)
+        monkeypatch.setattr("audit_logger._connect_pg", lambda: conn)
+
         with patch("audit_logger._in_request_context", return_value=False):
             audit_log(
                 AuditCategory.AUTH,
                 "login_success",
                 actor="user:1",
-                redis_client=fake_redis,
+                tenant_id=42,
             )
-        assert "sentinel:audit:auth" in fake_redis.sorted_sets
-        assert len(fake_redis.sorted_sets["sentinel:audit:auth"]) == 1
 
-    def test_stores_in_global_index(self, fake_redis):
+        set_config_idx = next(
+            i for i, sql in enumerate(cursor.statements) if "set_config" in sql
+        )
+        insert_idx = next(
+            i
+            for i, sql in enumerate(cursor.statements)
+            if "INSERT INTO audit_log" in sql
+        )
+        assert set_config_idx < insert_idx
+
+    def test_audit_log_omits_set_config_when_no_tenant(self, monkeypatch):
+        cursor = FakeCursor()
+        conn = FakeConnection(cursor)
+        monkeypatch.setattr("audit_logger._connect_pg", lambda: conn)
+
         with patch("audit_logger._in_request_context", return_value=False):
             audit_log(
                 AuditCategory.SYSTEM,
                 "service_start",
-                redis_client=fake_redis,
             )
-        assert "sentinel:audit:index" in fake_redis.sorted_sets
-        assert len(fake_redis.sorted_sets["sentinel:audit:index"]) == 1
 
-    def test_increments_stats(self, fake_redis):
+        assert not any("set_config" in sql for sql in cursor.statements)
+        assert any("INSERT INTO audit_log" in sql for sql in cursor.statements)
+
+    def test_default_actor_is_system(self, monkeypatch):
+        cursor = FakeCursor()
+        conn = FakeConnection(cursor)
+        monkeypatch.setattr("audit_logger._connect_pg", lambda: conn)
+
         with patch("audit_logger._in_request_context", return_value=False):
-            audit_log(AuditCategory.AUTH, "a", redis_client=fake_redis)
-            audit_log(AuditCategory.AUTH, "b", redis_client=fake_redis)
-            audit_log(AuditCategory.SYSTEM, "c", redis_client=fake_redis)
+            audit_log(AuditCategory.SYSTEM, "boot")
 
-        stats = fake_redis.hashes.get("sentinel:audit:stats", {})
-        assert int(stats["total"]) == 3
-        assert int(stats["auth"]) == 2
-        assert int(stats["system"]) == 1
+        params = cursor.params[-1]
+        details_json = params.get("details")
+        details = (
+            json.loads(details_json) if isinstance(details_json, str) else details_json
+        )
+        assert details["actor"] == "system"
 
-    def test_record_contains_integrity_hash(self, fake_redis):
+    def test_user_id_parsed_from_actor(self, monkeypatch):
+        cursor = FakeCursor()
+        conn = FakeConnection(cursor)
+        monkeypatch.setattr("audit_logger._connect_pg", lambda: conn)
+
         with patch("audit_logger._in_request_context", return_value=False):
-            audit_log(
-                AuditCategory.AUTH,
-                "login",
-                actor="user:1",
-                redis_client=fake_redis,
-            )
-        raw = fake_redis.sorted_sets["sentinel:audit:auth"][0][1]
-        record = json.loads(raw)
-        assert "integrity_hash" in record
-        assert len(record["integrity_hash"]) == 64  # SHA-256 hex
+            audit_log(AuditCategory.AUTH, "x", actor="user:42")
 
-    def test_record_fields(self, fake_redis):
+        assert cursor.params[-1]["user_id"] == 42
+
+    def test_user_id_null_for_non_user_actor(self, monkeypatch):
+        cursor = FakeCursor()
+        conn = FakeConnection(cursor)
+        monkeypatch.setattr("audit_logger._connect_pg", lambda: conn)
+
         with patch("audit_logger._in_request_context", return_value=False):
-            audit_log(
-                AuditCategory.CONFIG_CHANGE,
-                "policy_updated",
-                actor="user:42",
-                resource="policy-orchestrator",
-                detail={"policy": "fw-001"},
-                tenant_id=7,
-                redis_client=fake_redis,
-            )
-        raw = fake_redis.sorted_sets["sentinel:audit:config_change"][0][1]
-        record = json.loads(raw)
-        assert record["category"] == "config_change"
-        assert record["action"] == "policy_updated"
-        assert record["actor"] == "user:42"
-        assert record["resource"] == "policy-orchestrator"
-        assert record["tenant_id"] == 7
-        assert record["detail"] == {"policy": "fw-001"}
-        assert "timestamp" in record
-        assert "epoch" in record
+            audit_log(AuditCategory.SYSTEM, "boot", actor="system")
 
-    def test_sets_ttl_on_category_key(self, fake_redis):
-        with patch("audit_logger._in_request_context", return_value=False):
-            audit_log(AuditCategory.ALERT, "fired", redis_client=fake_redis)
-        assert "sentinel:audit:alert" in fake_redis.expiry
-        # Default 365 days
-        assert fake_redis.expiry["sentinel:audit:alert"] == 365 * 86400
-
-    def test_default_actor_is_system(self, fake_redis):
-        with patch("audit_logger._in_request_context", return_value=False):
-            audit_log(AuditCategory.SYSTEM, "boot", redis_client=fake_redis)
-        raw = fake_redis.sorted_sets["sentinel:audit:system"][0][1]
-        record = json.loads(raw)
-        assert record["actor"] == "system"
-
-    def test_fallback_to_stdout_when_no_redis(self):
-        with (
-            patch("audit_logger._in_request_context", return_value=False),
-            patch("audit_logger._get_redis", return_value=None),
-            patch("audit_logger.logger") as mock_logger,
-        ):
-            rid = audit_log(AuditCategory.AUTH, "login", actor="user:1")
-        assert rid is not None
-        # Should have logged a warning and an info fallback
-        mock_logger.warning.assert_called_once()
-        mock_logger.info.assert_called_once()
-
-    def test_redis_error_falls_back_gracefully(self):
-        broken_redis = MagicMock()
-        broken_redis.zadd.side_effect = ConnectionError("Redis down")
-        with patch("audit_logger._in_request_context", return_value=False):
-            rid = audit_log(AuditCategory.AUTH, "login", redis_client=broken_redis)
-        # Still returns an ID (logged to stdout fallback)
-        assert rid is not None
+        assert cursor.params[-1]["user_id"] is None
 
 
 # ===================================================================
-# query_audit_log()
+# audit_log() — failure mode
 # ===================================================================
 
 
-class TestQueryAuditLog:
-    def _seed(self, fake_redis, n=5, category=AuditCategory.AUTH, actor="user:1"):
-        with patch("audit_logger._in_request_context", return_value=False):
-            for i in range(n):
-                audit_log(category, f"action_{i}", actor=actor, redis_client=fake_redis)
+class TestAuditLogFailure:
+    def test_audit_insert_failure_logs_structured_payload_and_raises(self, monkeypatch):
+        class BrokenCursor(FakeCursor):
+            def execute(self, sql, params=None):
+                if "INSERT INTO audit_log" in str(sql):
+                    raise RuntimeError("pg down")
+                super().execute(sql, params)
 
-    def test_query_all(self, fake_redis):
-        self._seed(fake_redis, 3)
-        results = query_audit_log(fake_redis)
+        conn = FakeConnection(BrokenCursor())
+        monkeypatch.setattr("audit_logger._connect_pg", lambda: conn)
+
+        with patch("audit_logger.logger") as mock_logger:
+            with patch("audit_logger._in_request_context", return_value=False):
+                with pytest.raises(Exception):
+                    audit_log(
+                        AuditCategory.AUTH,
+                        "login",
+                        actor="user:1",
+                        detail={"password": "secret", "ip": "1.2.3.4"},
+                    )
+
+        assert conn.rolled_back is True
+        mock_logger.error.assert_called()
+        _, kwargs = mock_logger.error.call_args
+        assert kwargs["extra"]["audit_failure"] is True
+        serialized = json.dumps(kwargs["extra"]["audit_event"])
+        assert "secret" not in serialized
+        assert "[REDACTED]" in serialized
+
+    def test_audit_insert_failure_raises_audit_log_error(self, monkeypatch):
+        from audit_logger import AuditLogError
+
+        class BrokenCursor(FakeCursor):
+            def execute(self, sql, params=None):
+                if "INSERT INTO audit_log" in str(sql):
+                    raise RuntimeError("pg down")
+                super().execute(sql, params)
+
+        conn = FakeConnection(BrokenCursor())
+        monkeypatch.setattr("audit_logger._connect_pg", lambda: conn)
+
+        with patch("audit_logger._in_request_context", return_value=False):
+            with pytest.raises(AuditLogError):
+                audit_log(AuditCategory.AUTH, "login", actor="user:1")
+
+    def test_missing_database_url_raises_audit_log_error(self, monkeypatch):
+        from audit_logger import AuditLogError
+
+        monkeypatch.delenv("DATABASE_URL", raising=False)
+
+        with patch("audit_logger._in_request_context", return_value=False):
+            with pytest.raises(AuditLogError):
+                audit_log(AuditCategory.AUTH, "login", actor="user:1")
+
+
+# ===================================================================
+# query_audit_log() — PG read
+# ===================================================================
+
+
+class TestQueryAuditLogPG:
+    def test_query_audit_log_reads_pg_and_filters_actor(self, monkeypatch):
+        cursor = FakeCursor(
+            rows=[
+                {
+                    "id": 1,
+                    "event_id": "11111111-1111-1111-1111-111111111111",
+                    "timestamp": "2026-05-26T00:00:00Z",
+                    "category": "auth",
+                    "action": "login_success",
+                    "resource_type": None,
+                    "resource_id": "auth-service",
+                    "tenant_id": 1,
+                    "user_id": 1,
+                    "details": {
+                        "actor": "user:1",
+                        "service": "auth-service",
+                        "detail": {},
+                    },
+                    "event_hash": "a" * 64,
+                }
+            ]
+        )
+        monkeypatch.setattr("audit_logger._connect_pg", lambda: FakeConnection(cursor))
+
+        results = query_audit_log(category="auth", actor="user:1", tenant_id=1)
+
+        assert len(results) == 1
+        assert results[0]["category"] == "auth"
+        assert results[0]["actor"] == "user:1"
+        assert any("FROM audit_log" in sql for sql in cursor.statements)
+
+    def test_query_with_limit_clamps_to_1000(self, monkeypatch):
+        cursor = FakeCursor(rows=[])
+        monkeypatch.setattr("audit_logger._connect_pg", lambda: FakeConnection(cursor))
+
+        query_audit_log(limit=5000)
+
+        params = cursor.params[-1]
+        assert params["limit"] <= 1000
+
+    def test_query_no_filters_returns_all(self, monkeypatch):
+        cursor = FakeCursor(
+            rows=[
+                {
+                    "id": i,
+                    "event_id": f"{i:08d}-0000-0000-0000-000000000000",
+                    "timestamp": "2026-05-26T00:00:00Z",
+                    "category": "auth",
+                    "action": "x",
+                    "resource_type": None,
+                    "resource_id": "auth",
+                    "tenant_id": 1,
+                    "user_id": 1,
+                    "details": {"actor": "user:1", "service": "x", "detail": {}},
+                    "event_hash": "a" * 64,
+                }
+                for i in range(3)
+            ]
+        )
+        monkeypatch.setattr("audit_logger._connect_pg", lambda: FakeConnection(cursor))
+
+        results = query_audit_log()
+
         assert len(results) == 3
 
-    def test_query_by_category(self, fake_redis):
-        self._seed(fake_redis, 2, category=AuditCategory.AUTH)
-        self._seed(fake_redis, 3, category=AuditCategory.SYSTEM)
-        results = query_audit_log(fake_redis, category="auth")
-        assert len(results) == 2
-
-    def test_query_by_actor(self, fake_redis):
-        self._seed(fake_redis, 2, actor="user:1")
-        self._seed(fake_redis, 3, actor="user:2")
-        results = query_audit_log(fake_redis, actor="user:1")
-        assert len(results) == 2
-
-    def test_query_with_limit(self, fake_redis):
-        self._seed(fake_redis, 10)
-        results = query_audit_log(fake_redis, limit=3)
-        assert len(results) == 3
-
-    def test_query_time_range(self, fake_redis):
-        now = time.time()
-        results = query_audit_log(fake_redis, start_time=now - 60, end_time=now + 60)
-        # No records yet, should return empty
-        assert results == []
-
-        self._seed(fake_redis, 2)
-        results = query_audit_log(fake_redis, start_time=now - 60, end_time=now + 60)
-        assert len(results) == 2
-
-    def test_query_handles_redis_error(self):
-        broken = MagicMock()
-        broken.zrangebyscore.side_effect = ConnectionError("down")
-        results = query_audit_log(broken)
-        assert results == []
-
 
 # ===================================================================
-# get_audit_stats()
+# get_audit_stats() — PG read
 # ===================================================================
 
 
-class TestGetAuditStats:
-    def test_stats_after_writes(self, fake_redis):
-        with patch("audit_logger._in_request_context", return_value=False):
-            audit_log(AuditCategory.AUTH, "a", redis_client=fake_redis)
-            audit_log(AuditCategory.AUTH, "b", redis_client=fake_redis)
-            audit_log(AuditCategory.POLICY, "c", redis_client=fake_redis)
+class TestGetAuditStatsPG:
+    def test_get_audit_stats_reads_pg(self, monkeypatch):
+        cursor = FakeCursor(
+            rows=[
+                {"category": "auth", "count": 2},
+                {"category": "policy", "count": 1},
+            ]
+        )
+        monkeypatch.setattr("audit_logger._connect_pg", lambda: FakeConnection(cursor))
 
-        stats = get_audit_stats(fake_redis)
+        stats = get_audit_stats(tenant_id=1)
+
         assert stats["total_events"] == 3
-        assert stats["by_category"]["auth"] == 2
-        assert stats["by_category"]["policy"] == 1
+        assert stats["by_category"] == {"auth": 2, "policy": 1}
         assert "retention_days" in stats
-        assert "timestamp" in stats
+        assert any("FROM audit_log" in sql for sql in cursor.statements)
 
-    def test_stats_empty(self, fake_redis):
-        stats = get_audit_stats(fake_redis)
-        assert stats["total_events"] == 0
+    def test_get_audit_stats_empty(self, monkeypatch):
+        cursor = FakeCursor(rows=[])
+        monkeypatch.setattr("audit_logger._connect_pg", lambda: FakeConnection(cursor))
 
-    def test_stats_handles_error(self):
-        broken = MagicMock()
-        broken.hgetall.side_effect = ConnectionError("down")
-        stats = get_audit_stats(broken)
+        stats = get_audit_stats()
+
         assert stats["total_events"] == 0
+        assert stats["by_category"] == {}
 
 
 # ===================================================================
-# verify_integrity()
+# verify_integrity() — pure-function, unchanged by storage swap
 # ===================================================================
 
 
 class TestVerifyIntegrity:
-    def test_valid_record(self, fake_redis):
-        with patch("audit_logger._in_request_context", return_value=False):
-            audit_log(
-                AuditCategory.AUTH, "test", actor="user:1", redis_client=fake_redis
-            )
-
-        raw = fake_redis.sorted_sets["sentinel:audit:auth"][0][1]
-        record = json.loads(raw)
+    def test_valid_record(self):
+        record = {"action": "test", "actor": "user:1"}
+        record["integrity_hash"] = _compute_integrity_hash(record)
         assert verify_integrity(record) is True
 
-    def test_tampered_record(self, fake_redis):
-        with patch("audit_logger._in_request_context", return_value=False):
-            audit_log(
-                AuditCategory.AUTH, "test", actor="user:1", redis_client=fake_redis
-            )
-
-        raw = fake_redis.sorted_sets["sentinel:audit:auth"][0][1]
-        record = json.loads(raw)
+    def test_tampered_record(self):
+        record = {"action": "test", "actor": "user:1"}
+        record["integrity_hash"] = _compute_integrity_hash(record)
         record["actor"] = "user:HACKER"
         assert verify_integrity(record) is False
 
     def test_missing_hash_returns_false(self):
         assert verify_integrity({"action": "test"}) is False
 
-    def test_verify_preserves_hash_field(self, fake_redis):
-        """verify_integrity should not permanently remove the hash from the record."""
-        with patch("audit_logger._in_request_context", return_value=False):
-            audit_log(AuditCategory.AUTH, "test", redis_client=fake_redis)
-
-        raw = fake_redis.sorted_sets["sentinel:audit:auth"][0][1]
-        record = json.loads(raw)
+    def test_verify_preserves_hash_field(self):
+        record = {"action": "test"}
+        record["integrity_hash"] = _compute_integrity_hash({"action": "test"})
         original_hash = record["integrity_hash"]
         verify_integrity(record)
         assert record["integrity_hash"] == original_hash
 
 
 # ===================================================================
-# _compute_integrity_hash()
+# _compute_integrity_hash() — pure-function
 # ===================================================================
 
 
