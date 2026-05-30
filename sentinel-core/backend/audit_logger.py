@@ -48,6 +48,8 @@ import psycopg2
 import psycopg2.extras
 from flask import g
 
+from audit_merkle import canonical_event_digest
+
 logger = logging.getLogger(__name__)
 
 _AUDIT_TTL_DAYS = int(os.environ.get("AUDIT_RETENTION_DAYS", "365"))
@@ -172,6 +174,20 @@ def audit_log(
         "record_id": record_id,
     }
 
+    # Stored event_hash is the column-derivable canonical digest (wedge #3): the
+    # nightly Merkle-root job and verify_audit_chain.py recompute it from the
+    # persisted columns. prev_event_hash stays NULL — tamper-evidence comes from
+    # the daily signed Merkle roots over event_hash, not a per-event linked list.
+    event_hash = canonical_event_digest(
+        tenant_id=tenant_id,
+        category=category_value,
+        action=action,
+        resource_id=resource or _SERVICE_NAME,
+        user_id=_actor_user_id(actor),
+        timestamp=record["timestamp"],
+        details=details_payload,
+    )
+
     conn = _connect_pg()
     try:
         cur = conn.cursor()
@@ -208,7 +224,7 @@ def audit_log(
                     "resource_id": resource or _SERVICE_NAME,
                     "details": json.dumps(details_payload, default=str),
                     "timestamp": record["timestamp"],
-                    "event_hash": record["integrity_hash"],
+                    "event_hash": event_hash,
                 },
             )
             conn.commit()

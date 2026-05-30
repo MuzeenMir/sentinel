@@ -16,7 +16,13 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from audit_merkle import merkle_root, inclusion_proof, verify_proof  # noqa: E402
+from audit_merkle import (  # noqa: E402
+    merkle_root,
+    inclusion_proof,
+    verify_proof,
+    canonical_event_digest,
+    chained_daily_root,
+)
 
 
 def _leaf(d: bytes) -> bytes:
@@ -100,3 +106,66 @@ def test_verify_proof_rejects_wrong_length():
     proof = inclusion_proof(leaves, 0)
     assert verify_proof(root, b"a", 0, 4, proof + [b"\x00" * 32]) is False
     assert verify_proof(root, b"a", 0, 4, proof[:-1]) is False
+
+
+# ---------------------------------------------------------------------------
+# canonical_event_digest — column-derivable per-row hash (write == verify)
+# ---------------------------------------------------------------------------
+
+_ROW = dict(
+    tenant_id=7,
+    category="auth",
+    action="login_success",
+    resource_id="auth-service",
+    user_id=42,
+    timestamp="2026-05-30T00:00:00Z",
+    details={"actor": "user:42", "service": "auth-service", "detail": {"ip": "10.0.0.1"}},
+)
+
+
+def test_canonical_event_digest_is_deterministic_hex_sha256():
+    d = canonical_event_digest(**_ROW)
+    assert d == canonical_event_digest(**_ROW)
+    assert len(d) == 64 and all(c in "0123456789abcdef" for c in d)
+
+
+def test_canonical_event_digest_independent_of_details_key_order():
+    a = canonical_event_digest(**{**_ROW, "details": {"x": 1, "y": 2}})
+    b = canonical_event_digest(**{**_ROW, "details": {"y": 2, "x": 1}})
+    assert a == b
+
+
+def test_canonical_event_digest_changes_when_any_field_changes():
+    base = canonical_event_digest(**_ROW)
+    for field, newval in [
+        ("tenant_id", 8),
+        ("category", "policy"),
+        ("action", "logout"),
+        ("resource_id", "api-gateway"),
+        ("user_id", 99),
+        ("timestamp", "2026-05-30T00:00:01Z"),
+        ("details", {"actor": "user:99"}),
+    ]:
+        assert canonical_event_digest(**{**_ROW, field: newval}) != base
+
+
+# ---------------------------------------------------------------------------
+# chained_daily_root — root_N = H(domain || merkle_day || prev_root)
+# ---------------------------------------------------------------------------
+
+
+def test_chained_daily_root_genesis_differs_from_linked():
+    day = merkle_root([b"a", b"b"])
+    genesis = chained_daily_root(day, None)
+    linked = chained_daily_root(day, b"\x11" * 32)
+    assert genesis != linked
+
+
+def test_chained_daily_root_depends_on_prev():
+    day = merkle_root([b"a", b"b"])
+    assert chained_daily_root(day, b"\x11" * 32) != chained_daily_root(day, b"\x22" * 32)
+
+
+def test_chained_daily_root_deterministic():
+    day = merkle_root([b"a", b"b"])
+    assert chained_daily_root(day, b"\x33" * 32) == chained_daily_root(day, b"\x33" * 32)

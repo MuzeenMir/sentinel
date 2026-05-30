@@ -13,10 +13,16 @@ second-preimage resistance.
 """
 
 import hashlib
-from typing import List
+import json
+from typing import Any, List, Optional
 
 _LEAF_PREFIX = b"\x00"
 _NODE_PREFIX = b"\x01"
+
+# Domain separators keep the per-row digest and the daily-root digest in
+# disjoint hash spaces (defence against cross-protocol hash reuse).
+_EVENT_DOMAIN = b"sentinel.audit.event.v1\x00"
+_DAILY_ROOT_DOMAIN = b"sentinel.audit.dailyroot.v1\x00"
 
 
 def _leaf_hash(data: bytes) -> bytes:
@@ -83,3 +89,46 @@ def verify_proof(
     if len(proof) != _proof_len(n, m):
         return False
     return _root_from_proof(n, m, leaf_data, list(proof)) == root
+
+
+def canonical_event_digest(
+    *,
+    tenant_id: Optional[int],
+    category: Optional[str],
+    action: Optional[str],
+    resource_id: Optional[str],
+    user_id: Optional[int],
+    timestamp: Optional[str],
+    details: Any,
+) -> str:
+    """Hex SHA-256 over the column-derivable, stable projection of an audit row.
+
+    Computed identically at write time (``audit_logger``) and verify time
+    (``verify_audit_chain``). ``details`` is canonicalised with sorted keys so
+    JSONB round-tripping (which does not preserve key order) is irrelevant. The
+    volatile ``epoch`` float and the random ``record_id`` are intentionally
+    excluded — they are not reproducible from columns and not security-relevant.
+    """
+    projection = {
+        "tenant_id": tenant_id,
+        "category": category,
+        "action": action,
+        "resource_id": resource_id,
+        "user_id": user_id,
+        "timestamp": timestamp,
+        "details": details,
+    }
+    canonical = json.dumps(
+        projection, sort_keys=True, separators=(",", ":"), default=str
+    ).encode()
+    return hashlib.sha256(_EVENT_DOMAIN + canonical).hexdigest()
+
+
+def chained_daily_root(merkle_day: bytes, prev_root: Optional[bytes]) -> bytes:
+    """root_N = SHA-256(domain || merkle_root(day_N) || root_{N-1}).
+
+    ``prev_root=None`` is the genesis day (empty predecessor). Chaining the
+    daily roots makes deletion of an entire day detectable.
+    """
+    prev = prev_root if prev_root else b""
+    return hashlib.sha256(_DAILY_ROOT_DOMAIN + merkle_day + prev).digest()
