@@ -318,11 +318,38 @@ services:
     environment:
       - REDIS_URL=redis://redis:6379
       - AUTH_SERVICE_URL=http://auth-service:5000
+      - DATABASE_URL=postgresql://sentinel_app:${SENTINEL_APP_DB_PASSWORD:?set SENTINEL_APP_DB_PASSWORD}@sentinel-postgres:5432/${POSTGRES_DB:-sentinel}
+      - DEFAULT_TENANT_ID=${DEFAULT_TENANT_ID:-1}
+      - USE_V2_REVERSIBLE_ENFORCEMENT=${USE_V2_REVERSIBLE_ENFORCEMENT:-true}
+      - ENFORCEMENT_DEFAULT_TTL_SECONDS=${ENFORCEMENT_DEFAULT_TTL_SECONDS:-900}
       # Compose bridge peers need the HTTP listener on the container interface.
       - SENTINEL_BIND_HOST=0.0.0.0
     depends_on:
-      - redis
-      - auth-service
+      redis:
+        condition: service_started
+      auth-service:
+        condition: service_started
+      db-migrate:
+        condition: service_completed_successfully
+    networks:
+      - sentinel-network
+    restart: unless-stopped
+
+  # Reversible enforcement TTL reaper
+  enforcement-reaper:
+    build:
+      context: ./backend
+      dockerfile: policy-orchestrator/Dockerfile
+    container_name: sentinel-enforcement-reaper
+    command: ["python", "enforcement_reaper.py"]
+    environment:
+      - DATABASE_URL=postgresql://sentinel_app:${SENTINEL_APP_DB_PASSWORD:?set SENTINEL_APP_DB_PASSWORD}@sentinel-postgres:5432/${POSTGRES_DB:-sentinel}
+      - DEFAULT_TENANT_ID=${DEFAULT_TENANT_ID:-1}
+      - ENFORCEMENT_REAPER_INTERVAL_SECONDS=${ENFORCEMENT_REAPER_INTERVAL_SECONDS:-30}
+      - ENFORCEMENT_REAPER_BATCH_SIZE=${ENFORCEMENT_REAPER_BATCH_SIZE:-100}
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
     networks:
       - sentinel-network
     restart: unless-stopped

@@ -56,6 +56,7 @@ INTERNAL_SERVICES = {
     "elasticsearch",
     "kibana",
     "policy-orchestrator",
+    "enforcement-reaper",
     "drl-engine",
     "xai-service",
     "compliance-engine",
