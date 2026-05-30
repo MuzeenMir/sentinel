@@ -93,7 +93,12 @@ class AzureNSGAdapter(FirewallAdapter):
             return {"success": False, "error": "Azure client not available"}
 
         if rule_id not in self._rules_cache:
-            return {"success": False, "error": f"Rule {rule_id} not found"}
+            return {
+                "success": True,
+                "rule_id": rule_id,
+                "rules_removed": 0,
+                "idempotent_noop": True,
+            }
 
         try:
             operation = self._client.security_rules.begin_delete(

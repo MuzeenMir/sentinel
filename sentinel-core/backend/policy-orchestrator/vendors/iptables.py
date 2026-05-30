@@ -145,6 +145,7 @@ class IptablesAdapter(BaseVendorAdapter):
     @staticmethod
     def _execute(commands: List[str]) -> Dict[str, Any]:
         errors: List[str] = []
+        idempotent_noops: List[str] = []
         for cmd in commands:
             try:
                 subprocess.run(
@@ -155,7 +156,16 @@ class IptablesAdapter(BaseVendorAdapter):
                     timeout=30,
                 )
             except subprocess.CalledProcessError as exc:
-                errors.append(f"{cmd}: {exc.stderr.strip()}")
+                stderr = exc.stderr.strip()
+                if " -D " in f" {cmd} " and (
+                    "does a matching rule exist" in stderr
+                    or "No chain/target/match" in stderr
+                    or "Bad rule" in stderr
+                ):
+                    idempotent_noops.append(cmd)
+                    logger.info("iptables delete was already absent: %s", cmd)
+                    continue
+                errors.append(f"{cmd}: {stderr}")
                 logger.error("iptables command failed: %s – %s", cmd, exc.stderr)
             except FileNotFoundError:
                 errors.append(f"{cmd}: iptables binary not found")
@@ -171,6 +181,7 @@ class IptablesAdapter(BaseVendorAdapter):
             }
         return {
             "success": True,
-            "message": f"Applied {len(commands)} iptables command(s)",
+            "message": f"Applied {len(commands) - len(idempotent_noops)} iptables command(s)",
             "enforce_mode": True,
+            "idempotent_noop": bool(idempotent_noops),
         }

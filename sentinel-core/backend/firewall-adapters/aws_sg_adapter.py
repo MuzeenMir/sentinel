@@ -98,7 +98,12 @@ class AWSSecurityGroupAdapter(FirewallAdapter):
 
         rule = self._rules_cache.get(rule_id)
         if not rule:
-            return {"success": False, "error": f"Rule {rule_id} not found"}
+            return {
+                "success": True,
+                "rule_id": rule_id,
+                "rules_removed": 0,
+                "idempotent_noop": True,
+            }
 
         try:
             ip_permission = self._build_ip_permission(rule)

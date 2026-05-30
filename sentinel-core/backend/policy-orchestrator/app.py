@@ -9,7 +9,7 @@ conflict detection, and rollback capabilities.
 import os
 import sys
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import redis
@@ -21,11 +21,12 @@ from validation.policy_validator import PolicyValidator
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from auth_middleware import require_auth, require_role  # noqa: E402
-from tenant_middleware import require_tenant  # noqa: E402
+from tenant_middleware import get_tenant_id, require_tenant  # noqa: E402
 from audit_logger import audit_log, AuditCategory  # noqa: E402
 from observability import configure_logging  # noqa: E402
 from metrics import init_metrics, POLICIES_APPLIED  # noqa: E402
 from _lib.net import bind_host  # noqa: E402
+from enforcement_actions import EnforcementActionStore  # noqa: E402
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -43,6 +44,12 @@ app.config["SANDBOX_ENABLED"] = (
 app.config["AUTO_ROLLBACK_THRESHOLD"] = float(
     os.environ.get("AUTO_ROLLBACK_THRESHOLD", "0.05")
 )
+app.config["USE_V2_REVERSIBLE_ENFORCEMENT"] = (
+    os.environ.get("USE_V2_REVERSIBLE_ENFORCEMENT", "false").lower() == "true"
+)
+app.config["ENFORCEMENT_DEFAULT_TTL_SECONDS"] = int(
+    os.environ.get("ENFORCEMENT_DEFAULT_TTL_SECONDS", "900")
+)
 
 # Initialize Redis
 redis_client = redis.from_url(app.config["REDIS_URL"], decode_responses=True)
@@ -54,6 +61,46 @@ policy_engine = PolicyEngine(redis_client)
 rule_generator = RuleGenerator()
 vendor_factory = VendorFactory()
 policy_validator = PolicyValidator()
+enforcement_store = EnforcementActionStore.from_env()
+
+
+def _enforcement_ttl_seconds(data):
+    raw = (
+        data.get("enforcement_ttl_seconds")
+        or data.get("ttl_seconds")
+        or app.config["ENFORCEMENT_DEFAULT_TTL_SECONDS"]
+    )
+    return max(1, int(raw))
+
+
+def _record_reversible_enforcement(policy, vendor_name, rules, apply_result, data):
+    if not app.config["USE_V2_REVERSIBLE_ENFORCEMENT"]:
+        return None
+
+    expires_at = datetime.now(timezone.utc) + timedelta(
+        seconds=_enforcement_ttl_seconds(data)
+    )
+    record = enforcement_store.create_active_record(
+        policy_id=policy["id"],
+        vendor_name=vendor_name,
+        rules=rules,
+        apply_result=apply_result,
+        expires_at=expires_at,
+        tenant_id=get_tenant_id(),
+    )
+    audit_log(
+        AuditCategory.POLICY,
+        "enforcement_applied",
+        tenant_id=get_tenant_id(),
+        detail={
+            "action_id": record["action_id"],
+            "policy_id": policy["id"],
+            "vendor": vendor_name,
+            "expires_at": expires_at.isoformat(),
+            "rollback_state": "active",
+        },
+    )
+    return record
 
 
 @app.route("/health", methods=["GET"])
@@ -177,13 +224,27 @@ def create_policy():
                     vendor = vendor_factory.get_vendor(vendor_name)
                     if vendor:
                         result = vendor.apply_rules(rules)
-                        apply_results.append(
-                            {
-                                "vendor": vendor_name,
-                                "success": result["success"],
-                                "message": result.get("message"),
-                            }
-                        )
+                        result_entry = {
+                            "vendor": vendor_name,
+                            "success": result["success"],
+                            "message": result.get("message"),
+                        }
+                        if result.get("success"):
+                            record = _record_reversible_enforcement(
+                                policy,
+                                vendor_name,
+                                rules,
+                                result,
+                                data,
+                            )
+                            if record:
+                                result_entry["enforcement_action_id"] = record[
+                                    "action_id"
+                                ]
+                                result_entry["expires_at"] = record[
+                                    "expires_at"
+                                ].isoformat()
+                        apply_results.append(result_entry)
                 except Exception as e:
                     apply_results.append(
                         {"vendor": vendor_name, "success": False, "message": str(e)}
@@ -368,13 +429,23 @@ def apply_drl_decision():
             vendor = vendor_factory.get_vendor(vendor_name)
             if vendor:
                 result = vendor.apply_rules(rules)
-                apply_results.append(
-                    {
-                        "vendor": vendor_name,
-                        "success": result["success"],
-                        "rules_applied": len(rules),
-                    }
-                )
+                result_entry = {
+                    "vendor": vendor_name,
+                    "success": result["success"],
+                    "rules_applied": len(rules),
+                }
+                if result.get("success"):
+                    record = _record_reversible_enforcement(
+                        policy,
+                        vendor_name,
+                        rules,
+                        result,
+                        data,
+                    )
+                    if record:
+                        result_entry["enforcement_action_id"] = record["action_id"]
+                        result_entry["expires_at"] = record["expires_at"].isoformat()
+                apply_results.append(result_entry)
 
         return jsonify(
             {
@@ -414,6 +485,41 @@ def rollback_policy(policy_id):
     except Exception as e:
         logger.error(f"Rollback error: {e}")
         return jsonify({"error": "Failed to rollback policy"}), 500
+
+
+@app.route("/api/v1/enforcement-actions/<action_id>/confirm", methods=["POST"])
+@require_role("admin")
+def confirm_enforcement_action(action_id):
+    """Confirm a TTL-bound enforcement action as permanent."""
+    try:
+        record = enforcement_store.confirm_permanent(
+            action_id,
+            tenant_id=get_tenant_id(),
+        )
+        if not record:
+            return jsonify({"error": "Enforcement action not found"}), 404
+
+        audit_log(
+            AuditCategory.POLICY,
+            "enforcement_confirmed",
+            tenant_id=get_tenant_id(),
+            detail={
+                "action_id": action_id,
+                "rollback_state": "confirmed",
+                "confirmed_permanent": True,
+            },
+        )
+
+        return jsonify(
+            {
+                "message": "Enforcement action confirmed permanent",
+                "enforcement_action": record,
+            }
+        ), 200
+
+    except Exception as e:
+        logger.error(f"Confirm enforcement action error: {e}")
+        return jsonify({"error": "Failed to confirm enforcement action"}), 500
 
 
 @app.route("/api/v1/rules/translate", methods=["POST"])
