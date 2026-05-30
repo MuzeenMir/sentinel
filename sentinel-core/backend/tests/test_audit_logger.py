@@ -181,6 +181,7 @@ class TestAuditLogPG:
     def test_audit_log_omits_set_config_when_no_tenant(self, monkeypatch):
         cursor = FakeCursor()
         conn = FakeConnection(cursor)
+        monkeypatch.delenv("DEFAULT_TENANT_ID", raising=False)
         monkeypatch.setattr("audit_logger._connect_pg", lambda: conn)
 
         with patch("audit_logger._in_request_context", return_value=False):
@@ -191,6 +192,22 @@ class TestAuditLogPG:
 
         assert not any("set_config" in sql for sql in cursor.statements)
         assert any("INSERT INTO audit_log" in sql for sql in cursor.statements)
+
+    def test_audit_log_uses_default_tenant_when_no_explicit_tenant(self, monkeypatch):
+        cursor = FakeCursor()
+        conn = FakeConnection(cursor)
+        monkeypatch.setenv("DEFAULT_TENANT_ID", "1")
+        monkeypatch.setattr("audit_logger._connect_pg", lambda: conn)
+
+        with patch("audit_logger._in_request_context", return_value=False):
+            audit_log(
+                AuditCategory.AUTH,
+                "user_registered",
+                actor="user:7",
+            )
+
+        assert any("set_config('app.tenant_id'" in sql for sql in cursor.statements)
+        assert cursor.params[-1]["tenant_id"] == 1
 
     def test_default_actor_is_system(self, monkeypatch):
         cursor = FakeCursor()

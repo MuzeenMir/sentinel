@@ -262,6 +262,22 @@ class TestBackfillSkippedRecords:
 
 
 class TestBackfillVerificationGate:
+    def test_skipped_records_block_verification_and_redis_delete(
+        self, tmp_path, fake_redis, fake_pg
+    ):
+        fake_redis.add_raw("not-json{")
+
+        result = script.backfill(
+            redis_client=fake_redis,
+            pg=fake_pg,
+            skipped_path=tmp_path / "skipped.jsonl",
+            delete_after_verify=True,
+        )
+
+        assert result.verified is False
+        assert result.deleted_redis_keys is False
+        assert fake_redis._deleted_keys == []
+
     def test_delete_after_verify_runs_when_counts_match(
         self, tmp_path, fake_redis, fake_pg
     ):

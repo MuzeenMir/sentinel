@@ -280,6 +280,27 @@ def increment_failed_login(user):
     db.session.commit()
 
 
+def _default_tenant_id():
+    raw = os.environ.get("DEFAULT_TENANT_ID")
+    if not raw:
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        return None
+
+
+def _audit_tenant_id(*candidates):
+    for candidate in candidates:
+        if candidate is None:
+            continue
+        try:
+            return int(candidate)
+        except (TypeError, ValueError):
+            continue
+    return _default_tenant_id()
+
+
 def _audit_fail_soft(*args, **kwargs) -> None:
     """Call audit_log() but swallow AuditLogError.
 
@@ -349,6 +370,7 @@ def register():
             email=data["email"],
             role=getattr(UserRole, data["role"].upper(), UserRole.SECURITY_ANALYST),
             status=UserStatus.ACTIVE,
+            tenant_id=_default_tenant_id(),
         )
 
         # Set password with validation
@@ -375,6 +397,7 @@ def register():
                 AuditCategory.AUTH,
                 "user_registered",
                 actor=f"user:{user.id}",
+                tenant_id=_audit_tenant_id(user.tenant_id),
                 detail={"username": user.username, "role": user.role.value},
             )
         except AuditLogError:
@@ -766,6 +789,7 @@ def update_user(user_id):
             audit_log(
                 AuditCategory.CONFIG_CHANGE,
                 "user_updated",
+                tenant_id=_audit_tenant_id(user.tenant_id),
                 detail={"target_user": user.username, "changes": data},
             )
         except AuditLogError:
@@ -815,6 +839,7 @@ def create_tenant():
             audit_log(
                 AuditCategory.CONFIG_CHANGE,
                 "tenant_created",
+                tenant_id=_default_tenant_id(),
                 detail={"tenant_name": tenant.name, "plan": tenant.plan},
             )
         except AuditLogError:
@@ -886,6 +911,7 @@ def deactivate_tenant(tenant_pk):
             audit_log(
                 AuditCategory.CONFIG_CHANGE,
                 "tenant_deactivated",
+                tenant_id=_default_tenant_id(),
                 detail={"tenant_name": tenant.name},
             )
         except AuditLogError:

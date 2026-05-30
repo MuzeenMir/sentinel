@@ -101,6 +101,16 @@ def _actor_user_id(actor: Optional[str]) -> Optional[int]:
     return int(raw) if raw.isdigit() else None
 
 
+def _default_tenant_id() -> Optional[int]:
+    raw = os.environ.get("DEFAULT_TENANT_ID")
+    if not raw:
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        return None
+
+
 def _compute_integrity_hash(record: dict) -> str:
     """Compute SHA-256 hash over the audit record for tamper detection."""
     canonical = json.dumps(record, sort_keys=True, default=str)
@@ -135,6 +145,8 @@ def audit_log(
 
     if tenant_id is None and _in_request_context():
         tenant_id = getattr(g, "tenant_id", None)
+    if tenant_id is None:
+        tenant_id = _default_tenant_id()
 
     category_value = category.value if isinstance(category, AuditCategory) else category
 

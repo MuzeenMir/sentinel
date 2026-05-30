@@ -461,6 +461,27 @@ class TestT031_AuditFailurePolicy:
             user = User.query.filter_by(username="newuser").first()
             assert user is None
 
+    def test_register_assigns_and_audits_default_tenant(self, client, monkeypatch):
+        monkeypatch.setenv("DEFAULT_TENANT_ID", "1")
+        audit = MagicMock(return_value="audit_stub")
+
+        with patch.object(auth_mod, "audit_log", audit):
+            resp = client.post(
+                "/api/v1/auth/register",
+                json={
+                    "username": "tenantuser",
+                    "email": "tenantuser@test.local",
+                    "password": VALID_PASSWORD,
+                    "role": "viewer",
+                },
+            )
+
+        assert resp.status_code == 201
+        with app.app_context():
+            user = User.query.filter_by(username="tenantuser").first()
+            assert user.tenant_id == 1
+        assert audit.call_args.kwargs["tenant_id"] == 1
+
     def test_login_failed_fails_soft_when_audit_unavailable(self, client):
         _create_user(client)
         with patch.object(

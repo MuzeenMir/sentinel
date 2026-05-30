@@ -67,7 +67,10 @@ class BackfillResult:
 
     @property
     def verified(self) -> bool:
-        return (self.inserted + self.pre_existing_matches) == self.parsed
+        return (
+            self.skipped == 0
+            and (self.inserted + self.pre_existing_matches) == self.parsed
+        )
 
 
 def _read_redis_audit_members(redis_client) -> Iterable[bytes]:
