@@ -1,0 +1,50 @@
+name: detections-validate
+
+on:
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'sentinel-core/detections/**'
+      - 'sentinel-core/backend/detection_engine/**'
+      - 'sentinel-core/backend/tests/test_detection_engine.py'
+      - 'sentinel-core/backend/tests/test_validate_detections.py'
+      - 'sentinel-core/scripts/validate_detections.py'
+      - '.github/workflows/detections-validate.yml'
+  push:
+    branches: [main, develop]
+    paths:
+      - 'sentinel-core/detections/**'
+      - 'sentinel-core/backend/detection_engine/**'
+      - 'sentinel-core/backend/tests/test_detection_engine.py'
+      - 'sentinel-core/backend/tests/test_validate_detections.py'
+      - 'sentinel-core/scripts/validate_detections.py'
+      - '.github/workflows/detections-validate.yml'
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+concurrency:
+  group: detections-validate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  detections-validate:
+    name: detections-validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install validation deps
+        run: pip install pytest==9.0.3 PyYAML==6.0.1
+      - name: Validate detection content
+        run: python sentinel-core/scripts/validate_detections.py
+      - name: Detection unit tests
+        working-directory: sentinel-core/backend
+        run: python -m pytest tests/test_detection_engine.py tests/test_validate_detections.py -q
