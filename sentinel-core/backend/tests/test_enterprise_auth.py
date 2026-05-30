@@ -84,6 +84,20 @@ VALID_PASSWORD = "Test@1234"
 
 
 @pytest.fixture(autouse=True)
+def _stub_audit_log(monkeypatch):
+    """Stub audit_log() so unit tests don't need a real PG connection (T-031).
+
+    Matches the established pattern in test_auth_service.py /
+    test_auth_security.py: the auth-service `app` module binds `audit_log` at
+    import time, so patching it there short-circuits the psycopg2 PG sink that
+    T-031 made mandatory. Without this, every login-path audit raises a raw
+    psycopg2 invalid-dsn error against the sqlite test DSN, which bypasses the
+    route's `except AuditLogError` guard and surfaces as a 500.
+    """
+    monkeypatch.setattr(auth_mod, "audit_log", lambda *a, **k: "audit_stub")
+
+
+@pytest.fixture(autouse=True)
 def setup_db():
     app.config["TESTING"] = True
     with app.app_context():
