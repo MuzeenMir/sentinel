@@ -35,6 +35,7 @@ module.exports = {
         'agent',
         'llm-gateway',
         // v1 legacy (retained Phase 0–1; may be used during strangler-fig work)
+        'auth',
         'api-gateway',
         'auth-service',
         'ai-engine',
@@ -53,6 +54,7 @@ module.exports = {
         'lib-tenancy',
         'lib-otel',
         'lib-audit',
+        'audit',
         'lib-llm-client',
         // platform + infra
         'opa',
