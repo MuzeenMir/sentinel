@@ -1606,3 +1606,60 @@ class TestCorsConfig:
         monkeypatch.delenv("CORS_ORIGINS", raising=False)
         monkeypatch.delenv("SENTINEL_ENV", raising=False)
         assert gw._load_cors_origins() == ["http://localhost:3000"]
+
+
+class TestT031_AuditEndpoints:
+    """T-031: /api/v1/audit/events and /api/v1/audit/stats read PG, not Redis."""
+
+    @patch("requests.post", side_effect=_auth_verify_ok)
+    def test_audit_events_queries_pg_audit_log(self, _post, client, monkeypatch):
+        captured = {}
+
+        def fake_query(**kwargs):
+            captured.update(kwargs)
+            return [{"id": "audit_1", "category": "auth", "actor": "user:1"}]
+
+        monkeypatch.setattr(gw, "query_audit_log", fake_query)
+
+        resp = client.get(
+            "/api/v1/audit/events?category=auth&limit=10",
+            headers=AUTH_HEADER,
+        )
+
+        assert resp.status_code == 200
+        assert captured["category"] == "auth"
+        assert captured["limit"] == 10
+        body = resp.get_json()
+        assert body["count"] == 1
+        assert body["events"][0]["category"] == "auth"
+
+    @patch("requests.post", side_effect=_auth_verify_ok)
+    def test_audit_events_passes_no_redis_client(self, _post, client, monkeypatch):
+        call_args = {}
+
+        def fake_query(*args, **kwargs):
+            call_args["args"] = args
+            call_args["kwargs"] = kwargs
+            return []
+
+        monkeypatch.setattr(gw, "query_audit_log", fake_query)
+
+        resp = client.get("/api/v1/audit/events", headers=AUTH_HEADER)
+
+        assert resp.status_code == 200
+        assert call_args["args"] == ()  # no positional Redis client
+        assert "redis_client" not in call_args["kwargs"]
+
+    @patch("requests.post", side_effect=_auth_verify_ok)
+    def test_audit_stats_queries_pg(self, _post, client, monkeypatch):
+        def fake_stats(**kwargs):
+            return {"total_events": 7, "by_category": {"auth": 5, "policy": 2}}
+
+        monkeypatch.setattr(gw, "get_audit_stats", fake_stats)
+
+        resp = client.get("/api/v1/audit/stats", headers=AUTH_HEADER)
+
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body["total_events"] == 7
+        assert body["by_category"]["auth"] == 5
