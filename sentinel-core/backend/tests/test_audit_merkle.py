@@ -169,3 +169,19 @@ def test_chained_daily_root_depends_on_prev():
 def test_chained_daily_root_deterministic():
     day = merkle_root([b"a", b"b"])
     assert chained_daily_root(day, b"\x33" * 32) == chained_daily_root(day, b"\x33" * 32)
+
+
+def test_canonical_event_digest_invariant_across_timestamp_representations():
+    # Write stores "...Z"; the DB returns a datetime whose isoformat() is
+    # "...+00:00". The verifier must recompute the same digest from either.
+    from datetime import datetime, timezone
+
+    base = canonical_event_digest(**{**_ROW, "timestamp": "2026-05-30T12:00:00.000000Z"})
+    plus = canonical_event_digest(**{**_ROW, "timestamp": "2026-05-30T12:00:00+00:00"})
+    dt = canonical_event_digest(
+        **{**_ROW, "timestamp": datetime(2026, 5, 30, 12, 0, 0, tzinfo=timezone.utc)}
+    )
+    naive = canonical_event_digest(
+        **{**_ROW, "timestamp": datetime(2026, 5, 30, 12, 0, 0)}
+    )
+    assert base == plus == dt == naive

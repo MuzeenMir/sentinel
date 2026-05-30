@@ -14,6 +14,7 @@ second-preimage resistance.
 
 import hashlib
 import json
+from datetime import datetime, timezone
 from typing import Any, List, Optional
 
 _LEAF_PREFIX = b"\x00"
@@ -91,6 +92,30 @@ def verify_proof(
     return _root_from_proof(n, m, leaf_data, list(proof)) == root
 
 
+def canonical_timestamp(value: Any) -> Optional[str]:
+    """Normalise a timestamp (str ``...Z`` / ``+00:00`` or datetime) to a single
+    canonical UTC string, so the write side and the verifier agree regardless of
+    how PostgreSQL round-trips the column."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        dt = value
+    elif isinstance(value, str):
+        s = value.strip()
+        if s.endswith("Z"):
+            s = s[:-1] + "+00:00"
+        try:
+            dt = datetime.fromisoformat(s)
+        except ValueError:
+            return value  # unparseable: hash verbatim (still deterministic)
+    else:
+        return str(value)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    dt = dt.astimezone(timezone.utc)
+    return dt.strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
+
+
 def canonical_event_digest(
     *,
     tenant_id: Optional[int],
@@ -98,7 +123,7 @@ def canonical_event_digest(
     action: Optional[str],
     resource_id: Optional[str],
     user_id: Optional[int],
-    timestamp: Optional[str],
+    timestamp: Any,
     details: Any,
 ) -> str:
     """Hex SHA-256 over the column-derivable, stable projection of an audit row.
@@ -115,7 +140,7 @@ def canonical_event_digest(
         "action": action,
         "resource_id": resource_id,
         "user_id": user_id,
-        "timestamp": timestamp,
+        "timestamp": canonical_timestamp(timestamp),
         "details": details,
     }
     canonical = json.dumps(
