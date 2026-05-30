@@ -22,6 +22,8 @@ from urllib.parse import urlencode
 import bcrypt
 import pyotp
 from flask import Blueprint, jsonify, redirect, request
+
+from secret_crypto import decrypt, encrypt
 from flask_jwt_extended import (
     create_access_token,
     create_refresh_token,
@@ -415,8 +417,8 @@ def mfa_enroll():
     secret = pyotp.random_base32()
     totp = pyotp.TOTP(secret)
 
-    # Persist secret in user record
-    user.mfa_secret = secret
+    # Persist secret encrypted at rest (T-027)
+    user.mfa_secret = encrypt(secret)
     _db.session.commit()
 
     provisioning_uri = totp.provisioning_uri(name=user.email, issuer_name="SENTINEL")
@@ -445,7 +447,7 @@ def mfa_verify():
     if not code:
         return jsonify({"error": "code required"}), 400
 
-    totp = pyotp.TOTP(user.mfa_secret)
+    totp = pyotp.TOTP(decrypt(user.mfa_secret))
     if totp.verify(code, valid_window=1):
         user.mfa_enabled = True
         _db.session.commit()
@@ -474,7 +476,7 @@ def mfa_disable():
     if not code:
         return jsonify({"error": "Current TOTP code required to disable MFA"}), 400
 
-    totp = pyotp.TOTP(user.mfa_secret)
+    totp = pyotp.TOTP(decrypt(user.mfa_secret))
     if not totp.verify(code, valid_window=1):
         return jsonify({"error": "Invalid TOTP code"}), 401
 

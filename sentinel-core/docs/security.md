@@ -321,6 +321,26 @@ production; do not claim tamper-evidence for a window with no published root.
 - AI model artefacts: stored in Docker volumes; encrypt the volume backend in production.
 - Backup files: the hardening service stores backups at `BACKUP_DIR`; encrypt with filesystem-level encryption.
 
+#### Application-level secret encryption (T-027)
+
+MFA TOTP seeds (`users.mfa_secret`) are encrypted at rest with an **AES-256-GCM
+envelope** (`secret_crypto.py`), independent of disk/volume encryption:
+
+- Format `v1:<nonce_b64>:<ct_b64>`; fresh random 96-bit nonce per write; the GCM
+  tag authenticates each value.
+- KEK from `SENTINEL_SECRET_KEK` (base64 of 32 bytes), sourced from the secret
+  manager. Decryption with a missing/wrong key, or any tampering, **raises** —
+  it never silently returns the wrong value.
+- **Transitional window**: a value without the `v1:` prefix is treated as legacy
+  plaintext and read unchanged until the one-shot backfill runs:
+  `python scripts/encrypt_auth_secrets.py --database-url "$DATABASE_URL"` (idempotent).
+- Requires the `20260530_002_mfa_secret_text` migration (widens the column to TEXT).
+
+**Honest claim boundary**: this is a **single application-layer KEK**. KMS-backed
+keys and per-tenant DEKs are a documented follow-up — do not claim them. The
+env-backed SAML/OIDC secrets are not yet DB-persisted, so they are out of scope
+for this pass.
+
 ### In Transit
 
 - All external traffic must use TLS 1.2+.

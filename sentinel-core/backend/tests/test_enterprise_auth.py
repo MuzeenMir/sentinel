@@ -98,6 +98,14 @@ def _stub_audit_log(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _secret_kek(monkeypatch):
+    """Provide a KEK so MFA enrollment can encrypt the TOTP secret (T-027)."""
+    import base64
+
+    monkeypatch.setenv("SENTINEL_SECRET_KEK", base64.b64encode(b"k" * 32).decode())
+
+
+@pytest.fixture(autouse=True)
 def setup_db():
     app.config["TESTING"] = True
     with app.app_context():
@@ -314,6 +322,23 @@ class TestMFAEndpoints:
         assert "provisioning_uri" in resp.json
         assert "otpauth://" in resp.json["provisioning_uri"]
 
+    def test_enroll_encrypts_mfa_secret_at_rest(self, client):
+        import pyotp
+        from secret_crypto import decrypt
+
+        user = _create_user()
+        token = self._get_token(client, user)
+        client.post("/api/v1/auth/mfa/enroll", headers=_auth_header(token))
+
+        with app.app_context():
+            stored = User.query.get(user.id).mfa_secret
+
+        # Stored value must be the v1: envelope, not the raw base32 seed.
+        assert stored.startswith("v1:")
+        # …and must decrypt back to a usable TOTP secret.
+        recovered = decrypt(stored)
+        assert pyotp.TOTP(recovered).verify(pyotp.TOTP(recovered).now())
+
     def test_verify_enables_mfa(self, client):
         import pyotp
 
@@ -323,10 +348,12 @@ class TestMFAEndpoints:
         # Enroll
         client.post("/api/v1/auth/mfa/enroll", headers=_auth_header(token))
 
-        # Read secret from DB
+        # Read secret from DB (stored encrypted at rest — decrypt to compute code)
+        from secret_crypto import decrypt
+
         with app.app_context():
             refreshed = User.query.get(user.id)
-            secret = refreshed.mfa_secret
+            secret = decrypt(refreshed.mfa_secret)
 
         totp = pyotp.TOTP(secret)
         resp = client.post(

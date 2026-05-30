@@ -33,6 +33,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from observability import configure_logging
 from metrics import init_metrics
 from audit_logger import audit_log, AuditCategory, AuditLogError
+from secret_crypto import decrypt
 from _lib.net import bind_host
 from _lib.tenancy import install_set_local_listener
 
@@ -132,7 +133,7 @@ class User(db.Model):
     role = db.Column(db.Enum(UserRole), nullable=False)
     status = db.Column(db.Enum(UserStatus), default=UserStatus.ACTIVE)
     tenant_id = db.Column(db.BigInteger, nullable=True)
-    mfa_secret = db.Column(db.String(32), nullable=True)
+    mfa_secret = db.Column(db.Text, nullable=True)  # encrypted at rest (T-027)
     mfa_enabled = db.Column(db.Boolean, default=False)
     mfa_backup_codes = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -582,8 +583,8 @@ def mfa_challenge():
         if not user or not user.mfa_secret:
             return jsonify({"error": "User not found or MFA not configured"}), 401
 
-        # Try TOTP code first
-        totp = pyotp.TOTP(user.mfa_secret)
+        # Try TOTP code first (secret stored encrypted at rest — T-027)
+        totp = pyotp.TOTP(decrypt(user.mfa_secret))
         verified = totp.verify(code, valid_window=1)
 
         # Try backup codes if TOTP fails
