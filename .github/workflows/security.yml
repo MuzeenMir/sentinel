@@ -278,6 +278,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     needs: []
+    env:
+      POSTGRES_USER: sentinel
+      POSTGRES_PASSWORD: dast_pg_password
+      POSTGRES_DB: sentinel_db
+      SENTINEL_APP_DB_PASSWORD: dast_app_password
+      JWT_SECRET_KEY: ci-dast-not-a-real-secret
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: Admin@123!DastCI
+      ADMIN_EMAIL: admin@example.com
+      INTERNAL_SERVICE_TOKEN: ci-dast-internal-service-token
+      GRAFANA_PASSWORD: dast_grafana_password
+      DEFAULT_TENANT_ID: "1"
+      BOOTSTRAP_TENANT_ID: "1"
     defaults:
       run:
         working-directory: sentinel-core
@@ -285,8 +298,43 @@ jobs:
       - uses: actions/checkout@v4
       - name: Stack up
         run: |
-          docker compose up -d --build api-gateway auth-service redis postgres
-          sleep 30
+          set -euo pipefail
+
+          docker compose up -d --build postgres redis db-migrate
+
+          for i in {1..60}; do
+            status="$(docker inspect sentinel-db-migrate --format '{{.State.Status}}' 2>/dev/null || true)"
+            code="$(docker inspect sentinel-db-migrate --format '{{.State.ExitCode}}' 2>/dev/null || true)"
+
+            if [ "$status" = "exited" ] && [ "$code" = "0" ]; then
+              break
+            fi
+
+            if [ "$status" = "exited" ]; then
+              docker compose logs db-migrate postgres
+              exit 1
+            fi
+
+            sleep 2
+          done
+
+          if [ "${status:-}" != "exited" ]; then
+            docker compose logs db-migrate postgres
+            exit 1
+          fi
+
+          docker compose up -d --build --no-deps auth-service
+          docker compose up -d --build --no-deps api-gateway
+
+          for i in {1..60}; do
+            if curl -sf http://localhost:8080/health >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+
+          docker compose logs api-gateway auth-service db-migrate postgres redis
+          exit 1
       - name: ZAP baseline
         uses: zaproxy/action-baseline@v0.14.0
         with:
