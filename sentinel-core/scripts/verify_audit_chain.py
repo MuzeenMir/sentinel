@@ -160,7 +160,9 @@ def fetch_rows(database_url: str) -> List[Dict[str, Any]]:  # pragma: no cover
         conn.close()
 
 
-def load_published_roots(published_dir: str) -> List[Dict[str, Any]]:  # pragma: no cover
+def load_published_roots(
+    published_dir: str,
+) -> List[Dict[str, Any]]:  # pragma: no cover
     published = []
     if not os.path.isdir(published_dir):
         return published
@@ -175,11 +177,12 @@ def load_published_roots(published_dir: str) -> List[Dict[str, Any]]:  # pragma:
 def main(argv: Optional[List[str]] = None) -> int:  # pragma: no cover
     parser = argparse.ArgumentParser(description="Verify the SENTINEL audit ledger.")
     parser.add_argument(
-        "--database-url", default=os.environ.get("AUDIT_DATABASE_URL")
-        or os.environ.get("DATABASE_URL"),
+        "--database-url",
+        default=os.environ.get("AUDIT_DATABASE_URL") or os.environ.get("DATABASE_URL"),
     )
     parser.add_argument(
-        "--published-dir", default=os.environ.get("AUDIT_ROOTS_DIR", "audit-roots"),
+        "--published-dir",
+        default=os.environ.get("AUDIT_ROOTS_DIR", "audit-roots"),
         help="Directory of nightly published signed root JSON files.",
     )
     args = parser.parse_args(argv)
@@ -214,8 +217,11 @@ def main(argv: Optional[List[str]] = None) -> int:  # pragma: no cover
 
     print(
         f"OK: {len(rows)} rows, {len(computed)} daily roots verified"
-        + (f" against {len(published)} published roots" if published else
-           " (no published roots supplied — per-row integrity only)")
+        + (
+            f" against {len(published)} published roots"
+            if published
+            else " (no published roots supplied — per-row integrity only)"
+        )
     )
     return 0
 

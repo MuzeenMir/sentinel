@@ -1,0 +1,84 @@
+name: merkle-root-publish
+
+# Nightly tamper-evidence anchor for the audit ledger (wedge #3): build the
+# previous UTC day's chained Merkle root over audit_log.event_hash and publish
+# it cosign-signed (keyless / OIDC). Auditors verify the live DB against these
+# signed roots with sentinel-core/scripts/verify_audit_chain.py.
+#
+# Scheduled + manual only — never runs on pull_request, so it does not gate PRs.
+
+on:
+  schedule:
+    - cron: '17 3 * * *'   # 03:17 UTC daily (after the day has fully closed)
+  workflow_dispatch:
+    inputs:
+      date:
+        description: 'UTC date YYYY-MM-DD to (re)publish (default: yesterday)'
+        required: false
+
+permissions:
+  contents: read
+  id-token: write   # keyless cosign sign-blob
+
+jobs:
+  publish-root:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install deps
+        run: pip install --quiet psycopg2-binary
+
+      - name: Resolve target date
+        id: d
+        env:
+          RAW_DATE: ${{ github.event.inputs.date }}
+        run: |
+          DATE="$RAW_DATE"
+          if [ -z "$DATE" ]; then DATE="$(date -u -d 'yesterday' +%F)"; fi
+          if ! printf '%s' "$DATE" | grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'; then
+            echo "Invalid date input: $DATE" >&2
+            exit 1
+          fi
+          echo "date=$DATE" >> "$GITHUB_OUTPUT"
+
+      - name: Build daily Merkle root
+        env:
+          AUDIT_DATABASE_URL: ${{ secrets.AUDIT_DATABASE_URL }}
+        run: |
+          python sentinel-core/scripts/publish_audit_root.py \
+            --date "${{ steps.d.outputs.date }}" \
+            --out-dir audit-roots
+
+      - name: Stop if no root produced
+        id: check
+        run: |
+          FILE="audit-roots/${{ steps.d.outputs.date }}.json"
+          if [ -f "$FILE" ]; then echo "file=$FILE" >> "$GITHUB_OUTPUT"; else
+            echo "No root file for ${{ steps.d.outputs.date }} (no audit rows); skipping."
+          fi
+
+      - name: Install cosign
+        if: steps.check.outputs.file != ''
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign root (keyless)
+        if: steps.check.outputs.file != ''
+        run: |
+          FILE="${{ steps.check.outputs.file }}"
+          cosign sign-blob --yes \
+            --output-signature "${FILE}.sig" \
+            --output-certificate "${FILE}.pem" \
+            "${FILE}"
+
+      - name: Upload signed root
+        if: steps.check.outputs.file != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-root-${{ steps.d.outputs.date }}
+          path: audit-roots/${{ steps.d.outputs.date }}.json*
+          retention-days: 3650

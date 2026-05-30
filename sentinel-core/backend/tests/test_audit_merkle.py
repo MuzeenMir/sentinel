@@ -119,7 +119,11 @@ _ROW = dict(
     resource_id="auth-service",
     user_id=42,
     timestamp="2026-05-30T00:00:00Z",
-    details={"actor": "user:42", "service": "auth-service", "detail": {"ip": "10.0.0.1"}},
+    details={
+        "actor": "user:42",
+        "service": "auth-service",
+        "detail": {"ip": "10.0.0.1"},
+    },
 )
 
 
@@ -163,12 +167,16 @@ def test_chained_daily_root_genesis_differs_from_linked():
 
 def test_chained_daily_root_depends_on_prev():
     day = merkle_root([b"a", b"b"])
-    assert chained_daily_root(day, b"\x11" * 32) != chained_daily_root(day, b"\x22" * 32)
+    assert chained_daily_root(day, b"\x11" * 32) != chained_daily_root(
+        day, b"\x22" * 32
+    )
 
 
 def test_chained_daily_root_deterministic():
     day = merkle_root([b"a", b"b"])
-    assert chained_daily_root(day, b"\x33" * 32) == chained_daily_root(day, b"\x33" * 32)
+    assert chained_daily_root(day, b"\x33" * 32) == chained_daily_root(
+        day, b"\x33" * 32
+    )
 
 
 def test_canonical_event_digest_invariant_across_timestamp_representations():
@@ -176,7 +184,9 @@ def test_canonical_event_digest_invariant_across_timestamp_representations():
     # "...+00:00". The verifier must recompute the same digest from either.
     from datetime import datetime, timezone
 
-    base = canonical_event_digest(**{**_ROW, "timestamp": "2026-05-30T12:00:00.000000Z"})
+    base = canonical_event_digest(
+        **{**_ROW, "timestamp": "2026-05-30T12:00:00.000000Z"}
+    )
     plus = canonical_event_digest(**{**_ROW, "timestamp": "2026-05-30T12:00:00+00:00"})
     dt = canonical_event_digest(
         **{**_ROW, "timestamp": datetime(2026, 5, 30, 12, 0, 0, tzinfo=timezone.utc)}
