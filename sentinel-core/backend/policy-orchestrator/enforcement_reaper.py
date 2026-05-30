@@ -68,7 +68,9 @@ class EnforcementReaper:
                 result["reverted"] += 1
             except Exception as exc:
                 reason = str(exc)
-                logger.warning("enforcement_revert_failed action=%s: %s", action_id, exc)
+                logger.warning(
+                    "enforcement_revert_failed action=%s: %s", action_id, exc
+                )
                 self.store.mark_revert_failed(action_id, reason=reason)
                 self.alert_callback(
                     {

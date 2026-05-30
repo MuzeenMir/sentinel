@@ -1,6 +1,6 @@
 """Add dedicated reversible enforcement action records.
 
-Revision ID: 20260530_001_reversible_enforcement
+Revision ID: 20260530_001_reversible_enf
 Revises: 20260526_001_audit_pg
 Create Date: 2026-05-30
 
@@ -19,7 +19,7 @@ from sqlalchemy import inspect
 from sqlalchemy.dialects import postgresql
 
 
-revision: str = "20260530_001_reversible_enforcement"
+revision: str = "20260530_001_reversible_enf"
 down_revision: Union[str, None] = "20260526_001_audit_pg"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -139,7 +139,9 @@ def upgrade() -> None:
     )
 
     op.execute("ALTER TABLE enforcement_actions ENABLE ROW LEVEL SECURITY")
-    op.execute("DROP POLICY IF EXISTS rls_enforcement_actions_tenant ON enforcement_actions")
+    op.execute(
+        "DROP POLICY IF EXISTS rls_enforcement_actions_tenant ON enforcement_actions"
+    )
     op.execute("""
         CREATE POLICY rls_enforcement_actions_tenant ON enforcement_actions
           USING (tenant_id = current_setting('app.tenant_id', true)::bigint)
@@ -164,7 +166,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute("DROP POLICY IF EXISTS rls_enforcement_actions_tenant ON enforcement_actions")
+    op.execute(
+        "DROP POLICY IF EXISTS rls_enforcement_actions_tenant ON enforcement_actions"
+    )
     op.execute("DROP INDEX IF EXISTS idx_enforcement_actions_tenant")
     op.execute("DROP INDEX IF EXISTS idx_enforcement_actions_reaper")
     op.execute("DROP INDEX IF EXISTS uq_enforcement_actions_action_id")
