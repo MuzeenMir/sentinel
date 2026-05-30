@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.2.0](https://github.com/MuzeenMir/sentinel/compare/v1.1.3...v1.2.0) (2026-05-30)
+
+
+### Features
+
+* **audit:** migrate audit_log Redis -&gt; PostgreSQL (T-031) ([#46](https://github.com/MuzeenMir/sentinel/issues/46)) ([944cd31](https://github.com/MuzeenMir/sentinel/commit/944cd315582fff222675919f15b1334206cff35d))
+* **lib-tenancy:** wire sentinel_app runtime role + per-tx SET LOCAL (T-028) ([#41](https://github.com/MuzeenMir/sentinel/issues/41)) ([f07f0be](https://github.com/MuzeenMir/sentinel/commit/f07f0be57d203e639c3ed43e75e34446c29758cf))
+
+
+### Bug Fixes
+
+* **ci:** repair security dast bootstrap ([#45](https://github.com/MuzeenMir/sentinel/issues/45)) ([00e27d0](https://github.com/MuzeenMir/sentinel/commit/00e27d0c8f3d073f9e80e80303a78fd48e232975))
+* **ci:** retry cosign installer in sbom-images ([#43](https://github.com/MuzeenMir/sentinel/issues/43)) ([ef47cf2](https://github.com/MuzeenMir/sentinel/commit/ef47cf293eac03d0d1e5ddc60e7bc15c9072eac8))
+* **repo:** allow audit scope ([#47](https://github.com/MuzeenMir/sentinel/issues/47)) ([7eea8ea](https://github.com/MuzeenMir/sentinel/commit/7eea8eaf5dfbdb88905ce718365cff946737feed))
+
+
+### Documentation
+
+* **repo:** flip T-028 closure status + clean dragon-scale CLAUDE.md ([#44](https://github.com/MuzeenMir/sentinel/issues/44)) ([05593b4](https://github.com/MuzeenMir/sentinel/commit/05593b479d482f6cefca66001e772488cc7f6746))
+
 ## [1.1.3](https://github.com/MuzeenMir/sentinel/compare/v1.1.2...v1.1.3) (2026-05-24)
 
 
