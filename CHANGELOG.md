@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.0](https://github.com/MuzeenMir/sentinel/compare/v1.2.0...v1.3.0) (2026-05-30)
+
+
+### Features
+
+* **audit:** tamper-evident audit ledger — Merkle roots + verifier (wedge [#3](https://github.com/MuzeenMir/sentinel/issues/3)) ([#48](https://github.com/MuzeenMir/sentinel/issues/48)) ([5ea62de](https://github.com/MuzeenMir/sentinel/commit/5ea62de990062e4ad0f934207f433c536a5f0625))
+* **policy-orchestrator:** reversible enforcement — TTL auto-rollback (wedge [#1](https://github.com/MuzeenMir/sentinel/issues/1)) ([#49](https://github.com/MuzeenMir/sentinel/issues/49)) ([04eb11b](https://github.com/MuzeenMir/sentinel/commit/04eb11bd00947f69edfdce8892c92d930ea09499))
+
 ## [1.2.0](https://github.com/MuzeenMir/sentinel/compare/v1.1.3...v1.2.0) (2026-05-30)
 
 
