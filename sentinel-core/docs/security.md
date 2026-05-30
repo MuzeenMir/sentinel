@@ -271,6 +271,44 @@ Structured JSON logging via the shared `observability` module:
 - Elasticsearch: configurable, recommended 90 days minimum.
 - Prometheus: 30 days (`--storage.tsdb.retention.time=30d`).
 
+### Tamper-Evidence (Audit Ledger)
+
+The PostgreSQL `audit_log` is append-only at the role level (`sentinel_app` has
+`INSERT, SELECT` only; `UPDATE, DELETE, TRUNCATE` revoked). On top of that, the
+ledger is **cryptographically tamper-evident**:
+
+- **Per-row digest.** Every row stores `event_hash` = `canonical_event_digest()`
+  — a domain-separated SHA-256 over the row's stable, column-derivable
+  projection (`tenant_id, category, action, resource_id, user_id, timestamp,
+  details`). Timestamps are normalised to canonical UTC and `details` is
+  canonicalised with sorted keys, so the digest is reproducible from the stored
+  columns regardless of JSONB round-tripping. The volatile `epoch` float and
+  random `record_id` are intentionally excluded.
+- **Daily Merkle roots.** `merkle-root-publish.yml` runs nightly, builds the
+  previous UTC day's RFC 6962 Merkle root (domain-separated `0x00` leaf / `0x01`
+  node — second-preimage resistant) over that day's `event_hash` leaves ordered
+  by `id`, chains it to the prior day's root, and publishes it **cosign-signed**
+  (keyless / OIDC) as a retained artifact.
+
+**Verification (auditor runbook).**
+
+```bash
+python sentinel-core/scripts/verify_audit_chain.py \
+  --database-url "$AUDIT_DATABASE_URL" \
+  --published-dir ./audit-roots
+```
+
+It recomputes every row's digest (catches content edits with a stale hash) and
+rebuilds + chains the daily roots to compare against the signed published roots
+(catches deletion, insertion, reordering, and any hash change; an earlier day's
+tamper cascades into all later roots). Exit code is non-zero on any divergence.
+
+**Honest claim boundary.** This provides **signed daily tamper-evidence**, not a
+per-event linked chain (`prev_event_hash` is reserved/NULL — a global per-event
+chain conflicts with `audit_log` RLS for the non-`BYPASSRLS` app role). Roots are
+only authoritative once the nightly signed-publish job has been running in
+production; do not claim tamper-evidence for a window with no published root.
+
 ---
 
 ## Encryption

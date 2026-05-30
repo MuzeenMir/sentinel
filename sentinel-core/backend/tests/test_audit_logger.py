@@ -155,6 +155,41 @@ class TestAuditLogPG:
         assert conn.committed is True
         redis_client.zadd.assert_not_called()
 
+    def test_event_hash_is_canonical_column_digest(self, monkeypatch):
+        # The stored event_hash MUST be the column-derivable canonical digest so
+        # verify_audit_chain.py can recompute it from the DB row (wedge #3).
+        from audit_merkle import canonical_event_digest
+
+        cursor = FakeCursor()
+        conn = FakeConnection(cursor)
+        monkeypatch.setenv("DATABASE_URL", "postgresql://sentinel_app:test@db/sentinel")
+        monkeypatch.setattr("audit_logger._connect_pg", lambda: conn)
+
+        with patch("audit_logger._in_request_context", return_value=False):
+            audit_log(
+                AuditCategory.AUTH,
+                "login_success",
+                actor="user:1",
+                tenant_id=7,
+                resource="auth-service",
+                detail={"ip": "10.0.0.1"},
+            )
+
+        idx = next(
+            i for i, s in enumerate(cursor.statements) if "INSERT INTO audit_log" in s
+        )
+        params = cursor.params[idx]
+        expected = canonical_event_digest(
+            tenant_id=params["tenant_id"],
+            category=params["category"],
+            action=params["action"],
+            resource_id=params["resource_id"],
+            user_id=params["user_id"],
+            timestamp=params["timestamp"],
+            details=json.loads(params["details"]),
+        )
+        assert params["event_hash"] == expected
+
     def test_audit_log_sets_tenant_context_before_insert(self, monkeypatch):
         cursor = FakeCursor()
         conn = FakeConnection(cursor)
