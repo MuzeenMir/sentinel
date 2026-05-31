@@ -16,12 +16,23 @@ import logging
 import os
 import sys
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
-from flask import Flask, jsonify
+import redis
+from flask import Flask, jsonify, request
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from observability import configure_logging  # noqa: E402
 from metrics import init_metrics  # noqa: E402
+
+from anthropic_client import AnthropicClient  # noqa: E402
+from audit import CopilotAuditor  # noqa: E402
+from copilot import Copilot  # noqa: E402
+from cost import resolve_token_budget  # noqa: E402
+from persistence import SessionStore  # noqa: E402
+from prompts import render  # noqa: E402
+from safety import RateLimiter, check_request  # noqa: E402
+from tools import ToolRegistry, config_from_env  # noqa: E402
 
 SERVICE_NAME = "llm-gateway"
 
@@ -31,11 +42,58 @@ init_metrics(app, service_name=SERVICE_NAME)
 
 logger = logging.getLogger(__name__)
 
+REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379")
+redis_client = redis.from_url(REDIS_URL, decode_responses=True)
+
+# Overridable audit sink (tests set a no-op; default resolves the shared logger).
+audit_sink = None
+
 
 def inference_enabled() -> bool:
     """True when an Anthropic API key is configured for real inference."""
     return bool(os.environ.get("ANTHROPIC_API_KEY", "").strip())
 
+
+# --- dependency factories (overridable in tests) -------------------------
+
+def make_registry() -> ToolRegistry:
+    return ToolRegistry(
+        config=config_from_env(),
+        service_token=os.environ.get("INTERNAL_SERVICE_TOKEN", ""),
+    )
+
+
+def make_copilot_context(actor: str, tenant_id=None) -> SimpleNamespace:
+    """Build the per-request copilot stack. Overridden in tests to avoid network."""
+    registry = make_registry()
+    auditor = CopilotAuditor(actor=actor, tenant_id=tenant_id, sink=audit_sink)
+    client = AnthropicClient(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+    copilot = Copilot(
+        client=client,
+        registry=registry,
+        audit_hook=auditor.hook(),
+        max_total_tokens=resolve_token_budget(),
+    )
+    return SimpleNamespace(copilot=copilot, registry=registry, auditor=auditor)
+
+
+def _session_store() -> SessionStore:
+    return SessionStore(redis_client)
+
+
+def _rate_limiter() -> RateLimiter:
+    return RateLimiter(redis_client, limit=int(os.environ.get("COPILOT_RATE_LIMIT", "20")))
+
+
+def _actor(data: dict) -> str:
+    return data.get("actor") or request.headers.get("X-Actor") or "anonymous"
+
+
+def _tenant(data: dict):
+    return data.get("tenant_id") or request.headers.get("X-Tenant-Id")
+
+
+# --- health --------------------------------------------------------------
 
 @app.get("/health")
 def health():
@@ -63,6 +121,129 @@ def readyz():
         ),
         200,
     )
+
+
+# --- copilot endpoints ---------------------------------------------------
+
+@app.post("/copilot/summarize")
+def copilot_summarize():
+    data = request.get_json(force=True, silent=True) or {}
+    entity_id = data.get("entity_id")
+    if not entity_id:
+        return jsonify({"error": "entity_id is required"}), 400
+    if not inference_enabled():
+        return jsonify({"error": "inference disabled (no ANTHROPIC_API_KEY)"}), 503
+
+    actor = _actor(data)
+    if not _rate_limiter().allow(actor):
+        return jsonify({"error": "rate limit exceeded"}), 429
+
+    ctx = make_copilot_context(actor, _tenant(data))
+    # Pre-fetch grounded facts so the summary is deterministic and cited.
+    prefetched = [
+        ctx.registry.execute("get_threat_score", {"entity_id": entity_id}),
+        ctx.registry.execute("get_audit_events", {"entity_id": entity_id, "window": "24h"}),
+        ctx.registry.execute("get_enforcement_state", {"entity_id": entity_id}),
+    ]
+    result = ctx.copilot.run(
+        system=render("system"),
+        user_message=f"Summarize the security incident for entity {entity_id}.",
+        prefetched=prefetched,
+    )
+
+    store = _session_store()
+    session_id = store.create_session(entity_id)
+    store.append_message(session_id, "user", f"summarize {entity_id}")
+    store.append_message(session_id, "assistant", result.text)
+    for proposal in result.proposals:
+        store.save_proposal(session_id, proposal)
+
+    return jsonify(
+        {
+            "session_id": session_id,
+            "entity_id": entity_id,
+            "summary": result.text,
+            "grounded": result.grounded,
+            "citations": result.record_ids,
+            "proposals": result.proposals,
+        }
+    ), 200
+
+
+@app.post("/copilot/ask")
+def copilot_ask():
+    data = request.get_json(force=True, silent=True) or {}
+    session_id = data.get("session_id")
+    question = data.get("question", "")
+    if not session_id or not question:
+        return jsonify({"error": "session_id and question are required"}), 400
+    if not inference_enabled():
+        return jsonify({"error": "inference disabled (no ANTHROPIC_API_KEY)"}), 503
+
+    allowed, reason = check_request(question)
+    if not allowed:
+        return jsonify({"error": reason}), 400
+
+    store = _session_store()
+    session = store.get_session(session_id)
+    if session is None:
+        return jsonify({"error": "unknown session"}), 404
+
+    actor = _actor(data)
+    if not _rate_limiter().allow(actor):
+        return jsonify({"error": "rate limit exceeded"}), 429
+
+    entity_id = session["entity_id"]
+    ctx = make_copilot_context(actor, _tenant(data))
+    result = ctx.copilot.run(
+        system=render("system"),
+        user_message=render("followup", entity_id=entity_id, question=question),
+    )
+
+    store.append_message(session_id, "user", question)
+    store.append_message(session_id, "assistant", result.text)
+    for proposal in result.proposals:
+        store.save_proposal(session_id, proposal)
+
+    return jsonify(
+        {
+            "session_id": session_id,
+            "answer": result.text,
+            "grounded": result.grounded,
+            "citations": result.record_ids,
+            "proposals": result.proposals,
+        }
+    ), 200
+
+
+@app.post("/copilot/propose")
+def copilot_propose():
+    """Draft a reversible action for human confirmation. Never executes."""
+    data = request.get_json(force=True, silent=True) or {}
+    required = ("entity_id", "action_type", "rationale")
+    missing = [k for k in required if not data.get(k)]
+    if missing:
+        return jsonify({"error": f"missing: {', '.join(missing)}"}), 400
+
+    actor = _actor(data)
+    registry = make_registry()
+    draft = registry.execute(
+        "propose_reversible_action",
+        {
+            "entity_id": data["entity_id"],
+            "action_type": data["action_type"],
+            "ttl_seconds": int(data.get("ttl_seconds", 900)),
+            "rationale": data["rationale"],
+        },
+    )
+    proposal = draft["result"]
+
+    auditor = CopilotAuditor(actor=actor, tenant_id=_tenant(data), sink=audit_sink)
+    auditor.log_proposal(proposal)
+
+    # Defensive: the draft must never be marked executed.
+    assert proposal["executed"] is False
+    return jsonify({"proposal": proposal}), 200
 
 
 if __name__ == "__main__":
