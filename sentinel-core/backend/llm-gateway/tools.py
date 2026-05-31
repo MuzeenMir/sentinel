@@ -29,7 +29,9 @@ def config_from_env() -> dict:
     return {
         "ai_engine_url": os.environ.get("AI_ENGINE_URL", "http://ai-engine:5003"),
         "api_gateway_url": os.environ.get("API_GATEWAY_URL", "http://api-gateway:8080"),
-        "policy_url": os.environ.get("POLICY_SERVICE_URL", "http://policy-orchestrator:5004"),
+        "policy_url": os.environ.get(
+            "POLICY_SERVICE_URL", "http://policy-orchestrator:5004"
+        ),
     }
 
 

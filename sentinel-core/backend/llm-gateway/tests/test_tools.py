@@ -80,9 +80,7 @@ def test_get_threat_score_calls_ai_engine_and_returns_record_ids():
 
 
 def test_get_audit_events_returns_event_ids():
-    session = FakeSession(
-        get_data={"events": [{"id": "evt-1"}, {"id": "evt-2"}]}
-    )
+    session = FakeSession(get_data={"events": [{"id": "evt-1"}, {"id": "evt-2"}]})
     reg = _registry(session)
 
     out = reg.execute("get_audit_events", {"entity_id": "h1", "window": "24h"})

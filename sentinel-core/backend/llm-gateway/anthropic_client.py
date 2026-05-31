@@ -92,7 +92,9 @@ class AnthropicClient:
 
     @staticmethod
     def _cached_system(system: str) -> list[dict]:
-        return [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]
+        return [
+            {"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}
+        ]
 
     @staticmethod
     def _cached_tools(tools: list[dict]) -> list[dict]:

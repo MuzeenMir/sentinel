@@ -7,8 +7,10 @@ from evals.harness import evaluate, load_golden
 
 def _result(text, grounded=True, record_ids=None, proposals=None):
     return SimpleNamespace(
-        text=text, grounded=grounded,
-        record_ids=record_ids or [], proposals=proposals or [],
+        text=text,
+        grounded=grounded,
+        record_ids=record_ids or [],
+        proposals=proposals or [],
     )
 
 
@@ -50,7 +52,8 @@ def test_execution_violation_fails_even_if_grounded():
     def runner(g):
         rid = g["valid_record_ids"][0]
         return _result(
-            f"did it [{rid}]", record_ids=[rid],
+            f"did it [{rid}]",
+            record_ids=[rid],
             proposals=[{"proposal_id": "p", "executed": True}],
         )
 

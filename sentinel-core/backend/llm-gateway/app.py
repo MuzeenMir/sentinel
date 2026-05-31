@@ -56,6 +56,7 @@ def inference_enabled() -> bool:
 
 # --- dependency factories (overridable in tests) -------------------------
 
+
 def make_registry() -> ToolRegistry:
     return ToolRegistry(
         config=config_from_env(),
@@ -82,7 +83,9 @@ def _session_store() -> SessionStore:
 
 
 def _rate_limiter() -> RateLimiter:
-    return RateLimiter(redis_client, limit=int(os.environ.get("COPILOT_RATE_LIMIT", "20")))
+    return RateLimiter(
+        redis_client, limit=int(os.environ.get("COPILOT_RATE_LIMIT", "20"))
+    )
 
 
 def _actor(data: dict) -> str:
@@ -94,6 +97,7 @@ def _tenant(data: dict):
 
 
 # --- health --------------------------------------------------------------
+
 
 @app.get("/health")
 def health():
@@ -125,6 +129,7 @@ def readyz():
 
 # --- copilot endpoints ---------------------------------------------------
 
+
 @app.post("/copilot/summarize")
 def copilot_summarize():
     data = request.get_json(force=True, silent=True) or {}
@@ -142,7 +147,9 @@ def copilot_summarize():
     # Pre-fetch grounded facts so the summary is deterministic and cited.
     prefetched = [
         ctx.registry.execute("get_threat_score", {"entity_id": entity_id}),
-        ctx.registry.execute("get_audit_events", {"entity_id": entity_id, "window": "24h"}),
+        ctx.registry.execute(
+            "get_audit_events", {"entity_id": entity_id, "window": "24h"}
+        ),
         ctx.registry.execute("get_enforcement_state", {"entity_id": entity_id}),
     ]
     result = ctx.copilot.run(

@@ -57,22 +57,40 @@ def test_copilot_run_emits_audit_trail():
 
     class FakeRegistry:
         def definitions(self):
-            return [{"name": "get_threat_score", "description": "d",
-                     "input_schema": {"type": "object"}}]
+            return [
+                {
+                    "name": "get_threat_score",
+                    "description": "d",
+                    "input_schema": {"type": "object"},
+                }
+            ]
 
         def execute(self, name, tool_input):
             return {"ok": True, "result": {}, "record_ids": ["score:s1"]}
 
     sink = FakeSink()
     auditor = CopilotAuditor(actor="analyst@x", sink=sink)
-    client = FakeClient([
-        LLMResponse(text="", stop_reason="tool_use",
-                    tool_calls=[{"id": "tc", "name": "get_threat_score",
-                                 "input": {"entity_id": "h1"}}],
-                    usage={"input_tokens": 1, "output_tokens": 1}),
-        LLMResponse(text="elevated [score:s1]", stop_reason="end_turn",
-                    usage={"input_tokens": 1, "output_tokens": 1}),
-    ])
+    client = FakeClient(
+        [
+            LLMResponse(
+                text="",
+                stop_reason="tool_use",
+                tool_calls=[
+                    {
+                        "id": "tc",
+                        "name": "get_threat_score",
+                        "input": {"entity_id": "h1"},
+                    }
+                ],
+                usage={"input_tokens": 1, "output_tokens": 1},
+            ),
+            LLMResponse(
+                text="elevated [score:s1]",
+                stop_reason="end_turn",
+                usage={"input_tokens": 1, "output_tokens": 1},
+            ),
+        ]
+    )
     cop = Copilot(client=client, registry=FakeRegistry(), audit_hook=auditor.hook())
 
     cop.run(system="s", user_message="assess h1")

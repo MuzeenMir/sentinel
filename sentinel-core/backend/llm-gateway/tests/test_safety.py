@@ -12,7 +12,9 @@ from safety import (
 
 
 def test_redact_pii_emails_and_tokens():
-    text = "contact bob@acme.io key sk-ABCDEF1234567890 tok aGVsbG93b3JsZGhlbGxvd29ybGQ="
+    text = (
+        "contact bob@acme.io key sk-ABCDEF1234567890 tok aGVsbG93b3JsZGhlbGxvd29ybGQ="
+    )
     out = redact_pii(text)
     assert "bob@acme.io" not in out
     assert "[REDACTED_EMAIL]" in out

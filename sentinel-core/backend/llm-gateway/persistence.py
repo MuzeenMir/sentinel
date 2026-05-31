@@ -65,4 +65,6 @@ class SessionStore:
         self.redis.expire(key, self.ttl)
 
     def get_proposals(self, sid: str) -> list[dict]:
-        return [json.loads(x) for x in self.redis.lrange(self._proposal_key(sid), 0, -1)]
+        return [
+            json.loads(x) for x in self.redis.lrange(self._proposal_key(sid), 0, -1)
+        ]

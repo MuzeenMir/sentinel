@@ -74,8 +74,12 @@ def test_complete_returns_normalized_text():
 
 def test_complete_extracts_tool_calls():
     sdk = FakeSDK(
-        [_response([_tool_block("t1", "get_threat_score", {"entity_id": "e1"})],
-                   stop_reason="tool_use")]
+        [
+            _response(
+                [_tool_block("t1", "get_threat_score", {"entity_id": "e1"})],
+                stop_reason="tool_use",
+            )
+        ]
     )
     client = AnthropicClient(sdk_client=sdk)
 
@@ -110,7 +114,9 @@ def test_system_prompt_marked_for_caching():
     sdk = FakeSDK([_response([_text_block("ok")])])
     client = AnthropicClient(sdk_client=sdk)
 
-    client.complete(system="big system prompt", messages=[{"role": "user", "content": "x"}])
+    client.complete(
+        system="big system prompt", messages=[{"role": "user", "content": "x"}]
+    )
 
     sent = sdk.messages.calls[0]
     assert isinstance(sent["system"], list)

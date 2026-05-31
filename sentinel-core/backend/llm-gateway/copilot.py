@@ -88,7 +88,11 @@ class Copilot:
         valid_ids: set[str] = set()
         proposals: list[dict] = []
         tool_results: list[dict] = []
-        usage_total = {"input_tokens": 0, "output_tokens": 0, "cache_read_input_tokens": 0}
+        usage_total = {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_read_input_tokens": 0,
+        }
         repairs = 0
 
         user_content = user_message
@@ -111,23 +115,35 @@ class Copilot:
             )
             for key in usage_total:
                 usage_total[key] += resp.usage.get(key, 0)
-            self.audit_hook("llm_completion", {"usage": resp.usage, "stop": resp.stop_reason})
+            self.audit_hook(
+                "llm_completion", {"usage": resp.usage, "stop": resp.stop_reason}
+            )
 
             spent = usage_total["input_tokens"] + usage_total["output_tokens"]
             if spent > self.max_total_tokens:
                 return CopilotResult(
-                    text=SAFE_FALLBACK, grounded=False, record_ids=sorted(valid_ids),
-                    proposals=proposals, tool_results=tool_results, usage=usage_total,
-                    iterations=iteration, repairs=repairs, stop_reason="token_budget",
+                    text=SAFE_FALLBACK,
+                    grounded=False,
+                    record_ids=sorted(valid_ids),
+                    proposals=proposals,
+                    tool_results=tool_results,
+                    usage=usage_total,
+                    iterations=iteration,
+                    repairs=repairs,
+                    stop_reason="token_budget",
                     reason="token budget exceeded",
                 )
 
             if resp.stop_reason == "tool_use" and resp.tool_calls:
-                messages.append({"role": "assistant", "content": self._assistant_content(resp)})
+                messages.append(
+                    {"role": "assistant", "content": self._assistant_content(resp)}
+                )
                 result_blocks = []
                 for call in resp.tool_calls:
                     out = self.registry.execute(call["name"], call["input"])
-                    self.audit_hook("tool_call", {"name": call["name"], "input": call["input"]})
+                    self.audit_hook(
+                        "tool_call", {"name": call["name"], "input": call["input"]}
+                    )
                     valid_ids.update(out.get("record_ids", []))
                     tool_results.append(out)
                     if call["name"] == "propose_reversible_action" and out.get("ok"):
@@ -145,11 +161,19 @@ class Copilot:
             # Final natural-language answer: enforce grounding.
             gr = validate_grounding(resp.text, valid_ids)
             if gr.ok:
-                self.audit_hook("answer", {"grounded": True, "record_ids": sorted(valid_ids)})
+                self.audit_hook(
+                    "answer", {"grounded": True, "record_ids": sorted(valid_ids)}
+                )
                 return CopilotResult(
-                    text=resp.text, grounded=True, record_ids=sorted(valid_ids),
-                    proposals=proposals, tool_results=tool_results, usage=usage_total,
-                    iterations=iteration, repairs=repairs, stop_reason=resp.stop_reason,
+                    text=resp.text,
+                    grounded=True,
+                    record_ids=sorted(valid_ids),
+                    proposals=proposals,
+                    tool_results=tool_results,
+                    usage=usage_total,
+                    iterations=iteration,
+                    repairs=repairs,
+                    stop_reason=resp.stop_reason,
                 )
             if repairs < self.max_repairs:
                 repairs += 1
@@ -159,15 +183,27 @@ class Copilot:
 
             self.audit_hook("answer", {"grounded": False, "reason": gr.reason})
             return CopilotResult(
-                text=SAFE_FALLBACK, grounded=False, record_ids=sorted(valid_ids),
-                proposals=proposals, tool_results=tool_results, usage=usage_total,
-                iterations=iteration, repairs=repairs, stop_reason="ungrounded",
+                text=SAFE_FALLBACK,
+                grounded=False,
+                record_ids=sorted(valid_ids),
+                proposals=proposals,
+                tool_results=tool_results,
+                usage=usage_total,
+                iterations=iteration,
+                repairs=repairs,
+                stop_reason="ungrounded",
                 reason=gr.reason,
             )
 
         return CopilotResult(
-            text=SAFE_FALLBACK, grounded=False, record_ids=sorted(valid_ids),
-            proposals=proposals, tool_results=tool_results, usage=usage_total,
-            iterations=self.max_iters, repairs=repairs, stop_reason="max_iters",
+            text=SAFE_FALLBACK,
+            grounded=False,
+            record_ids=sorted(valid_ids),
+            proposals=proposals,
+            tool_results=tool_results,
+            usage=usage_total,
+            iterations=self.max_iters,
+            repairs=repairs,
+            stop_reason="max_iters",
             reason="max tool iterations reached",
         )
