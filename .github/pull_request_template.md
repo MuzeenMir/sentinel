@@ -49,6 +49,17 @@ Required if this PR touches any of:
 
 If any box is checked, request a second reviewer from the security/infra CODEOWNERS.
 
+## Audit-schema two-person rule
+
+PRs touching migrations, audit paths, or diffs that add/alter RLS policies must
+include both trailers below in the PR body, with two different non-empty names.
+Admin merge does not bypass the required `audit-schema-guard` check.
+
+```text
+Audit-Reviewed-by: <name>
+Audit-Approved-by: <different-name>
+```
+
 ## Test plan
 
 - [ ] <!-- e.g. `pytest backend/auth-service/tests/` -->
