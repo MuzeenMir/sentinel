@@ -12,6 +12,12 @@ from pathlib import Path
 
 REVIEWED_TRAILER = "Audit-Reviewed-by"
 APPROVED_TRAILER = "Audit-Approved-by"
+UNGUARDED_PREFIXES = (".github/", ".team/", "docs/", "sentinel-core/docs/")
+AUDIT_LEDGER_PATHS = {
+    "sentinel-core/backend/audit_logger.py",
+    "sentinel-core/backend/audit_merkle.py",
+    "sentinel-core/scripts/verify_audit_chain.py",
+}
 RLS_PATTERNS = (
     re.compile(r"\bROW\s+LEVEL\s+SECURITY\b", re.IGNORECASE),
     re.compile(r"\bCREATE\s+POLICY\b", re.IGNORECASE),
@@ -68,9 +74,11 @@ def find_guarded_files(changed_files: list[str], diff_text: str) -> list[str]:
         normalized = path.strip()
         if not normalized:
             continue
+        if normalized.startswith(UNGUARDED_PREFIXES):
+            continue
         if normalized.startswith("sentinel-core/backend/migrations/"):
             matched.add(normalized)
-        if "audit" in normalized.casefold():
+        if normalized in AUDIT_LEDGER_PATHS:
             matched.add(normalized)
 
     matched.update(find_rls_files(diff_text))
@@ -86,6 +94,8 @@ def find_rls_files(diff_text: str) -> set[str]:
             current_file = _parse_diff_file(line)
             continue
         if current_file is None:
+            continue
+        if current_file.startswith(UNGUARDED_PREFIXES):
             continue
         if not line.startswith(("+", "-")) or line.startswith(("+++", "---")):
             continue

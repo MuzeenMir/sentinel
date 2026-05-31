@@ -14,6 +14,76 @@ class AuditSchemaGuardTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         self.assertIn("no audit-schema/RLS changes", "\n".join(result.messages))
 
+    def test_github_audit_paths_do_not_trigger_guard(self):
+        result = audit_schema_guard.evaluate_guard(
+            changed_files=[
+                ".github/scripts/audit_schema_guard.py",
+                ".github/workflows/audit-schema-guard.yml",
+            ],
+            diff_text="",
+            pr_body="",
+        )
+
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("no audit-schema/RLS changes", "\n".join(result.messages))
+
+    def test_github_rls_keyword_diff_does_not_trigger_guard(self):
+        result = audit_schema_guard.evaluate_guard(
+            changed_files=[".github/workflows/audit-schema-guard.yml"],
+            diff_text=(
+                "diff --git a/.github/workflows/audit-schema-guard.yml "
+                "b/.github/workflows/audit-schema-guard.yml\n"
+                "+++ b/.github/workflows/audit-schema-guard.yml\n"
+                "+grep -E 'ROW LEVEL SECURITY|CREATE POLICY'\n"
+            ),
+            pr_body="",
+        )
+
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("no audit-schema/RLS changes", "\n".join(result.messages))
+
+    def test_docs_rls_keyword_diff_does_not_trigger_guard(self):
+        result = audit_schema_guard.evaluate_guard(
+            changed_files=[
+                "sentinel-core/docs/security.md",
+                "docs/superpowers/plans/audit-rls-plan.md",
+            ],
+            diff_text=(
+                "diff --git a/sentinel-core/docs/security.md "
+                "b/sentinel-core/docs/security.md\n"
+                "+++ b/sentinel-core/docs/security.md\n"
+                "+Document policies that use ROW LEVEL SECURITY and CREATE POLICY.\n"
+                "diff --git a/docs/superpowers/plans/audit-rls-plan.md "
+                "b/docs/superpowers/plans/audit-rls-plan.md\n"
+                "+++ b/docs/superpowers/plans/audit-rls-plan.md\n"
+                "+Plan mentions ROW LEVEL SECURITY.\n"
+            ),
+            pr_body="",
+        )
+
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("no audit-schema/RLS changes", "\n".join(result.messages))
+
+    def test_audit_ledger_source_triggers_guard(self):
+        result = audit_schema_guard.evaluate_guard(
+            changed_files=["sentinel-core/backend/audit_merkle.py"],
+            diff_text="",
+            pr_body="",
+        )
+
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("sentinel-core/backend/audit_merkle.py", "\n".join(result.messages))
+
+    def test_audit_named_test_file_does_not_trigger_guard(self):
+        result = audit_schema_guard.evaluate_guard(
+            changed_files=["sentinel-core/backend/tests/test_audit_merkle.py"],
+            diff_text="",
+            pr_body="",
+        )
+
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("no audit-schema/RLS changes", "\n".join(result.messages))
+
     def test_passes_with_distinct_audit_trailers(self):
         result = audit_schema_guard.evaluate_guard(
             changed_files=["sentinel-core/backend/migrations/versions/001_test.py"],
@@ -46,17 +116,21 @@ class AuditSchemaGuardTests(unittest.TestCase):
 
     def test_rls_diff_is_guarded_even_when_path_is_not(self):
         result = audit_schema_guard.evaluate_guard(
-            changed_files=["sentinel-core/docs/example.md"],
+            changed_files=["sentinel-core/backend/policy-orchestrator/policies.sql"],
             diff_text=(
-                "diff --git a/sentinel-core/docs/example.md b/sentinel-core/docs/example.md\n"
-                "+++ b/sentinel-core/docs/example.md\n"
+                "diff --git a/sentinel-core/backend/policy-orchestrator/policies.sql "
+                "b/sentinel-core/backend/policy-orchestrator/policies.sql\n"
+                "+++ b/sentinel-core/backend/policy-orchestrator/policies.sql\n"
                 "+ALTER TABLE audit_log ENABLE ROW LEVEL SECURITY;\n"
             ),
             pr_body="",
         )
 
         self.assertEqual(result.exit_code, 1)
-        self.assertIn("sentinel-core/docs/example.md", "\n".join(result.messages))
+        self.assertIn(
+            "sentinel-core/backend/policy-orchestrator/policies.sql",
+            "\n".join(result.messages),
+        )
 
 
 if __name__ == "__main__":

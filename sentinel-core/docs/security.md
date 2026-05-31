@@ -461,8 +461,14 @@ and row-level-security changes. It runs on every pull request and inspects the
 changed file list plus diff content. The guard applies when a PR touches:
 
 - `sentinel-core/backend/migrations/**`
-- any path containing `audit`
+- audit-ledger source files:
+  - `sentinel-core/backend/audit_logger.py`
+  - `sentinel-core/backend/audit_merkle.py`
+  - `sentinel-core/scripts/verify_audit_chain.py`
 - any diff hunk that adds or alters `ROW LEVEL SECURITY` or `CREATE POLICY`
+
+CI/governance files under `.github/` or `.team/`, and documentation under
+`docs/` or `sentinel-core/docs/`, are excluded from those matches.
 
 When the guard applies, the PR body must include both trailers with two
 different non-empty names:
