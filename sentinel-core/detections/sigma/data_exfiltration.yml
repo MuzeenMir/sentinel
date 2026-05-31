@@ -1,0 +1,23 @@
+id: sentinel.sigma.network.data_exfiltration
+title: Large outbound transfer to untrusted destination
+status: experimental
+description: Detects unusually large outbound network transfers to external addresses.
+logsource:
+  product: network
+  category: network_connection
+detection:
+  selection:
+    event.action: connection_closed
+    destination.ip|cidr:
+      - 0.0.0.0/0
+    network.direction: outbound
+  filter_internal:
+    destination.ip|cidr:
+      - 10.0.0.0/8
+      - 172.16.0.0/12
+      - 192.168.0.0/16
+  condition: selection and not filter_internal
+level: high
+tags:
+  - attack.exfiltration
+  - attack.t1041

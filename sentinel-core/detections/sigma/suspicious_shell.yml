@@ -1,0 +1,24 @@
+id: sentinel.sigma.process.suspicious_shell
+title: Suspicious interactive shell spawned by service process
+status: experimental
+description: Detects shells launched by web or service processes.
+logsource:
+  product: linux
+  category: process_creation
+detection:
+  parent:
+    ParentImage|endswith:
+      - /nginx
+      - /apache2
+      - /gunicorn
+      - /uwsgi
+  child:
+    Image|endswith:
+      - /bin/sh
+      - /bin/bash
+      - /usr/bin/python
+  condition: parent and child
+level: high
+tags:
+  - attack.execution
+  - attack.t1059

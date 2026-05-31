@@ -1,0 +1,4 @@
+enabled_rule_sets:
+  - sigma
+  - python
+severity_overrides: {}

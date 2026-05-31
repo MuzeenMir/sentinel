@@ -1,0 +1,21 @@
+id: sentinel.sigma.auth.bruteforce
+title: Multiple failed logins from one source
+status: experimental
+description: Detects repeated authentication failures that can indicate brute force.
+logsource:
+  product: linux
+  category: authentication
+detection:
+  selection:
+    event.action: login_failed
+  aggregation:
+    group_by:
+      - source.ip
+      - user.name
+    threshold: 8
+    window: 5m
+  condition: selection
+level: high
+tags:
+  - attack.credential_access
+  - attack.t1110
