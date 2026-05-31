@@ -14,7 +14,7 @@ RUN groupadd -r sentinel && useradd -r -g sentinel -d /app -s /sbin/nologin sent
 
 WORKDIR /app
 
-COPY auth_middleware.py observability.py metrics.py resilience.py tenant_middleware.py audit_logger.py audit_merkle.py ./
+COPY auth_middleware.py observability.py metrics.py resilience.py tenant_middleware.py audit_logger.py audit_merkle.py secret_crypto.py ./
 COPY integrations/ integrations/
 COPY _lib/ _lib/
 
