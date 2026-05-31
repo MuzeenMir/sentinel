@@ -454,6 +454,33 @@ for this pass.
 - Branch protection rules enforce code review before merge to main.
 - CI pipeline runs linting, type checking, and security scanning on every PR.
 
+### Audit Schema and RLS Guard
+
+The `audit-schema-guard` workflow enforces the two-person rule for audit schema
+and row-level-security changes. It runs on every pull request and inspects the
+changed file list plus diff content. The guard applies when a PR touches:
+
+- `sentinel-core/backend/migrations/**`
+- audit-ledger source files:
+  - `sentinel-core/backend/audit_logger.py`
+  - `sentinel-core/backend/audit_merkle.py`
+  - `sentinel-core/scripts/verify_audit_chain.py`
+- any diff hunk that adds or alters `ROW LEVEL SECURITY` or `CREATE POLICY`
+
+CI/governance files under `.github/` or `.team/`, and documentation under
+`docs/` or `sentinel-core/docs/`, are excluded from those matches.
+
+When the guard applies, the PR body must include both trailers with two
+different non-empty names:
+
+```text
+Audit-Reviewed-by: <name>
+Audit-Approved-by: <different-name>
+```
+
+Admin merge does not bypass this required check once branch protection includes
+`audit-schema-guard`.
+
 ### Dependency Provenance
 
 - Python packages are installed from PyPI with pinned versions.

@@ -1,0 +1,38 @@
+name: audit-schema-guard
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  audit-schema-guard:
+    name: audit-schema-guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check audit schema and RLS two-person trailers
+        env:
+          BASE: ${{ github.base_ref }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -eu
+          git fetch origin "$BASE"
+          git diff --name-only "origin/$BASE...HEAD" > changed_files.txt
+          git diff "origin/$BASE...HEAD" > pr.diff
+          printf '%s' "$PR_BODY" > pr_body.txt
+          git show "origin/$BASE:.github/scripts/audit_schema_guard.py" > audit_schema_guard.py 2>/dev/null \
+            || cp .github/scripts/audit_schema_guard.py audit_schema_guard.py
+          python audit_schema_guard.py \
+            --changed-files changed_files.txt \
+            --diff-file pr.diff \
+            --body-file pr_body.txt
