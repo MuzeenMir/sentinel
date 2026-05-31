@@ -6,7 +6,7 @@ Use this file for Claude Code sessions in this repository. Primary application c
 
 **Read first:** `docs/superpowers/plans/2026-05-07-phase-0-security-stabilization.md` — current path-to-baseline plan; closure status in `sentinel-core/docs/reviews/phase-0-critical-fixes.md`.
 **Branch:** `fix/dragon-scale-stabilize-2026-05-11`.
-**Owner:** Marcus (CTO) · Executor: Kai (Codex) · Approver: Mir.
+**Owner / approver (human):** Mir — the sole human. **Executor agent:** Kai (Codex). **Independent review agent:** Marcus (runs on a different model than the executor). Marcus and Kai are AI agents, not people; "Marcus review" is an automated mistake-catching gate, not human sign-off.
 
 `sentinel-main/` sibling tree was deleted in Wave 2 (A3) after `.team/tickets/T-001-tree-diff-audit.md` confirmed zero ports needed.
 
@@ -42,7 +42,7 @@ Use this file for Claude Code sessions in this repository. Primary application c
 - 🟡 honest README, `sentinel-core/`→root flatten — deferred to Phase 1 / not blocking exit
 
 Phase 1 active tickets:
-- T-031 [P1] — audit_log writes from Redis to PostgreSQL; branch `feat/phase-1-audit-log-redis-to-pg`, rebased onto main after T-028 PR #41; audit-schema two-person review pending.
+- T-031 [P1] — audit_log writes from Redis to PostgreSQL; branch `feat/phase-1-audit-log-redis-to-pg`, rebased onto main after T-028 PR #41; audit-schema independent review pending.
 - T-027 [P2] — SSO/SAML secret encryption-at-rest for `saml_configs` and `oidc_configs`.
 
 Phase 1 parked follow-ups:
@@ -59,7 +59,7 @@ Exit gate: Phase 0 exited 2026-05-25. The original 2026-05-23 → 2026-05-30 gre
 - DRL demoted to research; no Kubernetes role permissions.
 - Python 3.12+ backend, FastAPI (Flask sunset by Phase 2); TypeScript 5.x strict, React 18.
 - Conventional Commits mandatory; squash-merge only; signed commits on `main`.
-- Two-person rule for OPA bundles, model promotions, Helm prod values, RLS policies, audit schemas.
+- Independent review gate for OPA bundles, model promotions, Helm prod values, RLS policies, and audit schemas: changes here require an independent review by the **Marcus review agent — a DIFFERENT model than the executor** — recorded via an `Audit-Reviewed-by: <bot> (automated)` trailer plus maintainer `Audit-Approved-by: Mir`, enforced by the `audit-schema-guard` check. This is a **mistake-catching quality gate + tamper-evident audit trail, NOT human separation of duties**; with a single-human team it is not a regulatory two-person control and must not be marketed as one. See `.team/agents/marcus-audit-reviewer.md` and ADR-011.
 
 **Do not (Phase 0/1):** decommission v1 services, remove compliance-engine, touch drl-engine beyond archival, or land real LLM inference (that's Phase 2+).
 

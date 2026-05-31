@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Check audit schema and RLS two-person trailers
+      - name: Check audit schema and RLS independent-review trailers
         env:
           BASE: ${{ github.base_ref }}
           PR_BODY: ${{ github.event.pull_request.body }}

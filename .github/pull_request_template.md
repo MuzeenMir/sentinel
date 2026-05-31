@@ -37,7 +37,7 @@
 - [ ] README / docs updated if behavior changed
 - [ ] CODEOWNERS-mandated reviewer requested
 
-## Two-person rule (check if it applies)
+## Independent review gate (check if it applies)
 
 Required if this PR touches any of:
 
@@ -47,19 +47,24 @@ Required if this PR touches any of:
 - [ ] Postgres RLS policies (`backend/migrations/**` touching RLS)
 - [ ] Audit schema (`backend/_lib/audit/**` or audit table DDL)
 
-If any box is checked, request a second reviewer from the security/infra CODEOWNERS.
+If any box is checked, this change needs the independent review gate below: an automated independent review (Marcus agent, a different model than the executor) plus maintainer approval, recorded via the trailers and enforced by `audit-schema-guard`. It is a mistake-catching gate, not human separation of duties (ADR-011).
 
-## Audit-schema two-person rule
+## Audit-schema independent review gate
 
 PRs touching migrations, audit-ledger source files, or diffs that add/alter RLS
 policies must include both trailers below in the PR body, with two different
-non-empty names. CI/governance files under `.github/` or `.team/`, and
-documentation under `docs/` or `sentinel-core/docs/`, are excluded. Admin merge
-does not bypass the required `audit-schema-guard` check.
+non-empty names: an **independent review** (the Marcus review agent, run on a
+different model than the executor) and the **maintainer approval** (Mir).
+CI/governance files under `.github/` or `.team/`, and documentation under `docs/`
+or `sentinel-core/docs/`, are excluded. Admin merge does not bypass the required
+`audit-schema-guard` check.
+
+This is an automated mistake-catching gate + tamper-evident audit trail — not
+human separation of duties / a regulatory two-person control (see ADR-011).
 
 ```text
-Audit-Reviewed-by: <name>
-Audit-Approved-by: <different-name>
+Audit-Reviewed-by: marcus-agent (automated)
+Audit-Approved-by: Mir
 ```
 
 ## Test plan
