@@ -144,6 +144,33 @@ def test_max_iters_guard_prevents_infinite_tool_loop():
     assert result.iterations == 3
 
 
+def test_prefetched_data_seeds_grounding():
+    client = FakeClient([_resp(text="Score is elevated [score:s1].")])
+    cop = Copilot(client=client, registry=FakeRegistry({}))
+    prefetched = [{"tool": "get_threat_score", "ok": True,
+                   "result": {"score": 0.9}, "record_ids": ["score:s1"]}]
+
+    result = cop.run(system="s", user_message="summarize h1", prefetched=prefetched)
+
+    assert result.grounded is True
+    assert "score:s1" in result.record_ids
+    # The model is shown the grounded data (with ids) in its prompt.
+    assert "score:s1" in client.calls[0]["messages"][0]["content"]
+
+
+def test_prefetched_proposal_is_captured():
+    client = FakeClient([_resp(text="Recommend a block [proposal:p1].")])
+    cop = Copilot(client=client, registry=FakeRegistry({}))
+    prefetched = [{"tool": "propose_reversible_action", "ok": True,
+                   "result": {"proposal_id": "proposal:p1", "executed": False},
+                   "record_ids": ["proposal:p1"]}]
+
+    result = cop.run(system="s", user_message="block h1?", prefetched=prefetched)
+
+    assert len(result.proposals) == 1
+    assert result.proposals[0]["executed"] is False
+
+
 def test_token_budget_stops_loop():
     client = FakeClient([
         _resp(stop_reason="tool_use", tool_calls=[

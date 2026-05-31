@@ -14,12 +14,27 @@ from typing import Any, Callable, Optional
 
 
 def _default_sink(**kwargs: Any) -> None:  # pragma: no cover - needs PG
-    """Lazily import the shared logger so tests don't require psycopg2."""
+    """Lazily import the shared logger so tests don't require psycopg2.
+
+    Maps the auditor's normalized fields onto the real ``audit_log`` signature:
+    ``audit_log(category, action, actor, resource, detail, tenant_id)``.
+    """
     import audit_logger
 
-    category_name = kwargs.pop("category_name", "INCIDENT")
-    category = getattr(audit_logger.AuditCategory, category_name, None)
-    audit_logger.audit_log(category=category, **kwargs)
+    category_name = kwargs.get("category_name", "SYSTEM")
+    category = getattr(
+        audit_logger.AuditCategory, category_name, audit_logger.AuditCategory.SYSTEM
+    )
+    detail = dict(kwargs.get("metadata") or {})
+    detail["status"] = kwargs.get("status", "success")
+    audit_logger.audit_log(
+        category=category,
+        action=kwargs.get("event_type", "copilot_event"),
+        actor=kwargs.get("actor"),
+        resource=kwargs.get("target"),
+        detail=detail,
+        tenant_id=kwargs.get("tenant_id"),
+    )
 
 
 class CopilotAuditor:
@@ -28,7 +43,7 @@ class CopilotAuditor:
         actor: str,
         tenant_id: Optional[str] = None,
         sink: Optional[Callable[..., None]] = None,
-        category_name: str = "INCIDENT",
+        category_name: str = "SYSTEM",
     ):
         self.actor = actor
         self.tenant_id = tenant_id

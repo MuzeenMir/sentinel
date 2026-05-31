@@ -18,6 +18,17 @@ from grounding import repair_instruction, validate_grounding
 SAFE_FALLBACK = "I could not produce a grounded answer from the available data."
 
 
+def _render_prefetched(results: list[dict]) -> str:
+    """Render pre-fetched tool results into a citation-friendly context block."""
+    lines: list[str] = []
+    for r in results:
+        if not r.get("ok"):
+            continue
+        ids = ", ".join(r.get("record_ids", []) or [])
+        lines.append(f"- {r.get('tool')}: {json.dumps(r.get('result'))} [ids: {ids}]")
+    return "\n".join(lines)
+
+
 @dataclass
 class CopilotResult:
     text: str
@@ -68,13 +79,31 @@ class Copilot:
             )
         return content
 
-    def run(self, system: str, user_message: str) -> CopilotResult:
-        messages: list[dict] = [{"role": "user", "content": user_message}]
+    def run(
+        self,
+        system: str,
+        user_message: str,
+        prefetched: Optional[list[dict]] = None,
+    ) -> CopilotResult:
         valid_ids: set[str] = set()
         proposals: list[dict] = []
         tool_results: list[dict] = []
         usage_total = {"input_tokens": 0, "output_tokens": 0, "cache_read_input_tokens": 0}
         repairs = 0
+
+        user_content = user_message
+        if prefetched:
+            for r in prefetched:
+                valid_ids.update(r.get("record_ids", []) or [])
+                tool_results.append(r)
+                if r.get("tool") == "propose_reversible_action" and r.get("ok"):
+                    proposals.append(r["result"])
+            user_content = (
+                user_message
+                + "\n\nGrounded data (cite these record ids):\n"
+                + _render_prefetched(prefetched)
+            )
+        messages: list[dict] = [{"role": "user", "content": user_content}]
 
         for iteration in range(1, self.max_iters + 1):
             resp = self.client.complete(
