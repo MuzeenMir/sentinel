@@ -8,6 +8,7 @@ redis>=5.0.1
 psycopg2-binary>=2.9.9
 gunicorn>=22.0.0
 python-dotenv>=1.0.0
+slowapi>=0.1.9
 uvicorn[standard]>=0.30.0
 prometheus-client>=0.17.1
 
