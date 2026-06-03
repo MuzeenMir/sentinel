@@ -468,6 +468,67 @@ def test_update_config_requires_all_sections(mock_post, asgi_client):
     assert "monitoring" in response.json()["error"].lower()
 
 
+@patch("requests.post")
+def test_stats_aggregates_downstream(mock_post, asgi_client):
+    mock_post.side_effect = _auth_verify_ok
+    with patch.object(
+        asgi_app.flask_gateway,
+        "_fetch_downstream_stats",
+        return_value={
+            "threats_detected": 5,
+            "alerts_total": 2,
+            "alerts_by_severity": {"high": 1},
+            "alerts_by_status": {"open": 2},
+            "policies_total": 3,
+            "policies_by_action": {"block": 1},
+        },
+    ):
+        response = asgi_client.get(
+            "/api/v1/stats",
+            headers={"Authorization": "Bearer valid-token"},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["threats_detected"] == 5
+    assert body["alerts_total"] == 2
+    assert body["system_health"] == "healthy"
+
+
+@patch("requests.post")
+def test_statistics_alias_matches_stats(mock_post, asgi_client):
+    mock_post.side_effect = _auth_verify_ok
+    with patch.object(
+        asgi_app.flask_gateway,
+        "_fetch_downstream_stats",
+        return_value={"threats_detected": 1},
+    ):
+        response = asgi_client.get(
+            "/api/v1/statistics",
+            headers={"Authorization": "Bearer valid-token"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["threats_detected"] == 1
+
+
+@patch("requests.post")
+def test_stats_runtime_misconfiguration_returns_503(mock_post, asgi_client):
+    mock_post.side_effect = _auth_verify_ok
+    with patch.object(
+        asgi_app.flask_gateway,
+        "_fetch_downstream_stats",
+        side_effect=RuntimeError("missing token"),
+    ):
+        response = asgi_client.get(
+            "/api/v1/stats",
+            headers={"Authorization": "Bearer valid-token"},
+        )
+
+    assert response.status_code == 503
+    assert response.json() == {"error": "Statistics service misconfigured"}
+
+
 def _request(
     *,
     headers: dict[str, str] | None = None,

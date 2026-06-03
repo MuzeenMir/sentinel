@@ -362,6 +362,36 @@ async def update_config(request: Request) -> JSONResponse:
         return JSONResponse({"error": "Configuration update failed"}, status_code=500)
 
 
+@asgi.get("/api/v1/stats")
+@asgi.get("/api/v1/statistics")
+def get_statistics(request: Request) -> JSONResponse:
+    """Aggregate real-time statistics from downstream services."""
+    current_user = require_current_user(request)
+    if isinstance(current_user, JSONResponse):
+        return current_user
+
+    try:
+        downstream = flask_gateway._fetch_downstream_stats()
+        stats = {
+            "requests": flask_gateway.get_request_stats(),
+            "threats_detected": downstream.get("threats_detected", 0),
+            "alerts_total": downstream.get("alerts_total", 0),
+            "alerts_by_severity": downstream.get("alerts_by_severity", {}),
+            "alerts_by_status": downstream.get("alerts_by_status", {}),
+            "policies_total": downstream.get("policies_total", 0),
+            "policies_by_action": downstream.get("policies_by_action", {}),
+            "system_health": "healthy",
+            "timestamp": time.time(),
+        }
+        return JSONResponse(stats, status_code=200)
+    except RuntimeError:
+        return JSONResponse(
+            {"error": "Statistics service misconfigured"}, status_code=503
+        )
+    except Exception:
+        return JSONResponse({"error": "Statistics retrieval failed"}, status_code=500)
+
+
 @asgi.get("/api/v1/test-rate-limit")
 @limiter.limit("5 per minute")
 def test_rate_limit(request: Request) -> dict[str, object]:
