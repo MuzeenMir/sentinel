@@ -15,6 +15,7 @@ kafka-python==2.0.2
 numpy==1.26.0
 prometheus-client==0.17.1
 pyotp==2.9.0
+pyyaml==6.0.1
 redis==5.0.1
 requests==2.33.0
 scikit-learn==1.5.0

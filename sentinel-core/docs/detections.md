@@ -61,8 +61,11 @@ Detection changes are normal pull requests:
 This keeps detection behavior reviewable, reproducible, and deployable from
 Git without silent embedded logic.
 
-## OPA Deferral
+## OPA/Rego Follow-Up
 
-OPA policy bundles are intentionally out of scope for this wedge. They touch
-policy and governance boundaries that require the separate independent-review
-gate. This detection-as-code flow covers Sigma and Python detectors only.
+The Phase 2 hardening follow-up adds Rego parity rules under
+`sentinel-core/backend/policy-orchestrator/rego/` and evaluates them through an
+OPA sidecar using `policy-orchestrator/detection_rules.py`. Runtime callers must
+treat OPA evaluation errors as fail-closed; the checked-in parity tests keep the
+seeded Python detectors and Rego rules behaviorally aligned until detector
+execution fully moves behind OPA.
