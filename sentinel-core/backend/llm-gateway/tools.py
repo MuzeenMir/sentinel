@@ -14,15 +14,32 @@ network at import time.
 from __future__ import annotations
 
 import os
+import re
 import uuid
 from typing import Any, Optional
 
 SERVICE_TOKEN_HEADER = "X-Internal-Service-Token"
 HTTP_TIMEOUT = 5.0
 
+# entity_id is attacker/LLM-controlled and is interpolated into upstream URL
+# path segments / query params. Restrict to a strict allowlist so it can never
+# inject path traversal (``../``), a new path segment (``/``), a scheme/host
+# (``:``, ``@``), or query/whitespace — anti-SSRF / path-injection.
+_ENTITY_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
+
 
 class UnknownToolError(ValueError):
     """Raised when an unregistered tool is invoked."""
+
+
+class InvalidEntityIdError(ValueError):
+    """Raised when an entity_id fails the allowlist (anti-SSRF guard)."""
+
+
+def validate_entity_id(entity_id: Any) -> str:
+    if not isinstance(entity_id, str) or not _ENTITY_ID_RE.fullmatch(entity_id):
+        raise InvalidEntityIdError(f"invalid entity_id: {entity_id!r}")
+    return entity_id
 
 
 def config_from_env() -> dict:
@@ -150,7 +167,7 @@ class ToolRegistry:
     # --- read tools -------------------------------------------------------
 
     def _threat_score(self, args: dict) -> dict:
-        entity = args["entity_id"]
+        entity = validate_entity_id(args["entity_id"])
         data = self._get(f"{self.config['ai_engine_url']}/score/{entity}")
         rid = data.get("id") or entity
         return {
@@ -161,7 +178,7 @@ class ToolRegistry:
         }
 
     def _audit_events(self, args: dict) -> dict:
-        entity = args["entity_id"]
+        entity = validate_entity_id(args["entity_id"])
         window = args.get("window", "24h")
         data = self._get(
             f"{self.config['api_gateway_url']}/internal/audit",
@@ -176,7 +193,7 @@ class ToolRegistry:
         }
 
     def _enforcement_state(self, args: dict) -> dict:
-        entity = args["entity_id"]
+        entity = validate_entity_id(args["entity_id"])
         data = self._get(f"{self.config['policy_url']}/enforcement/{entity}")
         return {
             "tool": "get_enforcement_state",
@@ -188,6 +205,7 @@ class ToolRegistry:
     # --- propose tool (no network, never executed) ------------------------
 
     def _propose(self, args: dict) -> dict:
+        entity = validate_entity_id(args["entity_id"])
         proposal_id = f"proposal:{uuid.uuid4().hex[:12]}"
         ttl = int(args.get("ttl_seconds", 900))
         draft = {
@@ -195,7 +213,7 @@ class ToolRegistry:
             "executed": False,
             "reversible": True,
             "ttl_seconds": ttl,
-            "entity_id": args["entity_id"],
+            "entity_id": entity,
             "action_type": args["action_type"],
             "rationale": args["rationale"],
             "confirm_via": (

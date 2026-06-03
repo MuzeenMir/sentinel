@@ -6,7 +6,6 @@ inference happens; Redis is the in-memory fake from conftest.
 
 from types import SimpleNamespace
 
-import pytest
 
 from anthropic_client import LLMResponse
 from copilot import Copilot
@@ -211,3 +210,84 @@ def test_propose_returns_unexecuted_reversible_draft(app_module, monkeypatch):
 def test_propose_requires_fields(app_module, monkeypatch):
     rv = app_module.app.test_client().post("/copilot/propose", json={"entity_id": "h1"})
     assert rv.status_code == 400
+
+
+def test_propose_rejects_entity_id_path_injection(app_module, monkeypatch):
+    monkeypatch.setattr(app_module, "audit_sink", lambda **k: None)
+    rv = app_module.app.test_client().post(
+        "/copilot/propose",
+        json={"entity_id": "../../x", "action_type": "block", "rationale": "r"},
+    )
+    assert rv.status_code == 400
+
+
+def test_rate_limit_key_ignores_spoofed_actor(app_module, monkeypatch):
+    # Rotating the client-supplied 'actor' must NOT mint a fresh rate-limit
+    # bucket, otherwise the limit is trivially bypassed.
+    registry = FakeRegistry(
+        {
+            "get_threat_score": {"ok": True, "result": {}, "record_ids": []},
+            "get_audit_events": {"ok": True, "result": {}, "record_ids": []},
+            "get_enforcement_state": {"ok": True, "result": {}, "record_ids": []},
+        }
+    )
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setenv("COPILOT_RATE_LIMIT", "1")
+    monkeypatch.delenv("INTERNAL_SERVICE_TOKEN", raising=False)
+    monkeypatch.setattr(app_module, "audit_sink", lambda **k: None)
+    monkeypatch.setattr(app_module, "make_registry", lambda: registry)
+    monkeypatch.setattr(
+        app_module,
+        "make_copilot_context",
+        lambda actor, tenant_id=None: SimpleNamespace(
+            copilot=Copilot(
+                client=FakeClient([_resp(text="ok"), _resp(text="ok")]),
+                registry=registry,
+            ),
+            registry=registry,
+            auditor=None,
+        ),
+    )
+    c = app_module.app.test_client()
+    first = c.post("/copilot/summarize", json={"entity_id": "h1", "actor": "a@x"})
+    second = c.post(
+        "/copilot/summarize", json={"entity_id": "h1", "actor": "rotated@y"}
+    )
+    assert first.status_code == 200
+    assert second.status_code == 429  # different body actor, same real key
+
+
+def test_xactor_honored_only_when_service_token_valid(app_module, monkeypatch):
+    # With a valid internal service token the gateway-forwarded X-Actor keys the
+    # limiter, so two DIFFERENT authenticated actors get independent buckets.
+    registry = FakeRegistry(
+        {
+            "get_threat_score": {"ok": True, "result": {}, "record_ids": []},
+            "get_audit_events": {"ok": True, "result": {}, "record_ids": []},
+            "get_enforcement_state": {"ok": True, "result": {}, "record_ids": []},
+        }
+    )
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setenv("COPILOT_RATE_LIMIT", "1")
+    monkeypatch.setenv("INTERNAL_SERVICE_TOKEN", "svc-tok")
+    monkeypatch.setattr(app_module, "audit_sink", lambda **k: None)
+    monkeypatch.setattr(app_module, "make_registry", lambda: registry)
+    monkeypatch.setattr(
+        app_module,
+        "make_copilot_context",
+        lambda actor, tenant_id=None: SimpleNamespace(
+            copilot=Copilot(
+                client=FakeClient([_resp(text="ok"), _resp(text="ok")]),
+                registry=registry,
+            ),
+            registry=registry,
+            auditor=None,
+        ),
+    )
+    c = app_module.app.test_client()
+    hdr_a = {"X-Internal-Service-Token": "svc-tok", "X-Actor": "alice"}
+    hdr_b = {"X-Internal-Service-Token": "svc-tok", "X-Actor": "bob"}
+    first = c.post("/copilot/summarize", json={"entity_id": "h1"}, headers=hdr_a)
+    second = c.post("/copilot/summarize", json={"entity_id": "h1"}, headers=hdr_b)
+    assert first.status_code == 200
+    assert second.status_code == 200  # distinct authenticated actors = distinct buckets

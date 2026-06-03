@@ -12,6 +12,7 @@ Inference is provided by the Anthropic API and is optional: when no API key is
 configured the gateway still serves /health and reports inference disabled.
 """
 
+import hmac
 import logging
 import os
 import sys
@@ -32,7 +33,12 @@ from cost import resolve_token_budget  # noqa: E402
 from persistence import SessionStore  # noqa: E402
 from prompts import render  # noqa: E402
 from safety import RateLimiter, check_request  # noqa: E402
-from tools import ToolRegistry, config_from_env  # noqa: E402
+from tools import (  # noqa: E402
+    SERVICE_TOKEN_HEADER,
+    InvalidEntityIdError,
+    ToolRegistry,
+    config_from_env,
+)
 
 SERVICE_NAME = "llm-gateway"
 
@@ -88,12 +94,36 @@ def _rate_limiter() -> RateLimiter:
     )
 
 
-def _actor(data: dict) -> str:
-    return data.get("actor") or request.headers.get("X-Actor") or "anonymous"
+def _gateway_authenticated() -> bool:
+    """True when the caller presents the valid internal service token, i.e. the
+    request arrived via the authenticated api-gateway path (which mints the
+    X-Actor / X-Tenant-Id headers). Without it, forwarded identity headers are
+    untrusted and must not be honored."""
+    expected = os.environ.get("INTERNAL_SERVICE_TOKEN", "")
+    if not expected:
+        return False
+    return hmac.compare_digest(request.headers.get(SERVICE_TOKEN_HEADER, ""), expected)
 
 
-def _tenant(data: dict):
-    return data.get("tenant_id") or request.headers.get("X-Tenant-Id")
+def _actor() -> str:
+    """Server-derived rate-limit identity. Never trusts client-supplied body
+    fields. The gateway-forwarded ``X-Actor`` header is honored ONLY when the
+    caller is authenticated with the internal service token; otherwise we key on
+    the source address so a client cannot rotate the key to bypass the limit."""
+    if _gateway_authenticated():
+        actor = (request.headers.get("X-Actor") or "").strip()
+        if actor:
+            return f"user:{actor}"
+    return f"ip:{request.remote_addr or 'unknown'}"
+
+
+def _tenant():
+    """Tenant context, honored only from the authenticated gateway. A client
+    cannot self-assert a tenant via the request body/headers (RLS scoping is
+    hardened further under Phase-3 C3)."""
+    if _gateway_authenticated():
+        return request.headers.get("X-Tenant-Id")
+    return None
 
 
 # --- health --------------------------------------------------------------
@@ -139,11 +169,11 @@ def copilot_summarize():
     if not inference_enabled():
         return jsonify({"error": "inference disabled (no ANTHROPIC_API_KEY)"}), 503
 
-    actor = _actor(data)
+    actor = _actor()
     if not _rate_limiter().allow(actor):
         return jsonify({"error": "rate limit exceeded"}), 429
 
-    ctx = make_copilot_context(actor, _tenant(data))
+    ctx = make_copilot_context(actor, _tenant())
     # Pre-fetch grounded facts so the summary is deterministic and cited.
     prefetched = [
         ctx.registry.execute("get_threat_score", {"entity_id": entity_id}),
@@ -196,12 +226,12 @@ def copilot_ask():
     if session is None:
         return jsonify({"error": "unknown session"}), 404
 
-    actor = _actor(data)
+    actor = _actor()
     if not _rate_limiter().allow(actor):
         return jsonify({"error": "rate limit exceeded"}), 429
 
     entity_id = session["entity_id"]
-    ctx = make_copilot_context(actor, _tenant(data))
+    ctx = make_copilot_context(actor, _tenant())
     result = ctx.copilot.run(
         system=render("system"),
         user_message=render("followup", entity_id=entity_id, question=question),
@@ -232,20 +262,23 @@ def copilot_propose():
     if missing:
         return jsonify({"error": f"missing: {', '.join(missing)}"}), 400
 
-    actor = _actor(data)
+    actor = _actor()
     registry = make_registry()
-    draft = registry.execute(
-        "propose_reversible_action",
-        {
-            "entity_id": data["entity_id"],
-            "action_type": data["action_type"],
-            "ttl_seconds": int(data.get("ttl_seconds", 900)),
-            "rationale": data["rationale"],
-        },
-    )
+    try:
+        draft = registry.execute(
+            "propose_reversible_action",
+            {
+                "entity_id": data["entity_id"],
+                "action_type": data["action_type"],
+                "ttl_seconds": int(data.get("ttl_seconds", 900)),
+                "rationale": data["rationale"],
+            },
+        )
+    except InvalidEntityIdError as exc:
+        return jsonify({"error": str(exc)}), 400
     proposal = draft["result"]
 
-    auditor = CopilotAuditor(actor=actor, tenant_id=_tenant(data), sink=audit_sink)
+    auditor = CopilotAuditor(actor=actor, tenant_id=_tenant(), sink=audit_sink)
     auditor.log_proposal(proposal)
 
     # Defensive: the draft must never be marked executed.

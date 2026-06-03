@@ -134,3 +134,39 @@ def test_unknown_tool_raises():
     reg = _registry(FakeSession())
     with pytest.raises(UnknownToolError):
         reg.execute("delete_everything", {})
+
+
+# --- anti-SSRF / path-injection: entity_id is attacker/LLM-controlled --------
+
+
+def test_threat_score_rejects_path_injection_without_network():
+    session = FakeSession(get_data={"id": "x"})
+    reg = _registry(session)
+    out = reg.execute("get_threat_score", {"entity_id": "../../admin/keys"})
+    assert out["ok"] is False  # fail-soft, model gets an error
+    assert session.calls == []  # crucially: NEVER reached the network
+    assert "entity_id" in out["error"]
+
+
+def test_enforcement_state_rejects_path_injection_without_network():
+    session = FakeSession(get_data={})
+    reg = _registry(session)
+    out = reg.execute("get_enforcement_state", {"entity_id": "h1/../../secret"})
+    assert out["ok"] is False
+    assert session.calls == []
+
+
+def test_audit_events_rejects_injection_without_network():
+    session = FakeSession(get_data={"events": []})
+    reg = _registry(session)
+    out = reg.execute("get_audit_events", {"entity_id": "h1 OR 1=1", "window": "24h"})
+    assert out["ok"] is False
+    assert session.calls == []
+
+
+def test_valid_entity_id_with_safe_punctuation_allowed():
+    session = FakeSession(get_data={"id": "s1", "score": 0.5})
+    reg = _registry(session)
+    out = reg.execute("get_threat_score", {"entity_id": "host-1.local_2"})
+    assert out["ok"] is True
+    assert session.calls and "host-1.local_2" in session.calls[0][1]
