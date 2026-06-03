@@ -13,6 +13,8 @@ import json
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+from anthropic_client import DEFAULT_SYNTHESIS_MODEL
+from cost import cache_hit_ratio, estimate_cost_usd
 from grounding import GroundingResult, repair_instruction, validate_grounding
 from provenance import (
     DEFAULT_FRESHNESS_SECONDS,
@@ -20,6 +22,7 @@ from provenance import (
     provenance_from_results,
     verify_citations,
 )
+from telemetry import span
 
 SAFE_FALLBACK = "I could not produce a grounded answer from the available data."
 
@@ -44,6 +47,8 @@ class CopilotResult:
     tool_results: list[dict] = field(default_factory=list)
     citation_provenance: dict = field(default_factory=dict)
     usage: dict = field(default_factory=dict)
+    cost_usd: float = 0.0
+    cache_hit_ratio: float = 0.0
     iterations: int = 0
     repairs: int = 0
     stop_reason: Optional[str] = None
@@ -117,11 +122,19 @@ class Copilot:
                 + _render_prefetched(prefetched)
             )
         messages: list[dict] = [{"role": "user", "content": user_content}]
+        # Audit the prompt occurrence (metadata only — no raw content, no PII) so
+        # the copilot is fully inside the ledger from the first turn.
+        self.audit_hook(
+            "prompt", {"chars": len(user_content), "prefetched": bool(prefetched)}
+        )
 
         for iteration in range(1, self.max_iters + 1):
-            resp = self.client.complete(
-                system=system, messages=messages, tools=self.registry.definitions()
-            )
+            with span("copilot.model_call", iteration=iteration):
+                resp = self.client.complete(
+                    system=system,
+                    messages=messages,
+                    tools=self.registry.definitions(),
+                )
             for key in usage_total:
                 usage_total[key] += resp.usage.get(key, 0)
             self.audit_hook(
@@ -149,7 +162,8 @@ class Copilot:
                 )
                 result_blocks = []
                 for call in resp.tool_calls:
-                    out = self.registry.execute(call["name"], call["input"])
+                    with span("copilot.tool_call", tool=call["name"]):
+                        out = self.registry.execute(call["name"], call["input"])
                     self.audit_hook(
                         "tool_call", {"name": call["name"], "input": call["input"]}
                     )
@@ -183,12 +197,16 @@ class Copilot:
                     )
             if gr.ok:
                 cited_provenance = citation_hashes(gr.cited_ids, provenance)
+                cost_usd = estimate_cost_usd(usage_total, DEFAULT_SYNTHESIS_MODEL)
+                cache_ratio = cache_hit_ratio(usage_total)
                 self.audit_hook(
                     "answer",
                     {
                         "grounded": True,
                         "record_ids": sorted(valid_ids),
                         "citation_provenance": cited_provenance,
+                        "cost_usd": cost_usd,
+                        "cache_hit_ratio": cache_ratio,
                     },
                 )
                 return CopilotResult(
@@ -199,6 +217,8 @@ class Copilot:
                     tool_results=tool_results,
                     citation_provenance=cited_provenance,
                     usage=usage_total,
+                    cost_usd=cost_usd,
+                    cache_hit_ratio=cache_ratio,
                     iterations=iteration,
                     repairs=repairs,
                     stop_reason=resp.stop_reason,
