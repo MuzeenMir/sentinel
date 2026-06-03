@@ -227,6 +227,61 @@ def test_auth_proxy_service_unavailable(_post, asgi_client):
     assert response.json() == {"error": "Auth service unavailable"}
 
 
+@patch("requests.get")
+@patch("requests.post")
+def test_get_threats_strips_query_token(mock_post, mock_get, asgi_client):
+    mock_post.side_effect = _auth_verify_ok
+    mock_get.return_value = _response(200, {"threats": [{"id": 1}], "total": 1})
+
+    response = asgi_client.get("/api/v1/threats?token=valid-token&foo=bar")
+
+    assert response.status_code == 200
+    assert response.json() == {"threats": [{"id": 1}], "total": 1}
+    assert mock_get.call_args.args[0] == ("http://data-collector:5001/api/v1/threats")
+    assert mock_get.call_args.kwargs["params"] == {"foo": "bar"}
+    assert mock_get.call_args.kwargs["headers"] == {"Authorization": None}
+
+
+@patch("requests.post")
+def test_create_threat_admin_proxy(mock_post, asgi_client):
+    def side_effect(url, **kwargs):
+        if "/auth/verify" in url:
+            return _response(200, {"user": {"username": "admin", "role": "admin"}})
+        return _response(201, {"id": 1})
+
+    mock_post.side_effect = side_effect
+
+    response = asgi_client.post(
+        "/api/v1/threats",
+        headers={"Authorization": "Bearer valid-token"},
+        json={"type": "manual"},
+    )
+
+    assert response.status_code == 201
+    assert response.json() == {"id": 1}
+    assert mock_post.call_args.args[0] == ("http://data-collector:5001/api/v1/threats")
+    assert mock_post.call_args.kwargs["headers"] == {
+        "Authorization": "Bearer valid-token"
+    }
+    assert mock_post.call_args.kwargs["json"] == {"type": "manual"}
+
+
+@patch("requests.post")
+def test_create_threat_viewer_forbidden(mock_post, asgi_client):
+    mock_post.return_value = _response(
+        200, {"user": {"username": "viewer", "role": "viewer"}}
+    )
+
+    response = asgi_client.post(
+        "/api/v1/threats",
+        headers={"Authorization": "Bearer valid-token"},
+        json={"type": "manual"},
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {"error": "Insufficient permissions"}
+
+
 def _request(
     *,
     headers: dict[str, str] | None = None,
@@ -249,3 +304,10 @@ def _response(status_code=200, json_data=None):
     response.status_code = status_code
     response.json.return_value = json_data or {}
     return response
+
+
+def _auth_verify_ok(*args, **kwargs):
+    url = args[0] if args else kwargs.get("url", "")
+    if "/auth/verify" in url:
+        return _response(200, {"user": {"username": "testuser", "role": "admin"}})
+    return _response(200, {})

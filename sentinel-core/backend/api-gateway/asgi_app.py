@@ -73,6 +73,18 @@ def require_current_user(request: Request) -> dict[str, object] | JSONResponse:
         )
 
 
+def require_role(
+    request: Request, required_role: str
+) -> dict[str, object] | JSONResponse:
+    """Resolve an authenticated user and require a specific role."""
+    current_user = require_current_user(request)
+    if isinstance(current_user, JSONResponse):
+        return current_user
+    if current_user.get("role") != required_role:
+        return JSONResponse({"error": "Insufficient permissions"}, status_code=403)
+    return current_user
+
+
 @asgi.get("/health")
 def health_check() -> dict[str, object]:
     """Health check endpoint matching the Flask gateway response shape."""
@@ -137,6 +149,48 @@ async def auth_proxy(path: str, request: Request) -> JSONResponse:
         return JSONResponse(response.json(), status_code=response.status_code)
     except requests.exceptions.RequestException:
         return JSONResponse({"error": "Auth service unavailable"}, status_code=503)
+
+
+@asgi.get("/api/v1/threats")
+def get_threats(request: Request) -> JSONResponse:
+    """Get detected threats."""
+    current_user = require_current_user(request)
+    if isinstance(current_user, JSONResponse):
+        return current_user
+
+    params = dict(request.query_params)
+    params.pop("token", None)
+    try:
+        response = requests.get(
+            f"{flask_gateway.app.config['DATA_COLLECTOR_URL']}/api/v1/threats",
+            headers={"Authorization": request.headers.get("Authorization")},
+            params=params,
+        )
+        return JSONResponse(response.json(), status_code=response.status_code)
+    except requests.exceptions.RequestException:
+        return JSONResponse(
+            {"error": "Data collector service unavailable"}, status_code=503
+        )
+
+
+@asgi.post("/api/v1/threats")
+async def create_threat(request: Request) -> JSONResponse:
+    """Create a new threat (manual entry)."""
+    current_user = require_role(request, "admin")
+    if isinstance(current_user, JSONResponse):
+        return current_user
+
+    try:
+        response = requests.post(
+            f"{flask_gateway.app.config['DATA_COLLECTOR_URL']}/api/v1/threats",
+            headers={"Authorization": request.headers.get("Authorization")},
+            json=await request.json(),
+        )
+        return JSONResponse(response.json(), status_code=response.status_code)
+    except requests.exceptions.RequestException:
+        return JSONResponse(
+            {"error": "Data collector service unavailable"}, status_code=503
+        )
 
 
 @asgi.get("/api/v1/test-rate-limit")
