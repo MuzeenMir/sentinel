@@ -11,7 +11,7 @@ import time
 import requests
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -43,6 +43,17 @@ async def rate_limit_handler(
             "message": "Too many requests. Please try again later.",
         },
         status_code=429,
+    )
+
+
+@asgi.exception_handler(404)
+async def not_found(request: Request, _exc: object) -> JSONResponse:
+    return JSONResponse(
+        {
+            "error": "Endpoint not found",
+            "message": f"The requested endpoint {request.url.path} does not exist",
+        },
+        status_code=404,
     )
 
 
@@ -83,6 +94,14 @@ def require_role(
     if current_user.get("role") != required_role:
         return JSONResponse({"error": "Insufficient permissions"}, status_code=403)
     return current_user
+
+
+def _asgi_sse_stream(channel: str, heartbeat_type: str):
+    """Wrap the Flask SSE generator so ASGI treats disconnects as clean exits."""
+    try:
+        yield from flask_gateway._sse_pubsub_stream(channel, heartbeat_type)
+    except GeneratorExit:
+        return
 
 
 @asgi.get("/health")
@@ -390,6 +409,32 @@ def get_statistics(request: Request) -> JSONResponse:
         )
     except Exception:
         return JSONResponse({"error": "Statistics retrieval failed"}, status_code=500)
+
+
+@asgi.get("/api/v1/stream/threats", response_model=None)
+def stream_threats(request: Request) -> JSONResponse | StreamingResponse:
+    """Stream real-time threat events via Redis pub/sub."""
+    current_user = require_current_user(request)
+    if isinstance(current_user, JSONResponse):
+        return current_user
+    return StreamingResponse(
+        _asgi_sse_stream(flask_gateway.SSE_CHANNEL_THREATS, "threat_heartbeat"),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@asgi.get("/api/v1/stream/alerts", response_model=None)
+def stream_alerts(request: Request) -> JSONResponse | StreamingResponse:
+    """Stream real-time alert events via Redis pub/sub."""
+    current_user = require_current_user(request)
+    if isinstance(current_user, JSONResponse):
+        return current_user
+    return StreamingResponse(
+        _asgi_sse_stream(flask_gateway.SSE_CHANNEL_ALERTS, "alert_heartbeat"),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @asgi.get("/api/v1/test-rate-limit")

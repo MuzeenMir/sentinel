@@ -529,6 +529,42 @@ def test_stats_runtime_misconfiguration_returns_503(mock_post, asgi_client):
     assert response.json() == {"error": "Statistics service misconfigured"}
 
 
+@patch("requests.post")
+def test_stream_threats_content_type(mock_post, asgi_client):
+    mock_post.side_effect = _auth_verify_ok
+    mock_pubsub = MagicMock()
+    mock_pubsub.get_message = MagicMock(side_effect=[None, GeneratorExit()])
+    mock_redis_conn = MagicMock()
+    mock_redis_conn.pubsub.return_value = mock_pubsub
+
+    with patch("redis.from_url", return_value=mock_redis_conn):
+        with asgi_client.stream(
+            "GET",
+            "/api/v1/stream/threats",
+            headers={"Authorization": "Bearer valid-token"},
+        ) as response:
+            assert response.status_code == 200
+            assert response.headers["content-type"].startswith("text/event-stream")
+            assert "no-cache" in response.headers.get("cache-control", "")
+
+
+def test_stream_threats_requires_auth(asgi_client):
+    response = asgi_client.get("/api/v1/stream/threats")
+
+    assert response.status_code == 401
+    assert response.json() == {"error": "Authorization token required"}
+
+
+def test_404_handler_matches_gateway_shape(asgi_client):
+    response = asgi_client.get("/api/v1/nonexistent-endpoint")
+
+    assert response.status_code == 404
+    assert response.json() == {
+        "error": "Endpoint not found",
+        "message": "The requested endpoint /api/v1/nonexistent-endpoint does not exist",
+    }
+
+
 def _request(
     *,
     headers: dict[str, str] | None = None,
