@@ -32,6 +32,7 @@ from copilot import Copilot  # noqa: E402
 from cost import resolve_token_budget  # noqa: E402
 from persistence import SessionStore  # noqa: E402
 from prompts import render  # noqa: E402
+from proposals import NonceGuard, ProposalError, ProposalSigner  # noqa: E402
 from safety import RateLimiter, check_request  # noqa: E402
 from tools import (  # noqa: E402
     SERVICE_TOKEN_HEADER,
@@ -92,6 +93,10 @@ def _rate_limiter() -> RateLimiter:
     return RateLimiter(
         redis_client, limit=int(os.environ.get("COPILOT_RATE_LIMIT", "20"))
     )
+
+
+def _nonce_guard() -> NonceGuard:
+    return NonceGuard(redis_client)
 
 
 def _gateway_authenticated() -> bool:
@@ -284,6 +289,35 @@ def copilot_propose():
     # Defensive: the draft must never be marked executed.
     assert proposal["executed"] is False
     return jsonify({"proposal": proposal}), 200
+
+
+@app.post("/copilot/confirm")
+def copilot_confirm():
+    """Validate a human-confirmed proposal: signature, TTL, and single use.
+
+    This endpoint NEVER executes enforcement. On success the frontend forwards
+    the validated proposal to the existing policy-orchestrator endpoint
+    (``forward_to``). The copilot is advisory-only by construction.
+    """
+    data = request.get_json(force=True, silent=True) or {}
+    proposal = data.get("proposal") or data
+    try:
+        ProposalSigner().verify(proposal)
+    except ProposalError as exc:
+        return jsonify({"error": str(exc)}), 400
+    if not _nonce_guard().consume(proposal["nonce"]):
+        return jsonify({"error": "proposal already confirmed"}), 409
+
+    auditor = CopilotAuditor(actor=_actor(), tenant_id=_tenant(), sink=audit_sink)
+    auditor.log_proposal({**proposal, "confirmed": True})
+
+    return jsonify(
+        {
+            "confirmed": True,
+            "proposal": proposal,
+            "forward_to": proposal.get("confirm_via"),
+        }
+    ), 200
 
 
 if __name__ == "__main__":

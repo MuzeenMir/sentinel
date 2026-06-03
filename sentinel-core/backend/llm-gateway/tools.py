@@ -18,6 +18,8 @@ import re
 import uuid
 from typing import Any, Optional
 
+from proposals import ProposalSigner
+
 SERVICE_TOKEN_HEADER = "X-Internal-Service-Token"
 HTTP_TIMEOUT = 5.0
 
@@ -220,9 +222,12 @@ class ToolRegistry:
                 f"{self.config['policy_url']}/enforcement (human confirmation required)"
             ),
         }
+        # Make the draft tamper-evident + single-use so it cannot be replayed or
+        # escalated between proposal and human confirmation.
+        signed = ProposalSigner().issue(draft)
         return {
             "tool": "propose_reversible_action",
             "ok": True,
-            "result": draft,
+            "result": signed,
             "record_ids": [proposal_id],
         }

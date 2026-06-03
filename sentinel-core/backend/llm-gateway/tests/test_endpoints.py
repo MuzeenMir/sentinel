@@ -221,6 +221,40 @@ def test_propose_rejects_entity_id_path_injection(app_module, monkeypatch):
     assert rv.status_code == 400
 
 
+def test_confirm_accepts_valid_then_rejects_replay(app_module, monkeypatch):
+    monkeypatch.setenv("COPILOT_PROPOSAL_SIGNING_KEY", "k")
+    monkeypatch.setattr(app_module, "audit_sink", lambda **k: None)
+    c = app_module.app.test_client()
+    pr = c.post(
+        "/copilot/propose",
+        json={"entity_id": "h1", "action_type": "block", "rationale": "r"},
+    )
+    proposal = pr.get_json()["proposal"]
+    assert proposal["signature"] and proposal["nonce"]
+
+    ok = c.post("/copilot/confirm", json={"proposal": proposal})
+    assert ok.status_code == 200
+    assert ok.get_json()["confirmed"] is True
+
+    replay = c.post("/copilot/confirm", json={"proposal": proposal})
+    assert replay.status_code == 409  # single-use nonce already consumed
+
+
+def test_confirm_rejects_tampered_proposal(app_module, monkeypatch):
+    monkeypatch.setenv("COPILOT_PROPOSAL_SIGNING_KEY", "k")
+    monkeypatch.setattr(app_module, "audit_sink", lambda **k: None)
+    c = app_module.app.test_client()
+    pr = c.post(
+        "/copilot/propose",
+        json={"entity_id": "h1", "action_type": "block", "rationale": "r"},
+    )
+    proposal = pr.get_json()["proposal"]
+    proposal["action_type"] = "quarantine"  # escalate after signing
+
+    bad = c.post("/copilot/confirm", json={"proposal": proposal})
+    assert bad.status_code == 400  # signature mismatch, never executes
+
+
 def test_rate_limit_key_ignores_spoofed_actor(app_module, monkeypatch):
     # Rotating the client-supplied 'actor' must NOT mint a fresh rate-limit
     # bucket, otherwise the limit is trivially bypassed.
