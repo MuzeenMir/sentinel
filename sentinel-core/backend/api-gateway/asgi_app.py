@@ -193,6 +193,136 @@ async def create_threat(request: Request) -> JSONResponse:
         )
 
 
+@asgi.get("/api/v1/alerts")
+def get_alerts(request: Request) -> JSONResponse:
+    """Get system alerts."""
+    current_user = require_current_user(request)
+    if isinstance(current_user, JSONResponse):
+        return current_user
+
+    params = dict(request.query_params)
+    params.pop("token", None)
+    try:
+        response = requests.get(
+            f"{flask_gateway.app.config['ALERT_SERVICE_URL']}/api/v1/alerts",
+            headers={"Authorization": request.headers.get("Authorization")},
+            params=params,
+        )
+        return JSONResponse(response.json(), status_code=response.status_code)
+    except requests.exceptions.RequestException:
+        return JSONResponse({"error": "Alert service unavailable"}, status_code=503)
+
+
+@asgi.post("/api/v1/alerts")
+async def create_alert(request: Request) -> JSONResponse:
+    """Create a new alert."""
+    current_user = require_role(request, "admin")
+    if isinstance(current_user, JSONResponse):
+        return current_user
+
+    try:
+        response = requests.post(
+            f"{flask_gateway.app.config['ALERT_SERVICE_URL']}/api/v1/alerts",
+            headers={"Authorization": request.headers.get("Authorization")},
+            json=await request.json(),
+        )
+        return JSONResponse(response.json(), status_code=response.status_code)
+    except requests.exceptions.RequestException:
+        return JSONResponse({"error": "Alert service unavailable"}, status_code=503)
+
+
+@asgi.get("/api/v1/alerts/stats")
+def get_alert_stats(request: Request) -> JSONResponse:
+    """Proxy alert stats."""
+    current_user = require_current_user(request)
+    if isinstance(current_user, JSONResponse):
+        return current_user
+
+    try:
+        response = requests.get(
+            f"{flask_gateway.app.config['ALERT_SERVICE_URL']}/api/v1/alerts/statistics",
+            headers={"Authorization": request.headers.get("Authorization")},
+            params=dict(request.query_params),
+        )
+        return JSONResponse(response.json(), status_code=response.status_code)
+    except requests.exceptions.RequestException:
+        return JSONResponse({"error": "Alert service unavailable"}, status_code=503)
+
+
+@asgi.get("/api/v1/alerts/{alert_id}")
+def get_alert(alert_id: int, request: Request) -> JSONResponse:
+    """Get specific alert details."""
+    current_user = require_current_user(request)
+    if isinstance(current_user, JSONResponse):
+        return current_user
+
+    try:
+        response = requests.get(
+            f"{flask_gateway.app.config['ALERT_SERVICE_URL']}/api/v1/alerts/{alert_id}",
+            headers={"Authorization": request.headers.get("Authorization")},
+        )
+        return JSONResponse(response.json(), status_code=response.status_code)
+    except requests.exceptions.RequestException:
+        return JSONResponse({"error": "Alert service unavailable"}, status_code=503)
+
+
+@asgi.post("/api/v1/alerts/{alert_id}/acknowledge")
+async def acknowledge_alert(alert_id: int, request: Request) -> JSONResponse:
+    """Acknowledge an alert."""
+    current_user = require_role(request, "admin")
+    if isinstance(current_user, JSONResponse):
+        return current_user
+
+    try:
+        response = requests.post(
+            f"{flask_gateway.app.config['ALERT_SERVICE_URL']}/api/v1/alerts/{alert_id}/acknowledge",
+            headers={"Authorization": request.headers.get("Authorization")},
+            json=await request.json(),
+        )
+        return JSONResponse(response.json(), status_code=response.status_code)
+    except requests.exceptions.RequestException:
+        return JSONResponse({"error": "Alert service unavailable"}, status_code=503)
+
+
+@asgi.post("/api/v1/alerts/{alert_id}/resolve")
+async def resolve_alert(alert_id: int, request: Request) -> JSONResponse:
+    """Resolve an alert."""
+    current_user = require_role(request, "admin")
+    if isinstance(current_user, JSONResponse):
+        return current_user
+
+    try:
+        response = requests.post(
+            f"{flask_gateway.app.config['ALERT_SERVICE_URL']}/api/v1/alerts/{alert_id}/resolve",
+            headers={"Authorization": request.headers.get("Authorization")},
+            json=await request.json(),
+            params=dict(request.query_params),
+            timeout=30,
+        )
+        return JSONResponse(response.json(), status_code=response.status_code)
+    except requests.exceptions.RequestException:
+        return JSONResponse({"error": "Backend service unavailable"}, status_code=503)
+
+
+@asgi.put("/api/v1/alerts/{alert_id}")
+async def update_alert(alert_id: int, request: Request) -> JSONResponse:
+    """Update alert status."""
+    current_user = require_role(request, "admin")
+    if isinstance(current_user, JSONResponse):
+        return current_user
+
+    try:
+        response = requests.put(
+            f"{flask_gateway.app.config['ALERT_SERVICE_URL']}/api/v1/alerts/{alert_id}",
+            headers={"Authorization": request.headers.get("Authorization")},
+            json=await request.json(),
+            timeout=30,
+        )
+        return JSONResponse(response.json(), status_code=response.status_code)
+    except requests.exceptions.RequestException:
+        return JSONResponse({"error": "Backend service unavailable"}, status_code=503)
+
+
 @asgi.get("/api/v1/test-rate-limit")
 @limiter.limit("5 per minute")
 def test_rate_limit(request: Request) -> dict[str, object]:

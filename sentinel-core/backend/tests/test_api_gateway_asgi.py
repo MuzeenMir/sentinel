@@ -282,6 +282,136 @@ def test_create_threat_viewer_forbidden(mock_post, asgi_client):
     assert response.json() == {"error": "Insufficient permissions"}
 
 
+@patch("requests.get")
+@patch("requests.post")
+def test_get_alerts_strips_query_token(mock_post, mock_get, asgi_client):
+    mock_post.side_effect = _auth_verify_ok
+    mock_get.return_value = _response(200, {"alerts": []})
+
+    response = asgi_client.get("/api/v1/alerts?token=valid-token&status=open")
+
+    assert response.status_code == 200
+    assert response.json() == {"alerts": []}
+    assert mock_get.call_args.args[0] == "http://alert-service:5002/api/v1/alerts"
+    assert mock_get.call_args.kwargs["params"] == {"status": "open"}
+
+
+@patch("requests.get")
+@patch("requests.post")
+def test_get_alert_detail(mock_post, mock_get, asgi_client):
+    mock_post.side_effect = _auth_verify_ok
+    mock_get.return_value = _response(200, {"id": 7, "severity": "high"})
+
+    response = asgi_client.get(
+        "/api/v1/alerts/7", headers={"Authorization": "Bearer valid-token"}
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"id": 7, "severity": "high"}
+    assert mock_get.call_args.args[0] == "http://alert-service:5002/api/v1/alerts/7"
+
+
+@patch("requests.post")
+def test_create_alert_admin_proxy(mock_post, asgi_client):
+    def side_effect(url, **kwargs):
+        if "/auth/verify" in url:
+            return _response(200, {"user": {"username": "admin", "role": "admin"}})
+        return _response(201, {"id": 10})
+
+    mock_post.side_effect = side_effect
+
+    response = asgi_client.post(
+        "/api/v1/alerts",
+        headers={"Authorization": "Bearer valid-token"},
+        json={"severity": "high"},
+    )
+
+    assert response.status_code == 201
+    assert response.json() == {"id": 10}
+    assert mock_post.call_args.args[0] == "http://alert-service:5002/api/v1/alerts"
+
+
+@patch("requests.post")
+def test_acknowledge_alert_admin_proxy(mock_post, asgi_client):
+    def side_effect(url, **kwargs):
+        if "/auth/verify" in url:
+            return _response(200, {"user": {"username": "admin", "role": "admin"}})
+        return _response(200, {"acknowledged": True})
+
+    mock_post.side_effect = side_effect
+
+    response = asgi_client.post(
+        "/api/v1/alerts/7/acknowledge",
+        headers={"Authorization": "Bearer valid-token"},
+        json={"note": "seen"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"acknowledged": True}
+    assert mock_post.call_args.args[0] == (
+        "http://alert-service:5002/api/v1/alerts/7/acknowledge"
+    )
+
+
+@patch("requests.post")
+def test_resolve_alert_admin_proxy(mock_post, asgi_client):
+    def side_effect(url, **kwargs):
+        if "/auth/verify" in url:
+            return _response(200, {"user": {"username": "admin", "role": "admin"}})
+        return _response(200, {"resolved": True})
+
+    mock_post.side_effect = side_effect
+
+    response = asgi_client.post(
+        "/api/v1/alerts/7/resolve",
+        headers={"Authorization": "Bearer valid-token"},
+        json={"resolution": "fixed"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"resolved": True}
+    assert mock_post.call_args.args[0] == (
+        "http://alert-service:5002/api/v1/alerts/7/resolve"
+    )
+
+
+@patch("requests.put")
+@patch("requests.post")
+def test_update_alert_admin_proxy(mock_post, mock_put, asgi_client):
+    mock_post.return_value = _response(
+        200, {"user": {"username": "admin", "role": "admin"}}
+    )
+    mock_put.return_value = _response(200, {"updated": True})
+
+    response = asgi_client.put(
+        "/api/v1/alerts/7",
+        headers={"Authorization": "Bearer valid-token"},
+        json={"status": "ignored"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"updated": True}
+    assert mock_put.call_args.args[0] == "http://alert-service:5002/api/v1/alerts/7"
+
+
+@patch("requests.get")
+@patch("requests.post")
+def test_get_alert_stats_proxy(mock_post, mock_get, asgi_client):
+    mock_post.side_effect = _auth_verify_ok
+    mock_get.return_value = _response(200, {"total_alerts": 3})
+
+    response = asgi_client.get(
+        "/api/v1/alerts/stats",
+        headers={"Authorization": "Bearer valid-token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"total_alerts": 3}
+    assert mock_get.call_args.args[0] == (
+        "http://alert-service:5002/api/v1/alerts/statistics"
+    )
+
+
 def _request(
     *,
     headers: dict[str, str] | None = None,
