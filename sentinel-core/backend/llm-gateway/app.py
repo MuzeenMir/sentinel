@@ -207,6 +207,7 @@ def copilot_summarize():
             "summary": result.text,
             "grounded": result.grounded,
             "citations": result.record_ids,
+            "citation_provenance": result.citation_provenance,
             "proposals": result.proposals,
         }
     ), 200
@@ -253,6 +254,7 @@ def copilot_ask():
             "answer": result.text,
             "grounded": result.grounded,
             "citations": result.record_ids,
+            "citation_provenance": result.citation_provenance,
             "proposals": result.proposals,
         }
     ), 200

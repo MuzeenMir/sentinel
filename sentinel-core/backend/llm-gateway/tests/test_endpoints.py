@@ -100,6 +100,8 @@ def test_summarize_returns_grounded_summary(app_module, monkeypatch):
     assert body["entity_id"] == "h1"
     assert "score:s1" in body["citations"]
     assert body["session_id"]
+    # C2: cited ids carry a verifiable source-hash fingerprint.
+    assert body["citation_provenance"]["score:s1"]
 
 
 def test_summarize_requires_entity_id(app_module, monkeypatch):

@@ -13,7 +13,13 @@ import json
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from grounding import repair_instruction, validate_grounding
+from grounding import GroundingResult, repair_instruction, validate_grounding
+from provenance import (
+    DEFAULT_FRESHNESS_SECONDS,
+    citation_hashes,
+    provenance_from_results,
+    verify_citations,
+)
 
 SAFE_FALLBACK = "I could not produce a grounded answer from the available data."
 
@@ -36,6 +42,7 @@ class CopilotResult:
     record_ids: list[str] = field(default_factory=list)
     proposals: list[dict] = field(default_factory=list)
     tool_results: list[dict] = field(default_factory=list)
+    citation_provenance: dict = field(default_factory=dict)
     usage: dict = field(default_factory=dict)
     iterations: int = 0
     repairs: int = 0
@@ -53,6 +60,7 @@ class Copilot:
         max_repairs: int = 1,
         max_total_tokens: int = 100_000,
         audit_hook: Any = None,
+        citation_freshness_seconds: int = DEFAULT_FRESHNESS_SECONDS,
     ):
         self.client = client
         self.registry = registry
@@ -60,6 +68,7 @@ class Copilot:
         self.max_iters = max_iters
         self.max_repairs = max_repairs
         self.max_total_tokens = max_total_tokens
+        self.citation_freshness_seconds = citation_freshness_seconds
         # audit_hook(event_type: str, payload: dict) -> None; no-op by default.
         self.audit_hook = audit_hook or (lambda event_type, payload: None)
 
@@ -158,11 +167,29 @@ class Copilot:
                 messages.append({"role": "user", "content": result_blocks})
                 continue
 
-            # Final natural-language answer: enforce grounding.
+            # Final natural-language answer: enforce grounding + citation
+            # provenance (cited ids must map to a real, fresh source record).
             gr = validate_grounding(resp.text, valid_ids)
+            provenance = provenance_from_results(tool_results)
             if gr.ok:
+                pv = verify_citations(
+                    gr.cited_ids,
+                    provenance,
+                    freshness_seconds=self.citation_freshness_seconds,
+                )
+                if not pv.ok:
+                    gr = GroundingResult(
+                        ok=False, cited_ids=gr.cited_ids, reason=pv.reason
+                    )
+            if gr.ok:
+                cited_provenance = citation_hashes(gr.cited_ids, provenance)
                 self.audit_hook(
-                    "answer", {"grounded": True, "record_ids": sorted(valid_ids)}
+                    "answer",
+                    {
+                        "grounded": True,
+                        "record_ids": sorted(valid_ids),
+                        "citation_provenance": cited_provenance,
+                    },
                 )
                 return CopilotResult(
                     text=resp.text,
@@ -170,6 +197,7 @@ class Copilot:
                     record_ids=sorted(valid_ids),
                     proposals=proposals,
                     tool_results=tool_results,
+                    citation_provenance=cited_provenance,
                     usage=usage_total,
                     iterations=iteration,
                     repairs=repairs,
