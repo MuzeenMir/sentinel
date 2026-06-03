@@ -412,6 +412,62 @@ def test_get_alert_stats_proxy(mock_post, mock_get, asgi_client):
     )
 
 
+@patch("requests.post")
+def test_get_config_returns_defaults(mock_post, asgi_client, _patch_redis_clients):
+    mock_post.return_value = _response(
+        200, {"user": {"username": "admin", "role": "admin"}}
+    )
+    _patch_redis_clients.get.return_value = None
+
+    response = asgi_client.get(
+        "/api/v1/config",
+        headers={"Authorization": "Bearer valid-token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["ai_engine"]["model_path"] == "/models/current_model.pkl"
+
+
+@patch("requests.post")
+def test_update_config_persists_admin_change(
+    mock_post, asgi_client, _patch_redis_clients
+):
+    mock_post.return_value = _response(
+        200, {"user": {"username": "admin", "role": "admin"}}
+    )
+    new_config = {
+        "ai_engine": {"model_path": "/custom"},
+        "firewall": {"max_rules": 100},
+        "monitoring": {"retention_days": 30},
+    }
+
+    response = asgi_client.put(
+        "/api/v1/config",
+        headers={"Authorization": "Bearer valid-token"},
+        json=new_config,
+    )
+
+    assert response.status_code == 200
+    assert "updated" in response.json()["message"].lower()
+    _patch_redis_clients.set.assert_called_once()
+
+
+@patch("requests.post")
+def test_update_config_requires_all_sections(mock_post, asgi_client):
+    mock_post.return_value = _response(
+        200, {"user": {"username": "admin", "role": "admin"}}
+    )
+
+    response = asgi_client.put(
+        "/api/v1/config",
+        headers={"Authorization": "Bearer valid-token"},
+        json={"ai_engine": {}, "firewall": {}},
+    )
+
+    assert response.status_code == 400
+    assert "monitoring" in response.json()["error"].lower()
+
+
 def _request(
     *,
     headers: dict[str, str] | None = None,

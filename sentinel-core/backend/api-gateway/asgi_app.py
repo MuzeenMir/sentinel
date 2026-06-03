@@ -323,6 +323,45 @@ async def update_alert(alert_id: int, request: Request) -> JSONResponse:
         return JSONResponse({"error": "Backend service unavailable"}, status_code=503)
 
 
+@asgi.get("/api/v1/config")
+def get_config(request: Request) -> JSONResponse:
+    """Get system configuration."""
+    current_user = require_role(request, "admin")
+    if isinstance(current_user, JSONResponse):
+        return current_user
+
+    try:
+        return JSONResponse(flask_gateway._load_config(), status_code=200)
+    except Exception:
+        return JSONResponse(
+            {"error": "Configuration retrieval failed"}, status_code=500
+        )
+
+
+@asgi.put("/api/v1/config")
+async def update_config(request: Request) -> JSONResponse:
+    """Update system configuration."""
+    current_user = require_role(request, "admin")
+    if isinstance(current_user, JSONResponse):
+        return current_user
+
+    try:
+        new_config = await request.json()
+        required_keys = ["ai_engine", "firewall", "monitoring"]
+        for key in required_keys:
+            if key not in new_config:
+                return JSONResponse(
+                    {"error": f"Missing configuration section: {key}"},
+                    status_code=400,
+                )
+        flask_gateway._save_config(new_config)
+        return JSONResponse(
+            {"message": "Configuration updated successfully"}, status_code=200
+        )
+    except Exception:
+        return JSONResponse({"error": "Configuration update failed"}, status_code=500)
+
+
 @asgi.get("/api/v1/test-rate-limit")
 @limiter.limit("5 per minute")
 def test_rate_limit(request: Request) -> dict[str, object]:
