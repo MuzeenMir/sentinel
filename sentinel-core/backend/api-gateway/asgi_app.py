@@ -89,6 +89,56 @@ def readyz() -> dict[str, str]:
     return {"status": "ready"}
 
 
+@asgi.post("/api/v1/auth/verify")
+def auth_verify(request: Request) -> JSONResponse:
+    """Verify authentication token through the auth service."""
+    token = request.headers.get("Authorization", "").replace("Bearer ", "")
+    try:
+        response = requests.post(
+            f"{flask_gateway.app.config['AUTH_SERVICE_URL']}/api/v1/auth/verify",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=5,
+        )
+        return JSONResponse(response.json(), status_code=response.status_code)
+    except requests.exceptions.RequestException:
+        return JSONResponse({"error": "Auth service unavailable"}, status_code=503)
+
+
+@asgi.api_route(
+    "/api/v1/auth/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE"],
+)
+async def auth_proxy(path: str, request: Request) -> JSONResponse:
+    """Proxy authentication requests to auth service."""
+    if path.startswith("/") or not flask_gateway._AUTH_PATH_RE.fullmatch(path):
+        return JSONResponse({"error": "Invalid path"}, status_code=400)
+
+    auth_url = f"{flask_gateway.app.config['AUTH_SERVICE_URL']}/api/v1/auth/{path}"
+    headers = {}
+    auth_header = request.headers.get("Authorization")
+    if auth_header:
+        headers["Authorization"] = auth_header
+
+    try:
+        if request.method == "GET":
+            params = dict(request.query_params)
+            params.pop("token", None)
+            response = requests.get(auth_url, params=params, headers=headers)
+        elif request.method == "POST":
+            response = requests.post(
+                auth_url, json=await request.json(), headers=headers
+            )
+        elif request.method == "PUT":
+            response = requests.put(
+                auth_url, json=await request.json(), headers=headers
+            )
+        else:
+            response = requests.delete(auth_url, headers=headers)
+        return JSONResponse(response.json(), status_code=response.status_code)
+    except requests.exceptions.RequestException:
+        return JSONResponse({"error": "Auth service unavailable"}, status_code=503)
+
+
 @asgi.get("/api/v1/test-rate-limit")
 @limiter.limit("5 per minute")
 def test_rate_limit(request: Request) -> dict[str, object]:

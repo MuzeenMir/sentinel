@@ -153,6 +153,80 @@ def test_rate_limit_exceeded_returns_429(asgi_client):
     assert "rate limit" in response.json()["error"].lower()
 
 
+@patch("requests.post")
+def test_auth_login_proxy(mock_post, asgi_client):
+    mock_post.return_value = _response(
+        200, {"token": "jwt-token", "user": {"username": "admin"}}
+    )
+
+    response = asgi_client.post(
+        "/api/v1/auth/login",
+        json={"username": "admin", "password": "secret"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"token": "jwt-token", "user": {"username": "admin"}}
+    assert mock_post.call_args.args[0] == "http://auth-service:5000/api/v1/auth/login"
+    assert mock_post.call_args.kwargs["json"] == {
+        "username": "admin",
+        "password": "secret",
+    }
+
+
+@patch("requests.get")
+def test_auth_get_proxy_strips_query_token_and_forwards_header(mock_get, asgi_client):
+    mock_get.return_value = _response(200, {"users": []})
+
+    response = asgi_client.get(
+        "/api/v1/auth/users?token=secret&foo=bar",
+        headers={"Authorization": "Bearer valid-token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"users": []}
+    assert mock_get.call_args.args[0] == "http://auth-service:5000/api/v1/auth/users"
+    assert mock_get.call_args.kwargs["params"] == {"foo": "bar"}
+    assert mock_get.call_args.kwargs["headers"] == {
+        "Authorization": "Bearer valid-token"
+    }
+
+
+@patch("requests.post")
+def test_auth_verify_proxy(mock_post, asgi_client):
+    mock_post.return_value = _response(
+        200, {"user": {"username": "u", "role": "admin"}}
+    )
+
+    response = asgi_client.post(
+        "/api/v1/auth/verify",
+        headers={"Authorization": "Bearer valid-token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"user": {"username": "u", "role": "admin"}}
+    assert mock_post.call_args.args[0] == (
+        "http://auth-service:5000/api/v1/auth/verify"
+    )
+    assert mock_post.call_args.kwargs["headers"] == {
+        "Authorization": "Bearer valid-token"
+    }
+    assert mock_post.call_args.kwargs["timeout"] == 5
+
+
+@patch(
+    "requests.post",
+    side_effect=_requests_lib.exceptions.ConnectionError("conn refused"),
+)
+def test_auth_proxy_service_unavailable(_post, asgi_client):
+    response = asgi_client.post(
+        "/api/v1/auth/login",
+        json={"username": "admin", "password": "secret"},
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {"error": "Auth service unavailable"}
+
+
 def _request(
     *,
     headers: dict[str, str] | None = None,
