@@ -23,6 +23,13 @@ def test_policy_orchestrator_image_copies_audit_logger_shared_module():
     assert "audit_logger.py" in dockerfile
 
 
+def test_api_gateway_container_starts_fastapi_asgi_runtime():
+    dockerfile = _read(BACKEND / "api-gateway" / "Dockerfile")
+
+    assert 'CMD ["uvicorn", "asgi_app:asgi"' in dockerfile
+    assert "app:app" not in dockerfile
+
+
 def test_data_collector_uses_python312_compatible_kafka_python():
     requirements = _read(BACKEND / "data-collector" / "requirements.txt")
 
