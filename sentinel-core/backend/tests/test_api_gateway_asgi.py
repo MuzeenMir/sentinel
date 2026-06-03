@@ -565,6 +565,483 @@ def test_404_handler_matches_gateway_shape(asgi_client):
     }
 
 
+@patch("requests.get")
+@patch("requests.post")
+def test_get_threat_detail_proxy(mock_post, mock_get, asgi_client):
+    mock_post.side_effect = _auth_verify_ok
+    mock_get.return_value = _response(200, {"id": 42, "type": "brute_force"})
+
+    response = asgi_client.get(
+        "/api/v1/threats/42",
+        headers={"Authorization": "Bearer valid-token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"id": 42, "type": "brute_force"}
+    assert mock_get.call_args.args[0] == "http://data-collector:5001/api/v1/threats/42"
+
+
+@patch("requests.post")
+def test_create_policy_validates_required_fields(mock_post, asgi_client):
+    mock_post.return_value = _response(
+        200, {"user": {"username": "admin", "role": "admin"}}
+    )
+
+    response = asgi_client.post(
+        "/api/v1/policies",
+        headers={"Authorization": "Bearer valid-token"},
+        json={"name": "incomplete"},
+    )
+
+    assert response.status_code == 400
+    assert "missing required fields" in response.json()["error"].lower()
+
+
+@patch("requests.post")
+def test_create_policy_rejects_non_json(mock_post, asgi_client):
+    mock_post.return_value = _response(
+        200, {"user": {"username": "admin", "role": "admin"}}
+    )
+
+    response = asgi_client.post(
+        "/api/v1/policies",
+        headers={
+            "Authorization": "Bearer valid-token",
+            "Content-Type": "text/plain",
+        },
+        content="not json",
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {"error": "Content-Type must be application/json"}
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "expected_url", "expected_status", "body"),
+    [
+        (
+            "GET",
+            "/api/v1/policies",
+            "http://policy-orchestrator:5004/api/v1/policies",
+            200,
+            None,
+        ),
+        (
+            "GET",
+            "/api/v1/policies/p1",
+            "http://policy-orchestrator:5004/api/v1/policies/p1",
+            200,
+            None,
+        ),
+        (
+            "PUT",
+            "/api/v1/policies/p1",
+            "http://policy-orchestrator:5004/api/v1/policies/p1",
+            200,
+            {"action": "deny"},
+        ),
+        (
+            "DELETE",
+            "/api/v1/policies/p1",
+            "http://policy-orchestrator:5004/api/v1/policies/p1",
+            204,
+            None,
+        ),
+        (
+            "GET",
+            "/api/v1/frameworks",
+            "http://compliance-engine:5007/api/v1/frameworks",
+            200,
+            None,
+        ),
+        (
+            "GET",
+            "/api/v1/frameworks/cis",
+            "http://compliance-engine:5007/api/v1/frameworks/cis",
+            200,
+            None,
+        ),
+        (
+            "POST",
+            "/api/v1/assess",
+            "http://compliance-engine:5007/api/v1/assess",
+            200,
+            {"framework": "CIS"},
+        ),
+        (
+            "POST",
+            "/api/v1/gap-analysis",
+            "http://compliance-engine:5007/api/v1/gap-analysis",
+            200,
+            {},
+        ),
+        (
+            "POST",
+            "/api/v1/reports",
+            "http://compliance-engine:5007/api/v1/reports",
+            200,
+            {},
+        ),
+        (
+            "GET",
+            "/api/v1/reports/history",
+            "http://compliance-engine:5007/api/v1/reports/history",
+            200,
+            None,
+        ),
+        (
+            "POST",
+            "/api/v1/map-policy",
+            "http://compliance-engine:5007/api/v1/map-policy",
+            200,
+            {"policy_id": "p1"},
+        ),
+        (
+            "POST",
+            "/api/v1/explain/detection",
+            "http://xai-service:5006/api/v1/explain/detection",
+            200,
+            {"detection_id": 1},
+        ),
+        (
+            "POST",
+            "/api/v1/explain/policy",
+            "http://xai-service:5006/api/v1/explain/policy",
+            200,
+            {"policy_id": "p1"},
+        ),
+        (
+            "GET",
+            "/api/v1/audit-trail",
+            "http://xai-service:5006/api/v1/audit-trail",
+            200,
+            None,
+        ),
+        (
+            "POST",
+            "/api/v1/report/compliance",
+            "http://xai-service:5006/api/v1/report/compliance",
+            200,
+            {},
+        ),
+        (
+            "GET",
+            "/api/v1/xai/statistics",
+            "http://xai-service:5006/api/v1/statistics",
+            200,
+            None,
+        ),
+        (
+            "POST",
+            "/api/v1/detect",
+            "http://ai-engine:5003/api/v1/detect",
+            200,
+            {"packet": "sample"},
+        ),
+        (
+            "POST",
+            "/api/v1/detect/batch",
+            "http://ai-engine:5003/api/v1/detect/batch",
+            200,
+            {"packets": []},
+        ),
+        (
+            "POST",
+            "/api/v1/decide",
+            "http://drl-engine:5005/api/v1/decide",
+            200,
+            {"state": {}},
+        ),
+        (
+            "POST",
+            "/api/v1/decide/batch",
+            "http://drl-engine:5005/api/v1/decide/batch",
+            200,
+            {"states": []},
+        ),
+        (
+            "GET",
+            "/api/v1/action-space",
+            "http://drl-engine:5005/api/v1/action-space",
+            200,
+            None,
+        ),
+        (
+            "GET",
+            "/api/v1/state-space",
+            "http://drl-engine:5005/api/v1/state-space",
+            200,
+            None,
+        ),
+        (
+            "GET",
+            "/api/v1/hardening/scan",
+            "http://hardening-service:5011/api/v1/hardening/scan",
+            200,
+            None,
+        ),
+        (
+            "POST",
+            "/api/v1/hardening/scan",
+            "http://hardening-service:5011/api/v1/hardening/scan",
+            200,
+            {},
+        ),
+        (
+            "GET",
+            "/api/v1/hardening/posture",
+            "http://hardening-service:5011/api/v1/hardening/posture",
+            200,
+            None,
+        ),
+        (
+            "GET",
+            "/api/v1/hardening/remediations",
+            "http://hardening-service:5011/api/v1/hardening/remediations",
+            200,
+            None,
+        ),
+        (
+            "POST",
+            "/api/v1/hardening/remediate/check-1",
+            "http://hardening-service:5011/api/v1/hardening/remediate/check-1",
+            200,
+            {},
+        ),
+        (
+            "GET",
+            "/api/v1/hids/events",
+            "http://hids-agent:5010/api/v1/hids/events",
+            200,
+            None,
+        ),
+        (
+            "GET",
+            "/api/v1/hids/alerts",
+            "http://hids-agent:5010/api/v1/hids/alerts",
+            200,
+            None,
+        ),
+        (
+            "GET",
+            "/api/v1/hids/status",
+            "http://hids-agent:5010/api/v1/hids/status",
+            200,
+            None,
+        ),
+        (
+            "GET",
+            "/api/v1/admin/users",
+            "http://auth-service:5000/api/v1/auth/users",
+            200,
+            None,
+        ),
+        (
+            "PUT",
+            "/api/v1/admin/users/1",
+            "http://auth-service:5000/api/v1/auth/users/1",
+            200,
+            {"role": "viewer"},
+        ),
+        (
+            "GET",
+            "/api/v1/traffic",
+            "http://data-collector:5001/api/v1/traffic",
+            200,
+            None,
+        ),
+        (
+            "GET",
+            "/api/v1/tenants",
+            "http://auth-service:5000/api/v1/tenants",
+            200,
+            None,
+        ),
+        (
+            "POST",
+            "/api/v1/tenants",
+            "http://auth-service:5000/api/v1/tenants",
+            200,
+            {"name": "tenant-a"},
+        ),
+        (
+            "GET",
+            "/api/v1/tenants/1",
+            "http://auth-service:5000/api/v1/tenants/1",
+            200,
+            None,
+        ),
+        (
+            "PUT",
+            "/api/v1/tenants/1",
+            "http://auth-service:5000/api/v1/tenants/1",
+            200,
+            {"status": "active"},
+        ),
+        (
+            "DELETE",
+            "/api/v1/tenants/1",
+            "http://auth-service:5000/api/v1/tenants/1",
+            204,
+            None,
+        ),
+        (
+            "GET",
+            "/api/v1/integrations",
+            "http://alert-service:5002/api/v1/integrations",
+            200,
+            None,
+        ),
+        (
+            "POST",
+            "/api/v1/integrations",
+            "http://alert-service:5002/api/v1/integrations",
+            200,
+            {"kind": "siem"},
+        ),
+        (
+            "POST",
+            "/api/v1/integrations/test",
+            "http://alert-service:5002/api/v1/integrations/test",
+            200,
+            {"id": 1},
+        ),
+    ],
+)
+@patch("requests.delete")
+@patch("requests.put")
+@patch("requests.get")
+@patch("requests.post")
+def test_remaining_proxy_routes(
+    mock_post,
+    mock_get,
+    mock_put,
+    mock_delete,
+    method,
+    path,
+    expected_url,
+    expected_status,
+    body,
+    asgi_client,
+):
+    def post_side_effect(url, **kwargs):
+        if "/auth/verify" in url:
+            return _response(200, {"user": {"username": "admin", "role": "admin"}})
+        return _response(expected_status, {"ok": True})
+
+    mock_post.side_effect = post_side_effect
+    mock_get.return_value = _response(expected_status, {"ok": True})
+    mock_put.return_value = _response(expected_status, {"ok": True})
+    mock_delete.return_value = _response(expected_status, {}, content=b"")
+
+    response = asgi_client.request(
+        method,
+        path,
+        headers={"Authorization": "Bearer valid-token"},
+        json=body,
+    )
+
+    assert response.status_code == expected_status
+    called_mock = {
+        "GET": mock_get,
+        "POST": mock_post,
+        "PUT": mock_put,
+        "DELETE": mock_delete,
+    }[method]
+    if method == "POST":
+        assert called_mock.call_args_list[-1].args[0] == expected_url
+    else:
+        assert called_mock.call_args.args[0] == expected_url
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("GET", "/api/v1/admin/users"),
+        ("PUT", "/api/v1/admin/users/1"),
+        ("POST", "/api/v1/tenants"),
+        ("PUT", "/api/v1/tenants/1"),
+        ("DELETE", "/api/v1/tenants/1"),
+    ],
+)
+@patch("requests.post")
+def test_admin_and_tenant_mutations_require_admin(mock_post, method, path, asgi_client):
+    mock_post.return_value = _response(
+        200, {"user": {"username": "viewer", "role": "viewer"}}
+    )
+
+    response = asgi_client.request(
+        method,
+        path,
+        headers={"Authorization": "Bearer valid-token"},
+        json={"role": "admin"} if method in {"POST", "PUT"} else None,
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {"error": "Insufficient permissions"}
+
+
+@patch.object(asgi_app.flask_gateway, "query_audit_log")
+@patch("requests.post")
+def test_audit_events_reads_local_audit_log(mock_post, mock_query, asgi_client):
+    mock_post.side_effect = _auth_verify_ok
+    mock_query.return_value = [{"id": "evt-1"}]
+
+    response = asgi_client.get(
+        "/api/v1/audit/events?category=login&limit=5000&offset=2",
+        headers={"Authorization": "Bearer valid-token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"events": [{"id": "evt-1"}], "count": 1}
+    assert mock_query.call_args.kwargs["category"] == "login"
+    assert mock_query.call_args.kwargs["limit"] == 1000
+    assert mock_query.call_args.kwargs["offset"] == 2
+
+
+@patch.object(asgi_app.flask_gateway, "get_audit_stats", return_value={"total": 3})
+@patch("requests.post")
+def test_audit_stats_reads_local_stats(mock_post, _stats, asgi_client):
+    mock_post.side_effect = _auth_verify_ok
+
+    response = asgi_client.get(
+        "/api/v1/audit/stats",
+        headers={"Authorization": "Bearer valid-token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"total": 3}
+
+
+@patch.object(asgi_app.flask_gateway, "verify_integrity")
+@patch("requests.post")
+def test_audit_verify_checks_record_integrity(mock_post, mock_verify, asgi_client):
+    mock_post.side_effect = _auth_verify_ok
+    mock_verify.return_value = True
+
+    response = asgi_client.post(
+        "/api/v1/audit/verify",
+        headers={"Authorization": "Bearer valid-token"},
+        json={"records": [{"id": "evt-1"}]},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"results": [{"id": "evt-1", "valid": True}], "total": 1}
+
+
+@patch("requests.post")
+def test_audit_categories_lists_categories(mock_post, asgi_client):
+    mock_post.side_effect = _auth_verify_ok
+
+    response = asgi_client.get(
+        "/api/v1/audit/categories",
+        headers={"Authorization": "Bearer valid-token"},
+    )
+
+    assert response.status_code == 200
+    assert "categories" in response.json()
+
+
 def _request(
     *,
     headers: dict[str, str] | None = None,
@@ -582,10 +1059,11 @@ def _request(
     return request
 
 
-def _response(status_code=200, json_data=None):
+def _response(status_code=200, json_data=None, content=b"ok"):
     response = MagicMock()
     response.status_code = status_code
     response.json.return_value = json_data or {}
+    response.content = content
     return response
 
 
