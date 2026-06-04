@@ -1,56 +1,73 @@
 import { api } from "./api";
 
 export interface CopilotProposal {
-    proposal_id: string;
-    executed: boolean;
-    reversible: boolean;
-    ttl_seconds: number;
-    entity_id?: string;
-    action_type?: string;
-    rationale?: string;
-    confirm_via?: string;
+  proposal_id: string;
+  executed: boolean;
+  reversible: boolean;
+  ttl_seconds: number;
+  entity_id?: string;
+  action_type?: string;
+  rationale?: string;
+  confirm_via?: string;
+  // Tamper-evidence (backend C4): proposals are signed + single-use + TTL.
+  nonce?: string;
+  issued_at?: number;
+  signature?: string;
 }
 
 export interface SummarizeResponse {
-    session_id: string;
-    entity_id: string;
-    summary: string;
-    grounded: boolean;
-    citations: string[];
-    proposals: CopilotProposal[];
+  session_id: string;
+  entity_id: string;
+  summary: string;
+  grounded: boolean;
+  citations: string[];
+  // Verifiable citation provenance (backend C2): record id -> source hash.
+  citation_provenance: Record<string, string>;
+  proposals: CopilotProposal[];
 }
 
 export interface AskResponse {
-    session_id: string;
-    answer: string;
-    grounded: boolean;
-    citations: string[];
-    proposals: CopilotProposal[];
+  session_id: string;
+  answer: string;
+  grounded: boolean;
+  citations: string[];
+  citation_provenance: Record<string, string>;
+  proposals: CopilotProposal[];
 }
 
-const unwrap = <T,>(promise: Promise<{ data: T }>): Promise<T> =>
-    promise.then((response) => response.data);
+export interface ConfirmResponse {
+  confirmed: boolean;
+  proposal: CopilotProposal;
+  forward_to?: string;
+}
 
-export const summarizeIncident = (entityId: string): Promise<SummarizeResponse> =>
-    unwrap(api.post("/copilot/summarize", { entity_id: entityId }));
-
-export const askCopilot = (
-    sessionId: string,
-    question: string,
-): Promise<AskResponse> =>
-    unwrap(api.post("/copilot/ask", { session_id: sessionId, question }));
-
-export const proposeAction = (
+/**
+ * Analyst-copilot client. The copilot is advisory only: it summarizes, answers
+ * with citations, and *proposes* reversible enforcement. A proposal is only
+ * ever executed when a human explicitly confirms it via `confirm` (which the
+ * backend verifies + audits but does not execute — the human-initiated call to
+ * the policy-orchestrator does).
+ */
+export const copilotApi = {
+  summarize: (entityId: string) =>
+    api.post<SummarizeResponse>("/copilot/summarize", { entity_id: entityId }),
+  ask: (sessionId: string, question: string) =>
+    api.post<AskResponse>("/copilot/ask", {
+      session_id: sessionId,
+      question,
+    }),
+  propose: (
     entityId: string,
     actionType: string,
     rationale: string,
     ttlSeconds = 900,
-): Promise<{ proposal: CopilotProposal }> =>
-    unwrap(
-        api.post("/copilot/propose", {
-            entity_id: entityId,
-            action_type: actionType,
-            rationale,
-            ttl_seconds: ttlSeconds,
-        }),
-    );
+  ) =>
+    api.post<{ proposal: CopilotProposal }>("/copilot/propose", {
+      entity_id: entityId,
+      action_type: actionType,
+      rationale,
+      ttl_seconds: ttlSeconds,
+    }),
+  confirm: (proposal: CopilotProposal) =>
+    api.post<ConfirmResponse>("/copilot/confirm", { proposal }),
+};

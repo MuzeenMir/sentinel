@@ -19,6 +19,7 @@ import {
   Building2,
   ShieldCheck,
   Plug,
+  Sparkles,
 } from "lucide-react";
 import { useAuthStore } from "../store/authStore";
 
@@ -26,6 +27,7 @@ const navigation = [
   { name: "Dashboard", to: "/", icon: LayoutDashboard },
   { name: "Threats", to: "/threats", icon: Shield },
   { name: "Alerts", to: "/alerts", icon: Bell },
+  { name: "Copilot", to: "/copilot", icon: Sparkles },
   { name: "Policies", to: "/policies", icon: FileText },
   { name: "Compliance", to: "/compliance", icon: CheckCircle },
   { name: "Hardening", to: "/hardening", icon: Lock },
