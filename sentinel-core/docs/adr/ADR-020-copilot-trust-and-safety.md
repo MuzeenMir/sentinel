@@ -24,7 +24,7 @@ and — honestly — what is not yet shipped.
 | **Copilot is inside the ledger** | every prompt (metadata only, no PII), completion, tool-call, proposal, and confirm emits an audit event; cost + cache-hit recorded with the answer | `copilot.py`, `audit.py`, `telemetry.py` | ✅ shipped |
 | **Observability** | OTel spans per model/tool call (no-op safe without an exporter) | `telemetry.py` | ✅ shipped |
 | **Inference residency seam** | provider/region/base_url config; on-prem adapter interface | `residency.py` | ✅ shipped (see ADR-021) |
-| **Tenant isolation of copilot state** | per-tenant scoping of sessions/messages/proposals | `persistence.py` | ⚠️ **partial** — see below |
+| **Tenant isolation of copilot state** | every session/message/proposal Redis key is namespaced by the *authenticated* tenant, bound to the store and re-derived from the request (never the client-supplied id); a foreign tenant's id resolves into its own keyspace and misses | `persistence.py` | ✅ shipped (interim Redis keyspace; durable RLS-PG store still owed — see below) |
 | **Adversarial red-team CI gate** | injection / jailbreak / tool-poisoning / citation-forgery / SSRF-arg corpus run fail-closed in CI with published residual | `redteam.py`, `evals/redteam/*.jsonl`, `llm-gateway-redteam.yml` | ✅ shipped |
 
 ## Honest claim boundaries (do NOT over-claim)
@@ -37,12 +37,17 @@ and — honestly — what is not yet shipped.
   this measures *defense coverage of known attack classes*, **not** a
   hallucination rate on free-form generation — expand the corpus as new vectors
   are found, and do not represent 0 residual as "cannot hallucinate."
-- **Copilot session state is Redis-only by design today.** Moving it to Postgres
-  (for RLS tenant isolation) trips the `audit-schema-guard` required check, which
-  needs a genuine independent (Marcus, different-model) review of the migration
-  that must not be fabricated (see [[project_two-person-rule-not-github-enforced]]).
-  So full RLS isolation (Plan CLAUDE C3) is **gated on that review**, or ships as
-  interim Redis keyspace tenant-scoping first.
+- **Copilot session state is Redis-only by design today, now tenant-scoped.**
+  Each key is namespaced by the authenticated tenant, so a leaked session id
+  cannot be replayed by a different tenant (the lookup lands in a different
+  keyspace and misses; the stored tenant is also re-checked). This closes the
+  cross-tenant *read* gap in the interim. It is **not** the durable, Postgres
+  `RLS`-enforced store — moving to Postgres trips the `audit-schema-guard`
+  required check, which needs a genuine independent (Marcus, different-model)
+  review of the migration that must not be fabricated (see
+  [[project_two-person-rule-not-github-enforced]]). So the durable RLS isolation
+  (full Plan CLAUDE C3) remains **gated on that review**; the Redis keyspace
+  scoping ships now as the interim mitigation.
 - **Secret encryption is a single app-layer KEK.** Per-tenant DEK / KMS is in
   flight separately (Plan KAI K3); the copilot does not yet benefit from it.
 - **The audit ledger is daily signed Merkle roots, not a per-event hash chain**
@@ -51,9 +56,9 @@ and — honestly — what is not yet shipped.
 
 ## Remaining integration / follow-ups
 
-- Land copilot tenant isolation (C3) — either a Marcus-reviewed RLS migration or
-  interim Redis keyspace scoping (gated on the `audit-schema-guard` two-person
-  review).
+- Copilot tenant isolation (C3) — interim Redis keyspace scoping **shipped**;
+  the durable Marcus-reviewed RLS-PG migration remains owed (gated on the
+  `audit-schema-guard` two-person review).
 - **Gateway proxy route:** the admin-console now calls `/api/v1/copilot/*`; the
   api-gateway must proxy those to the `llm-gateway` `/copilot/*` endpoints,
   injecting the internal service token + verified `X-Actor`/`X-Tenant-Id`. The
@@ -67,9 +72,9 @@ and — honestly — what is not yet shipped.
 - Positive: the copilot's safety-critical invariants (untrusted input, verifiable
   grounding, no auto-exec, full audit) are enforced in code and tested.
 - Positive: every gap above is explicit, so trust claims stay honest.
-- Negative: until the red-team gate and RLS isolation land, the copilot is
-  "advisory, grounded, audited" — not yet "adversarially measured" or
-  "RLS-tenant-isolated."
+- Negative: copilot state is tenant-scoped in Redis but not yet behind Postgres
+  `RLS`; until the durable migration lands (Marcus-gated), the isolation is
+  enforced in application key-derivation, not at the database role level.
 
 ## References
 

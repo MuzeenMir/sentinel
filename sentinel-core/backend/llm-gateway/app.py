@@ -86,8 +86,11 @@ def make_copilot_context(actor: str, tenant_id=None) -> SimpleNamespace:
     return SimpleNamespace(copilot=copilot, registry=registry, auditor=auditor)
 
 
-def _session_store() -> SessionStore:
-    return SessionStore(redis_client)
+def _session_store(tenant_id=None) -> SessionStore:
+    """Session store bound to the authenticated tenant so all copilot state is
+    namespaced per tenant (C3 interim isolation). ``tenant_id`` is derived only
+    from the verified gateway context, never from the client."""
+    return SessionStore(redis_client, tenant_id=tenant_id)
 
 
 def _rate_limiter() -> RateLimiter:
@@ -200,7 +203,7 @@ def copilot_summarize():
         prefetched=prefetched,
     )
 
-    store = _session_store()
+    store = _session_store(_tenant())
     session_id = store.create_session(entity_id)
     store.append_message(session_id, "user", f"summarize {entity_id}")
     store.append_message(session_id, "assistant", result.text)
@@ -234,7 +237,7 @@ def copilot_ask():
     if not allowed:
         return jsonify({"error": reason}), 400
 
-    store = _session_store()
+    store = _session_store(_tenant())
     session = store.get_session(session_id)
     if session is None:
         return jsonify({"error": "unknown session"}), 404

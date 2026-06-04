@@ -40,3 +40,41 @@ def test_save_and_get_proposals(fake_redis):
     proposals = store.get_proposals(sid)
     assert len(proposals) == 1
     assert proposals[0]["executed"] is False
+
+
+def test_sessions_are_tenant_isolated(fake_redis):
+    # C3: a session minted under tenant-a is invisible to tenant-b even with the
+    # exact token — the tenant is bound to the store, never read from the id.
+    a = SessionStore(fake_redis, tenant_id="tenant-a")
+    b = SessionStore(fake_redis, tenant_id="tenant-b")
+    sid = a.create_session(entity_id="host-1")
+
+    assert a.get_session(sid)["entity_id"] == "host-1"
+    assert a.exists(sid) is True
+    assert b.get_session(sid) is None
+    assert b.exists(sid) is False
+
+
+def test_messages_and_proposals_are_tenant_isolated(fake_redis):
+    a = SessionStore(fake_redis, tenant_id="tenant-a")
+    b = SessionStore(fake_redis, tenant_id="tenant-b")
+    sid = a.create_session("h1")
+    a.append_message(sid, "user", "secret")
+    a.save_proposal(sid, {"executed": False})
+
+    # Cross-tenant reads see nothing.
+    assert b.get_messages(sid) == []
+    assert b.get_proposals(sid) == []
+    # Cross-tenant writes cannot leak into tenant-a's namespace.
+    b.append_message(sid, "user", "intruder")
+    assert [m["content"] for m in a.get_messages(sid)] == ["secret"]
+
+
+def test_token_extraction_ignores_embedded_tenant(fake_redis):
+    # Handing tenant-b a fully-qualified tenant-a key still resolves into
+    # tenant-b's own namespace and misses.
+    a = SessionStore(fake_redis, tenant_id="tenant-a")
+    token = a.create_session("h1")
+    forged = f"copilot:t:tenant-a:session:{token}"
+    b = SessionStore(fake_redis, tenant_id="tenant-b")
+    assert b.get_session(forged) is None

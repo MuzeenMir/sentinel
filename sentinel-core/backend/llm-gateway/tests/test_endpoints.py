@@ -186,6 +186,34 @@ def test_ask_uses_session_and_tools(app_module, monkeypatch, fake_redis):
     assert "audit:e9" in body["citations"]
 
 
+def test_ask_is_tenant_isolated(app_module, monkeypatch, fake_redis):
+    # C3: a session created under tenant-a cannot be reached by tenant-b through
+    # the gateway, even with the real session id.
+    registry = FakeRegistry({})
+    client = FakeClient([_resp(text="answer")])
+    monkeypatch.setenv("INTERNAL_SERVICE_TOKEN", "svc-tok")
+    _install(app_module, monkeypatch, client, registry)
+    sid = SessionStore(fake_redis, tenant_id="tenant-a").create_session("h1")
+
+    def hdr(tenant):
+        return {"X-Internal-Service-Token": "svc-tok", "X-Tenant-Id": tenant}
+
+    c = app_module.app.test_client()
+    other = c.post(
+        "/copilot/ask",
+        json={"session_id": sid, "question": "what happened?"},
+        headers=hdr("tenant-b"),
+    )
+    assert other.status_code == 404  # foreign tenant — session not visible
+
+    owner = c.post(
+        "/copilot/ask",
+        json={"session_id": sid, "question": "what happened?"},
+        headers=hdr("tenant-a"),
+    )
+    assert owner.status_code == 200  # owning tenant resolves its own session
+
+
 def test_ask_unknown_session_404(app_module, monkeypatch):
     registry = FakeRegistry({})
     client = FakeClient([_resp(text="x")])
