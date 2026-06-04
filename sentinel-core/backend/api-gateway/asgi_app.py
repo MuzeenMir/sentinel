@@ -921,7 +921,7 @@ async def integrations_test(request: Request) -> Response:
 
 @asgi.get("/api/v1/audit/events")
 def get_audit_events(request: Request) -> JSONResponse:
-    current_user = require_current_user(request)
+    current_user = require_role(request, "admin")
     if isinstance(current_user, JSONResponse):
         return current_user
 
@@ -932,21 +932,25 @@ def get_audit_events(request: Request) -> JSONResponse:
         actor=request.query_params.get("actor"),
         limit=min(_query_int(request, "limit", 100), 1000),
         offset=_query_int(request, "offset", 0),
+        tenant_id=current_user.get("tenant_id"),
     )
     return JSONResponse({"events": records, "count": len(records)}, status_code=200)
 
 
 @asgi.get("/api/v1/audit/stats")
 def audit_statistics(request: Request) -> JSONResponse:
-    current_user = require_current_user(request)
+    current_user = require_role(request, "admin")
     if isinstance(current_user, JSONResponse):
         return current_user
-    return JSONResponse(core.get_audit_stats(), status_code=200)
+    return JSONResponse(
+        core.get_audit_stats(tenant_id=current_user.get("tenant_id")),
+        status_code=200,
+    )
 
 
 @asgi.post("/api/v1/audit/verify")
 async def audit_verify_integrity(request: Request) -> JSONResponse:
-    current_user = require_current_user(request)
+    current_user = require_role(request, "admin")
     if isinstance(current_user, JSONResponse):
         return current_user
     data = await _json_body(request)
@@ -961,7 +965,7 @@ async def audit_verify_integrity(request: Request) -> JSONResponse:
 
 @asgi.get("/api/v1/audit/categories")
 def audit_categories(request: Request) -> JSONResponse:
-    current_user = require_current_user(request)
+    current_user = require_role(request, "admin")
     if isinstance(current_user, JSONResponse):
         return current_user
     return JSONResponse(

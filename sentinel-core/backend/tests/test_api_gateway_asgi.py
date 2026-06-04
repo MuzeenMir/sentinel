@@ -1028,7 +1028,10 @@ def test_admin_and_tenant_mutations_require_admin(mock_post, method, path, asgi_
 @patch.object(asgi_app.core, "query_audit_log")
 @patch("requests.post")
 def test_audit_events_reads_local_audit_log(mock_post, mock_query, asgi_client):
-    mock_post.side_effect = _auth_verify_ok
+    mock_post.return_value = _response(
+        200,
+        {"user": {"username": "admin", "role": "admin", "tenant_id": 7}},
+    )
     mock_query.return_value = [{"id": "evt-1"}]
 
     response = asgi_client.get(
@@ -1041,12 +1044,16 @@ def test_audit_events_reads_local_audit_log(mock_post, mock_query, asgi_client):
     assert mock_query.call_args.kwargs["category"] == "login"
     assert mock_query.call_args.kwargs["limit"] == 1000
     assert mock_query.call_args.kwargs["offset"] == 2
+    assert mock_query.call_args.kwargs["tenant_id"] == 7
 
 
 @patch.object(asgi_app.core, "get_audit_stats", return_value={"total": 3})
 @patch("requests.post")
-def test_audit_stats_reads_local_stats(mock_post, _stats, asgi_client):
-    mock_post.side_effect = _auth_verify_ok
+def test_audit_stats_reads_local_stats(mock_post, mock_stats, asgi_client):
+    mock_post.return_value = _response(
+        200,
+        {"user": {"username": "admin", "role": "admin", "tenant_id": 7}},
+    )
 
     response = asgi_client.get(
         "/api/v1/audit/stats",
@@ -1055,6 +1062,7 @@ def test_audit_stats_reads_local_stats(mock_post, _stats, asgi_client):
 
     assert response.status_code == 200
     assert response.json() == {"total": 3}
+    mock_stats.assert_called_once_with(tenant_id=7)
 
 
 @patch.object(asgi_app.core, "verify_integrity")
@@ -1084,6 +1092,36 @@ def test_audit_categories_lists_categories(mock_post, asgi_client):
 
     assert response.status_code == 200
     assert "categories" in response.json()
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "body"),
+    [
+        ("GET", "/api/v1/audit/events", None),
+        ("GET", "/api/v1/audit/stats", None),
+        ("POST", "/api/v1/audit/verify", {"records": []}),
+        ("GET", "/api/v1/audit/categories", None),
+    ],
+)
+@patch("requests.post")
+def test_audit_endpoints_require_admin(mock_post, method, path, body, asgi_client):
+    mock_post.return_value = _response(
+        200, {"user": {"username": "viewer", "role": "viewer", "tenant_id": 7}}
+    )
+
+    with (
+        patch.object(asgi_app.core, "query_audit_log", return_value=[]),
+        patch.object(asgi_app.core, "get_audit_stats", return_value={}),
+    ):
+        response = asgi_client.request(
+            method,
+            path,
+            headers={"Authorization": "Bearer valid-token"},
+            json=body,
+        )
+
+    assert response.status_code == 403
+    assert response.json() == {"error": "Insufficient permissions"}
 
 
 def _request(
