@@ -172,6 +172,21 @@ def test_rate_limiter_uses_shared_redis_storage():
     assert asgi_app.limiter._storage_uri == asgi_app.core.CONFIG["REDIS_URL"]
 
 
+def test_gateway_core_configures_llm_gateway_url():
+    assert asgi_app.core.CONFIG["LLM_GATEWAY_URL"] == "http://llm-gateway:5012"
+
+
+def test_gateway_core_internal_service_token_accessor():
+    with patch.dict(os.environ, {"INTERNAL_SERVICE_TOKEN": "shared-token"}):
+        assert asgi_app.core.get_internal_service_token() == "shared-token"
+
+
+def test_gateway_core_internal_service_token_accessor_fails_closed():
+    with patch.dict(os.environ, {"INTERNAL_SERVICE_TOKEN": ""}):
+        with pytest.raises(RuntimeError, match="INTERNAL_SERVICE_TOKEN"):
+            asgi_app.core.get_internal_service_token()
+
+
 def test_rate_limit_exceeded_returns_429(asgi_client):
     for _ in range(5):
         asgi_client.get("/api/v1/test-rate-limit")
@@ -1108,6 +1123,120 @@ def test_audit_endpoints_require_admin(mock_post, method, path, body, asgi_clien
 
     assert response.status_code == 403
     assert response.json() == {"error": "Insufficient permissions"}
+
+
+@patch("requests.post")
+def test_copilot_proxy_requires_auth_without_upstream_call(mock_post, asgi_client):
+    response = asgi_client.post(
+        "/api/v1/copilot/summarize",
+        json={"entity_id": "incident-1"},
+    )
+
+    assert response.status_code == 401
+    assert response.json() == {"error": "Authorization token required"}
+    mock_post.assert_not_called()
+
+
+@patch("requests.post")
+def test_copilot_proxy_forwards_verified_identity_and_json(mock_post, asgi_client):
+    def side_effect(url, **kwargs):
+        if "/auth/verify" in url:
+            return _response(
+                200,
+                {
+                    "user": {
+                        "id": 42,
+                        "username": "analyst",
+                        "role": "security_analyst",
+                        "tenant_id": 7,
+                    }
+                },
+            )
+        return _response(200, {"summary": "grounded"})
+
+    mock_post.side_effect = side_effect
+
+    with patch.dict(os.environ, {"INTERNAL_SERVICE_TOKEN": "shared-token"}):
+        response = asgi_client.post(
+            "/api/v1/copilot/summarize",
+            headers={"Authorization": "Bearer user-jwt"},
+            json={"entity_id": "incident-1"},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {"summary": "grounded"}
+    upstream_call = mock_post.call_args_list[-1]
+    assert upstream_call.args[0] == "http://llm-gateway:5012/copilot/summarize"
+    assert upstream_call.kwargs["headers"] == {
+        "X-Internal-Service-Token": "shared-token",
+        "X-Actor": "user:42",
+        "X-Tenant-Id": "7",
+    }
+    assert upstream_call.kwargs["json"] == {"entity_id": "incident-1"}
+    assert "Authorization" not in upstream_call.kwargs["headers"]
+
+
+@patch("requests.post")
+def test_copilot_proxy_maps_upstream_down_to_503(mock_post, asgi_client):
+    def side_effect(url, **kwargs):
+        if "/auth/verify" in url:
+            return _response(
+                200,
+                {"user": {"id": 42, "username": "analyst", "tenant_id": 7}},
+            )
+        raise _requests_lib.exceptions.ConnectionError("down")
+
+    mock_post.side_effect = side_effect
+
+    with patch.dict(os.environ, {"INTERNAL_SERVICE_TOKEN": "shared-token"}):
+        response = asgi_client.post(
+            "/api/v1/copilot/ask",
+            headers={"Authorization": "Bearer user-jwt"},
+            json={"session_id": "session-1", "question": "What happened?"},
+        )
+
+    assert response.status_code == 503
+    assert response.json() == {"error": "Copilot service unavailable"}
+
+
+@patch("requests.post")
+def test_copilot_proxy_maps_upstream_5xx_to_502(mock_post, asgi_client):
+    def side_effect(url, **kwargs):
+        if "/auth/verify" in url:
+            return _response(
+                200,
+                {"user": {"id": 42, "username": "analyst", "tenant_id": 7}},
+            )
+        return _response(500, {"error": "model failure"})
+
+    mock_post.side_effect = side_effect
+
+    with patch.dict(os.environ, {"INTERNAL_SERVICE_TOKEN": "shared-token"}):
+        response = asgi_client.post(
+            "/api/v1/copilot/propose",
+            headers={"Authorization": "Bearer user-jwt"},
+            json={"entity_id": "incident-1", "action_type": "isolate"},
+        )
+
+    assert response.status_code == 502
+    assert response.json() == {"error": "Copilot service error"}
+
+
+@patch("requests.post")
+def test_copilot_proxy_rejects_unknown_operation(mock_post, asgi_client):
+    mock_post.return_value = _response(
+        200,
+        {"user": {"id": 42, "username": "analyst", "tenant_id": 7}},
+    )
+
+    response = asgi_client.post(
+        "/api/v1/copilot/admin",
+        headers={"Authorization": "Bearer user-jwt"},
+        json={},
+    )
+
+    assert response.status_code == 404
+    assert len(mock_post.call_args_list) == 1
 
 
 def _request(

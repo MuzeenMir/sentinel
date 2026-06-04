@@ -17,6 +17,12 @@ import gateway_core as core
 
 
 asgi = FastAPI(title="SENTINEL API Gateway")
+_COPILOT_PATHS = {
+    "ask": "/copilot/ask",
+    "confirm": "/copilot/confirm",
+    "propose": "/copilot/propose",
+    "summarize": "/copilot/summarize",
+}
 asgi.add_middleware(
     CORSMiddleware,
     allow_origins=core._load_cors_origins(),
@@ -901,6 +907,11 @@ async def integrations_test(request: Request) -> Response:
     )
 
 
+@asgi.api_route("/api/v1/copilot/{path:path}", methods=["POST"])
+async def copilot_proxy(path: str, request: Request) -> Response:
+    return await _copilot_proxy(request, path)
+
+
 @asgi.get("/api/v1/audit/events")
 def get_audit_events(request: Request) -> JSONResponse:
     current_user = require_role(request, "admin")
@@ -975,6 +986,54 @@ async def _role_proxy(request: Request, base_url: str, path_suffix: str) -> Resp
     if isinstance(current_user, JSONResponse):
         return current_user
     return await _proxy_to(base_url, path_suffix, request, current_user)
+
+
+async def _copilot_proxy(request: Request, path: str) -> Response:
+    """Forward an authenticated copilot request with verified internal identity."""
+    current_user = require_current_user(request)
+    if isinstance(current_user, JSONResponse):
+        return current_user
+
+    upstream_path = _COPILOT_PATHS.get(path)
+    if upstream_path is None:
+        return JSONResponse({"error": "Endpoint not found"}, status_code=404)
+
+    user_id = current_user.get("id")
+    if user_id is None:
+        return JSONResponse(
+            {"error": "Authenticated user identity unavailable"}, status_code=503
+        )
+
+    try:
+        headers = {
+            "X-Internal-Service-Token": core.get_internal_service_token(),
+            "X-Actor": f"user:{user_id}",
+        }
+    except RuntimeError:
+        return JSONResponse({"error": "Copilot service unavailable"}, status_code=503)
+
+    tenant_id = current_user.get("tenant_id")
+    if tenant_id is not None:
+        headers["X-Tenant-Id"] = str(tenant_id)
+
+    try:
+        response = requests.post(
+            core.CONFIG["LLM_GATEWAY_URL"].rstrip("/") + upstream_path,
+            headers=headers,
+            json=await _json_body(request),
+            timeout=30,
+        )
+    except requests.exceptions.RequestException:
+        return JSONResponse({"error": "Copilot service unavailable"}, status_code=503)
+
+    if response.status_code >= 500:
+        return JSONResponse({"error": "Copilot service error"}, status_code=502)
+    if not response.content:
+        return Response(status_code=response.status_code)
+    try:
+        return JSONResponse(response.json(), status_code=response.status_code)
+    except ValueError:
+        return JSONResponse({"error": "Copilot service error"}, status_code=502)
 
 
 def _query_int(request: Request, name: str, default: int) -> int:
