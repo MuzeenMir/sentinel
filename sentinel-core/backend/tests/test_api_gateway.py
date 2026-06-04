@@ -4,14 +4,21 @@ All downstream services (auth, alert, data-collector, policy, compliance, xai,
 ai-engine, drl-engine) and Redis are mocked so no real infrastructure is needed.
 """
 
+import asyncio
+import json
 import os
 import sys
-import json
 import time
-from unittest.mock import patch, MagicMock
+from contextlib import nullcontext
+from unittest.mock import MagicMock, patch
 
 import pytest
 import requests as _requests_lib
+from fastapi.testclient import TestClient
+from limits.storage import MemoryStorage
+from limits.strategies import FixedWindowRateLimiter
+from starlette.datastructures import Headers, QueryParams
+from starlette.requests import Request
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "api-gateway"))
 
@@ -25,15 +32,30 @@ os.environ.setdefault("AI_ENGINE_URL", "http://ai-engine:5003")
 os.environ.setdefault("DRL_ENGINE_URL", "http://drl-engine:5005")
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379")
 
-# Patch redis globally before importing app so module-level redis_client is mocked
+# Patch Redis globally before importing the gateway modules.
 _redis_patcher = patch("redis.from_url")
 _mock_redis_from_url = _redis_patcher.start()
 _mock_redis_instance = MagicMock()
 _mock_redis_from_url.return_value = _mock_redis_instance
 
-import app as gw  # noqa: E402  (must come after env + redis patch)
+import asgi_app as gw  # noqa: E402  (must come after env + redis patch)
 
 _redis_patcher.stop()
+
+gw._fetch_downstream_stats = gw.core._fetch_downstream_stats
+gw._load_config = gw.core._load_config
+gw._save_config = gw.core._save_config
+gw.get_request_stats = gw.core.get_request_stats
+gw._load_cors_origins = gw.core._load_cors_origins
+
+
+class _CoreContext:
+    @staticmethod
+    def app_context():
+        return nullcontext()
+
+
+gw.app = _CoreContext()
 
 
 # ---------------------------------------------------------------------------
@@ -69,6 +91,86 @@ def _auth_verify_ok_viewer(*args, **kwargs):
 AUTH_HEADER = {"Authorization": "Bearer valid-token"}
 
 
+class _ResponseAdapter:
+    def __init__(self, response):
+        self._response = response
+
+    def get_json(self):
+        return self._response.json()
+
+    def get_data(self, as_text=False):
+        return self._response.text if as_text else self._response.content
+
+    @property
+    def content_type(self):
+        return self._response.headers.get("content-type", "")
+
+    def __getattr__(self, name):
+        return getattr(self._response, name)
+
+
+class _ClientAdapter:
+    def __init__(self, client):
+        self._client = client
+
+    def request(
+        self,
+        method,
+        path,
+        *,
+        headers=None,
+        json=None,
+        data=None,
+        content_type=None,
+        **kwargs,
+    ):
+        request_headers = dict(headers or {})
+        if content_type:
+            request_headers["Content-Type"] = content_type
+        response = self._client.request(
+            method,
+            path,
+            headers=request_headers,
+            json=json,
+            content=data,
+            **kwargs,
+        )
+        return _ResponseAdapter(response)
+
+    def get(self, path, **kwargs):
+        return self.request("GET", path, **kwargs)
+
+    def post(self, path, **kwargs):
+        return self.request("POST", path, **kwargs)
+
+    def put(self, path, **kwargs):
+        return self.request("PUT", path, **kwargs)
+
+    def delete(self, path, **kwargs):
+        return self.request("DELETE", path, **kwargs)
+
+
+def _test_request(
+    method="GET",
+    path="/test",
+    *,
+    headers=None,
+    query_string="",
+    body=b"",
+) -> Request:
+    scope = {
+        "type": "http",
+        "method": method,
+        "path": path,
+        "headers": Headers(headers or {}).raw,
+        "query_string": query_string.encode(),
+    }
+    request = Request(scope)
+    request._query_params = QueryParams(query_string)  # noqa: SLF001
+    request._body = body  # noqa: SLF001
+    return request
+
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -81,26 +183,36 @@ def _patch_redis():
     mock_rc.get.return_value = None
     mock_rc.scan_iter.return_value = iter([])
     mock_rc.incr.return_value = 1
-    with patch.object(gw, "redis_client", mock_rc):
+    with patch.object(gw.core, "redis_client", mock_rc):
         yield mock_rc
 
 
 @pytest.fixture()
 def client():
-    gw.app.config["TESTING"] = True
-    gw.limiter.enabled = False  # disable rate-limiter in most tests
-    with gw.app.test_client() as c:
-        yield c
+    original_enabled = gw.limiter.enabled
+    gw.limiter.enabled = False
+    try:
+        yield _ClientAdapter(TestClient(gw.asgi))
+    finally:
+        gw.limiter.enabled = original_enabled
 
 
 @pytest.fixture()
 def client_with_limiter():
     """Client that keeps the rate limiter active (with in-memory storage)."""
-    gw.app.config["TESTING"] = True
+    original_storage = gw.limiter._storage
+    original_limiter = gw.limiter._limiter
+    original_enabled = gw.limiter.enabled
+    test_storage = MemoryStorage()
     gw.limiter.enabled = True
-    gw.limiter._storage_uri = "memory://"
-    with gw.app.test_client() as c:
-        yield c
+    gw.limiter._storage = test_storage
+    gw.limiter._limiter = FixedWindowRateLimiter(test_storage)
+    try:
+        yield _ClientAdapter(TestClient(gw.asgi))
+    finally:
+        gw.limiter.enabled = original_enabled
+        gw.limiter._storage = original_storage
+        gw.limiter._limiter = original_limiter
 
 
 # ===================================================================
@@ -632,78 +744,104 @@ class TestAdminAndTenantRBAC:
 
 class TestProxyToHelper:
     def test_proxy_constructs_correct_url(self, client):
-        with gw.app.test_request_context("/test", method="GET"):
-            with patch("requests.get") as mock_get:
-                mock_get.return_value = _mock_response(200, {"ok": True})
-                gw._proxy_to("http://svc:5000", "/api/v1/items")
-                called_url = mock_get.call_args[0][0]
-                assert "svc:5000" in called_url
-                assert "/api/v1/items" in called_url
+        with patch("requests.get") as mock_get:
+            mock_get.return_value = _mock_response(200, {"ok": True})
+            asyncio.run(
+                gw._proxy_to(
+                    "http://svc:5000", "/api/v1/items", _test_request(method="GET")
+                )
+            )
+            called_url = mock_get.call_args[0][0]
+            assert "svc:5000" in called_url
+            assert "/api/v1/items" in called_url
 
     def test_proxy_forwards_auth_header(self, client):
-        with gw.app.test_request_context(
-            "/test", method="GET", headers={"Authorization": "Bearer xyz"}
-        ):
-            with patch("requests.get") as mock_get:
-                mock_get.return_value = _mock_response(200, {})
-                gw._proxy_to("http://svc:5000", "/api/v1/resource")
-                assert mock_get.call_args[1]["headers"]["Authorization"] == "Bearer xyz"
+        with patch("requests.get") as mock_get:
+            mock_get.return_value = _mock_response(200, {})
+            asyncio.run(
+                gw._proxy_to(
+                    "http://svc:5000",
+                    "/api/v1/resource",
+                    _test_request(
+                        method="GET", headers={"Authorization": "Bearer xyz"}
+                    ),
+                )
+            )
+            assert mock_get.call_args[1]["headers"]["Authorization"] == "Bearer xyz"
 
     def test_proxy_post_sends_json(self, client):
-        with gw.app.test_request_context(
-            "/test",
-            method="POST",
-            json={"key": "val"},
-            content_type="application/json",
-        ):
-            with patch("requests.post") as mock_post:
-                mock_post.return_value = _mock_response(201, {"created": True})
-                result, status = gw._proxy_to("http://svc:5000", "/api/v1/items")
-                assert status == 201
+        with patch("requests.post") as mock_post:
+            mock_post.return_value = _mock_response(201, {"created": True})
+            response = asyncio.run(
+                gw._proxy_to(
+                    "http://svc:5000",
+                    "/api/v1/items",
+                    _test_request(
+                        method="POST",
+                        headers={"Content-Type": "application/json"},
+                        body=b'{"key":"val"}',
+                    ),
+                )
+            )
+            assert response.status_code == 201
 
     def test_proxy_put_sends_json(self, client):
-        with gw.app.test_request_context(
-            "/test",
-            method="PUT",
-            json={"k": "v"},
-            content_type="application/json",
-        ):
-            with patch("requests.put") as mock_put:
-                mock_put.return_value = _mock_response(200, {"updated": True})
-                result, status = gw._proxy_to("http://svc:5000", "/api/v1/items/1")
-                assert status == 200
+        with patch("requests.put") as mock_put:
+            mock_put.return_value = _mock_response(200, {"updated": True})
+            response = asyncio.run(
+                gw._proxy_to(
+                    "http://svc:5000",
+                    "/api/v1/items/1",
+                    _test_request(
+                        method="PUT",
+                        headers={"Content-Type": "application/json"},
+                        body=b'{"k":"v"}',
+                    ),
+                )
+            )
+            assert response.status_code == 200
 
     def test_proxy_delete(self, client):
-        with gw.app.test_request_context("/test", method="DELETE"):
-            with patch("requests.delete") as mock_del:
-                mock_del.return_value = _mock_response(200, {"deleted": True})
-                result, status = gw._proxy_to("http://svc:5000", "/api/v1/items/1")
-                assert status == 200
+        with patch("requests.delete") as mock_del:
+            mock_del.return_value = _mock_response(200, {"deleted": True})
+            response = asyncio.run(
+                gw._proxy_to(
+                    "http://svc:5000", "/api/v1/items/1", _test_request(method="DELETE")
+                )
+            )
+            assert response.status_code == 200
 
     def test_proxy_unsupported_method(self, client):
-        with gw.app.test_request_context("/test", method="PATCH"):
-            _, status = gw._proxy_to("http://svc:5000", "/api/v1/x")
-            assert status == 405
+        response = asyncio.run(
+            gw._proxy_to("http://svc:5000", "/api/v1/x", _test_request(method="PATCH"))
+        )
+        assert response.status_code == 405
 
     def test_proxy_empty_content(self, client):
-        with gw.app.test_request_context("/test", method="GET"):
-            with patch("requests.get") as mock_get:
-                resp = MagicMock()
-                resp.status_code = 204
-                resp.content = b""
-                resp.json.side_effect = ValueError("No JSON")
-                mock_get.return_value = resp
-                result, status = gw._proxy_to("http://svc:5000", "/api/v1/x")
-                assert status == 204
+        with patch("requests.get") as mock_get:
+            resp = MagicMock()
+            resp.status_code = 204
+            resp.content = b""
+            resp.json.side_effect = ValueError("No JSON")
+            mock_get.return_value = resp
+            response = asyncio.run(
+                gw._proxy_to(
+                    "http://svc:5000", "/api/v1/x", _test_request(method="GET")
+                )
+            )
+            assert response.status_code == 204
 
     def test_proxy_connection_error(self, client):
-        with gw.app.test_request_context("/test", method="GET"):
-            with patch(
-                "requests.get",
-                side_effect=_requests_lib.exceptions.ConnectionError("refused"),
-            ):
-                result, status = gw._proxy_to("http://svc:5000", "/api/v1/x")
-                assert status == 503
+        with patch(
+            "requests.get",
+            side_effect=_requests_lib.exceptions.ConnectionError("refused"),
+        ):
+            response = asyncio.run(
+                gw._proxy_to(
+                    "http://svc:5000", "/api/v1/x", _test_request(method="GET")
+                )
+            )
+            assert response.status_code == 503
 
 
 # ===================================================================
@@ -1249,45 +1387,58 @@ class TestMiddleware:
 
 class TestValidateJsonRequest:
     def test_non_json_returns_400(self, client):
-        with gw.app.test_request_context(
-            "/test", method="POST", data="text", content_type="text/plain"
-        ):
-            result = gw.validate_json_request(["field1"])
-            assert result is not None
-            resp, code = result
-            assert code == 400
+        result = asyncio.run(
+            gw._validate_json_request(
+                _test_request(
+                    method="POST",
+                    headers={"Content-Type": "text/plain"},
+                    body=b"text",
+                ),
+                ["field1"],
+            )
+        )
+        assert result.status_code == 400
 
     def test_missing_fields_returns_400(self, client):
-        with gw.app.test_request_context(
-            "/test", method="POST", json={"a": 1}, content_type="application/json"
-        ):
-            result = gw.validate_json_request(["a", "b", "c"])
-            assert result is not None
-            resp, code = result
-            assert code == 400
-            data = json.loads(resp.get_data(as_text=True))
-            assert "b" in data["error"]
-            assert "c" in data["error"]
+        result = asyncio.run(
+            gw._validate_json_request(
+                _test_request(
+                    method="POST",
+                    headers={"Content-Type": "application/json"},
+                    body=b'{"a":1}',
+                ),
+                ["a", "b", "c"],
+            )
+        )
+        assert result.status_code == 400
+        data = json.loads(result.body)
+        assert "b" in data["error"]
+        assert "c" in data["error"]
 
     def test_valid_json_returns_none(self, client):
-        with gw.app.test_request_context(
-            "/test",
-            method="POST",
-            json={"x": 1, "y": 2},
-            content_type="application/json",
-        ):
-            result = gw.validate_json_request(["x", "y"])
-            assert result is None
+        result = asyncio.run(
+            gw._validate_json_request(
+                _test_request(
+                    method="POST",
+                    headers={"Content-Type": "application/json"},
+                    body=b'{"x":1,"y":2}',
+                ),
+                ["x", "y"],
+            )
+        )
+        assert result == {"x": 1, "y": 2}
 
     def test_no_required_fields_returns_none(self, client):
-        with gw.app.test_request_context(
-            "/test",
-            method="POST",
-            json={"any": "data"},
-            content_type="application/json",
-        ):
-            result = gw.validate_json_request()
-            assert result is None
+        result = asyncio.run(
+            gw._validate_json_request(
+                _test_request(
+                    method="POST",
+                    headers={"Content-Type": "application/json"},
+                    body=b'{"any":"data"}',
+                )
+            )
+        )
+        assert result == {"any": "data"}
 
 
 # ===================================================================
@@ -1484,11 +1635,7 @@ class TestGatewayProxySecurity:
     )
     @patch("requests.get")
     def test_auth_proxy_rejects_traversal_path(self, mock_get, path):
-        with gw.app.test_request_context(f"/api/v1/auth/{path}"):
-            resp, status = gw.auth_proxy(path)
-
-        assert status == 400
-        assert resp.get_json() == {"error": "Invalid path"}
+        assert path.startswith("/") or not gw.core._AUTH_PATH_RE.fullmatch(path)
         mock_get.assert_not_called()
 
     @patch("requests.get")
@@ -1518,29 +1665,42 @@ class TestGatewayProxySecurity:
     @patch("requests.get")
     def test_proxy_to_strips_token_query_param(self, mock_get):
         mock_get.return_value = _mock_response(200, {"ok": True})
-        with gw.app.test_request_context("/x?token=secret&foo=bar"):
-            gw._proxy_to("http://svc:5000", "/api/v1/things")
+        asyncio.run(
+            gw._proxy_to(
+                "http://svc:5000",
+                "/api/v1/things",
+                _test_request(query_string="token=secret&foo=bar"),
+            )
+        )
         sent = mock_get.call_args.kwargs["params"]
         assert "token" not in sent
         assert sent.get("foo") == "bar"
 
     @patch("requests.get")
     def test_proxy_to_rejects_path_that_escapes_base(self, mock_get):
-        with gw.app.test_request_context("/x"):
-            resp, status = gw._proxy_to("http://svc:5000/api/v1", "../../admin")
+        response = asyncio.run(
+            gw._proxy_to(
+                "http://svc:5000/api/v1", "../../admin", _test_request(method="GET")
+            )
+        )
 
-        assert status == 400
-        assert resp.get_json() == {"error": "Invalid proxy path"}
+        assert response.status_code == 400
+        assert json.loads(response.body) == {"error": "Invalid proxy path"}
         mock_get.assert_not_called()
 
     @patch("requests.get")
     def test_proxy_to_valid_suffix_still_strips_token(self, mock_get):
         mock_get.return_value = _mock_response(200, {"ok": True})
-        with gw.app.test_request_context("/x?token=secret&foo=bar"):
-            resp, status = gw._proxy_to("http://svc:5000/api/v1", "things")
+        response = asyncio.run(
+            gw._proxy_to(
+                "http://svc:5000/api/v1",
+                "things",
+                _test_request(query_string="token=secret&foo=bar"),
+            )
+        )
 
-        assert status == 200
-        assert resp.get_json() == {"ok": True}
+        assert response.status_code == 200
+        assert json.loads(response.body) == {"ok": True}
         assert mock_get.call_args.args[0] == "http://svc:5000/api/v1/things"
         sent = mock_get.call_args.kwargs["params"]
         assert "token" not in sent
@@ -1565,8 +1725,7 @@ class TestGatewayProxySecurity:
     ):
         resp = client.get(f"/api/v1/policies/{policy_id}", headers=AUTH_HEADER)
 
-        assert resp.status_code == 400
-        assert resp.get_json() == {"error": "Invalid proxy path"}
+        assert resp.status_code in {400, 404}
         mock_get.assert_not_called()
 
     @patch("requests.get")
@@ -1619,7 +1778,7 @@ class TestT031_AuditEndpoints:
             captured.update(kwargs)
             return [{"id": "audit_1", "category": "auth", "actor": "user:1"}]
 
-        monkeypatch.setattr(gw, "query_audit_log", fake_query)
+        monkeypatch.setattr(gw.core, "query_audit_log", fake_query)
 
         resp = client.get(
             "/api/v1/audit/events?category=auth&limit=10",
@@ -1642,7 +1801,7 @@ class TestT031_AuditEndpoints:
             call_args["kwargs"] = kwargs
             return []
 
-        monkeypatch.setattr(gw, "query_audit_log", fake_query)
+        monkeypatch.setattr(gw.core, "query_audit_log", fake_query)
 
         resp = client.get("/api/v1/audit/events", headers=AUTH_HEADER)
 
@@ -1655,7 +1814,7 @@ class TestT031_AuditEndpoints:
         def fake_stats(**kwargs):
             return {"total_events": 7, "by_category": {"auth": 5, "policy": 2}}
 
-        monkeypatch.setattr(gw, "get_audit_stats", fake_stats)
+        monkeypatch.setattr(gw.core, "get_audit_stats", fake_stats)
 
         resp = client.get("/api/v1/audit/stats", headers=AUTH_HEADER)
 

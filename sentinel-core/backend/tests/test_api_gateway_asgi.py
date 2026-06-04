@@ -2,11 +2,15 @@
 
 import os
 import sys
+import fnmatch
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 import requests as _requests_lib
 from fastapi.testclient import TestClient
+from limits.storage import MemoryStorage
+from limits.strategies import FixedWindowRateLimiter
 from starlette.datastructures import Headers, QueryParams
 from starlette.requests import Request
 
@@ -27,7 +31,6 @@ _mock_redis_from_url = _redis_patcher.start()
 _mock_redis_instance = MagicMock()
 _mock_redis_from_url.return_value = _mock_redis_instance
 
-import app as flask_gateway  # noqa: E402
 import asgi_app  # noqa: E402
 from asgi_app import asgi  # noqa: E402
 
@@ -35,16 +38,17 @@ _redis_patcher.stop()
 
 
 @pytest.fixture()
-def flask_client():
-    flask_gateway.app.config["TESTING"] = True
-    flask_gateway.limiter.enabled = False
-    with flask_gateway.app.test_client() as client:
-        yield client
-
-
-@pytest.fixture()
 def asgi_client():
-    return TestClient(asgi)
+    original_storage = asgi_app.limiter._storage
+    original_limiter = asgi_app.limiter._limiter
+    test_storage = MemoryStorage()
+    asgi_app.limiter._storage = test_storage
+    asgi_app.limiter._limiter = FixedWindowRateLimiter(test_storage)
+    try:
+        yield TestClient(asgi)
+    finally:
+        asgi_app.limiter._storage = original_storage
+        asgi_app.limiter._limiter = original_limiter
 
 
 @pytest.fixture(autouse=True)
@@ -53,21 +57,19 @@ def _patch_redis_clients():
     mock_rc.get.return_value = None
     mock_rc.scan_iter.return_value = iter([])
     mock_rc.incr.return_value = 1
-    with patch.object(flask_gateway, "redis_client", mock_rc):
+    with patch.object(asgi_app.core, "redis_client", mock_rc):
         yield mock_rc
 
 
-def test_health_matches_flask_shape(flask_client, asgi_client):
-    flask_response = flask_client.get("/health")
+def test_health_returns_gateway_shape(asgi_client):
     asgi_response = asgi_client.get("/health")
 
-    assert asgi_response.status_code == flask_response.status_code == 200
-    flask_body = flask_response.get_json()
+    assert asgi_response.status_code == 200
     asgi_body = asgi_response.json()
 
-    assert asgi_body["status"] == flask_body["status"] == "healthy"
+    assert asgi_body["status"] == "healthy"
     assert isinstance(asgi_body["timestamp"], float)
-    assert asgi_body["request_stats"] == flask_body["request_stats"]
+    assert isinstance(asgi_body["request_stats"], dict)
 
 
 def test_readyz_reports_ready(asgi_client):
@@ -75,6 +77,28 @@ def test_readyz_reports_ready(asgi_client):
 
     assert response.status_code == 200
     assert response.json() == {"status": "ready"}
+
+
+def test_asgi_middleware_records_requests_in_health_stats(asgi_client):
+    redis_state = _StatefulRedis()
+
+    with patch.object(asgi_app.core, "redis_client", redis_state):
+        asgi_client.get("/readyz")
+        asgi_client.get("/readyz")
+        response = asgi_client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json()["request_stats"]["/readyz:GET"] == 2
+
+
+def test_gateway_core_is_framework_agnostic_and_asgi_does_not_import_flask_app():
+    gateway_dir = Path(__file__).resolve().parents[1] / "api-gateway"
+    core_source = (gateway_dir / "gateway_core.py").read_text(encoding="utf-8")
+    asgi_source = (gateway_dir / "asgi_app.py").read_text(encoding="utf-8")
+
+    assert "from flask" not in core_source
+    assert "import flask" not in core_source
+    assert "import app as flask_gateway" not in asgi_source
 
 
 def test_auth_dependency_rejects_missing_token():
@@ -142,6 +166,10 @@ def test_rate_limit_endpoint_returns_200(asgi_client):
 
     assert response.status_code == 200
     assert response.json()["message"] == "Rate limit test successful"
+
+
+def test_rate_limiter_uses_shared_redis_storage():
+    assert asgi_app.limiter._storage_uri == asgi_app.core.CONFIG["REDIS_URL"]
 
 
 def test_rate_limit_exceeded_returns_429(asgi_client):
@@ -239,7 +267,9 @@ def test_get_threats_strips_query_token(mock_post, mock_get, asgi_client):
     assert response.json() == {"threats": [{"id": 1}], "total": 1}
     assert mock_get.call_args.args[0] == ("http://data-collector:5001/api/v1/threats")
     assert mock_get.call_args.kwargs["params"] == {"foo": "bar"}
-    assert mock_get.call_args.kwargs["headers"] == {"Authorization": None}
+    assert mock_get.call_args.kwargs["headers"] == {
+        "Authorization": "Bearer valid-token"
+    }
 
 
 @patch("requests.post")
@@ -472,7 +502,7 @@ def test_update_config_requires_all_sections(mock_post, asgi_client):
 def test_stats_aggregates_downstream(mock_post, asgi_client):
     mock_post.side_effect = _auth_verify_ok
     with patch.object(
-        asgi_app.flask_gateway,
+        asgi_app.core,
         "_fetch_downstream_stats",
         return_value={
             "threats_detected": 5,
@@ -499,7 +529,7 @@ def test_stats_aggregates_downstream(mock_post, asgi_client):
 def test_statistics_alias_matches_stats(mock_post, asgi_client):
     mock_post.side_effect = _auth_verify_ok
     with patch.object(
-        asgi_app.flask_gateway,
+        asgi_app.core,
         "_fetch_downstream_stats",
         return_value={"threats_detected": 1},
     ):
@@ -516,7 +546,7 @@ def test_statistics_alias_matches_stats(mock_post, asgi_client):
 def test_stats_runtime_misconfiguration_returns_503(mock_post, asgi_client):
     mock_post.side_effect = _auth_verify_ok
     with patch.object(
-        asgi_app.flask_gateway,
+        asgi_app.core,
         "_fetch_downstream_stats",
         side_effect=RuntimeError("missing token"),
     ):
@@ -981,10 +1011,13 @@ def test_admin_and_tenant_mutations_require_admin(mock_post, method, path, asgi_
     assert response.json() == {"error": "Insufficient permissions"}
 
 
-@patch.object(asgi_app.flask_gateway, "query_audit_log")
+@patch.object(asgi_app.core, "query_audit_log")
 @patch("requests.post")
 def test_audit_events_reads_local_audit_log(mock_post, mock_query, asgi_client):
-    mock_post.side_effect = _auth_verify_ok
+    mock_post.return_value = _response(
+        200,
+        {"user": {"username": "admin", "role": "admin", "tenant_id": 7}},
+    )
     mock_query.return_value = [{"id": "evt-1"}]
 
     response = asgi_client.get(
@@ -997,12 +1030,16 @@ def test_audit_events_reads_local_audit_log(mock_post, mock_query, asgi_client):
     assert mock_query.call_args.kwargs["category"] == "login"
     assert mock_query.call_args.kwargs["limit"] == 1000
     assert mock_query.call_args.kwargs["offset"] == 2
+    assert mock_query.call_args.kwargs["tenant_id"] == 7
 
 
-@patch.object(asgi_app.flask_gateway, "get_audit_stats", return_value={"total": 3})
+@patch.object(asgi_app.core, "get_audit_stats", return_value={"total": 3})
 @patch("requests.post")
-def test_audit_stats_reads_local_stats(mock_post, _stats, asgi_client):
-    mock_post.side_effect = _auth_verify_ok
+def test_audit_stats_reads_local_stats(mock_post, mock_stats, asgi_client):
+    mock_post.return_value = _response(
+        200,
+        {"user": {"username": "admin", "role": "admin", "tenant_id": 7}},
+    )
 
     response = asgi_client.get(
         "/api/v1/audit/stats",
@@ -1011,9 +1048,10 @@ def test_audit_stats_reads_local_stats(mock_post, _stats, asgi_client):
 
     assert response.status_code == 200
     assert response.json() == {"total": 3}
+    mock_stats.assert_called_once_with(tenant_id=7)
 
 
-@patch.object(asgi_app.flask_gateway, "verify_integrity")
+@patch.object(asgi_app.core, "verify_integrity")
 @patch("requests.post")
 def test_audit_verify_checks_record_integrity(mock_post, mock_verify, asgi_client):
     mock_post.side_effect = _auth_verify_ok
@@ -1040,6 +1078,36 @@ def test_audit_categories_lists_categories(mock_post, asgi_client):
 
     assert response.status_code == 200
     assert "categories" in response.json()
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "body"),
+    [
+        ("GET", "/api/v1/audit/events", None),
+        ("GET", "/api/v1/audit/stats", None),
+        ("POST", "/api/v1/audit/verify", {"records": []}),
+        ("GET", "/api/v1/audit/categories", None),
+    ],
+)
+@patch("requests.post")
+def test_audit_endpoints_require_admin(mock_post, method, path, body, asgi_client):
+    mock_post.return_value = _response(
+        200, {"user": {"username": "viewer", "role": "viewer", "tenant_id": 7}}
+    )
+
+    with (
+        patch.object(asgi_app.core, "query_audit_log", return_value=[]),
+        patch.object(asgi_app.core, "get_audit_stats", return_value={}),
+    ):
+        response = asgi_client.request(
+            method,
+            path,
+            headers={"Authorization": "Bearer valid-token"},
+            json=body,
+        )
+
+    assert response.status_code == 403
+    assert response.json() == {"error": "Insufficient permissions"}
 
 
 def _request(
@@ -1072,3 +1140,22 @@ def _auth_verify_ok(*args, **kwargs):
     if "/auth/verify" in url:
         return _response(200, {"user": {"username": "testuser", "role": "admin"}})
     return _response(200, {})
+
+
+class _StatefulRedis:
+    def __init__(self):
+        self.values: dict[str, int | str] = {}
+
+    def incr(self, key):
+        self.values[key] = int(self.values.get(key, 0)) + 1
+        return self.values[key]
+
+    def expire(self, _key, _ttl):
+        return True
+
+    def scan_iter(self, pattern, count=100):
+        del count
+        return iter(key for key in self.values if fnmatch.fnmatch(key, pattern))
+
+    def get(self, key):
+        return self.values.get(key)

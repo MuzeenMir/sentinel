@@ -1,7 +1,8 @@
 # ADR-016 — API gateway FastAPI runtime
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-06-03
+- **Accepted:** 2026-06-04
 - **Deciders:** SENTINEL backend CODEOWNERS
 - **Supersedes:** None
 - **Superseded by:** None
@@ -9,9 +10,9 @@
 ## Context
 
 The API gateway was implemented as a Flask service and started in the container
-with `gunicorn app:app`. Phase 3 K1 requires sunset of Flask services, starting
-with an incremental API gateway port that keeps existing Flask parity tests
-green while a new FastAPI ASGI surface grows alongside it.
+with `gunicorn app:app`. Phase 3 K1 required sunset of Flask services, starting
+with an incremental API gateway port that kept the existing Flask parity tests
+green while a new FastAPI ASGI surface grew alongside it.
 
 The current gateway has a larger surface than the initial K1.1 prompt described:
 health, auth proxy, threats, alerts, config, stats, SSE, policy, compliance,
@@ -25,27 +26,30 @@ Move the API gateway container runtime from Flask/Gunicorn to FastAPI/Uvicorn:
 
 - `api-gateway/asgi_app.py` exposes `asgi = FastAPI(...)` and route parity for
   the current gateway surface.
+- `api-gateway/gateway_core.py` owns framework-agnostic configuration, Redis,
+  request-statistics, SSE, audit, and downstream-statistics helpers.
 - `api-gateway/Dockerfile` starts `uvicorn asgi_app:asgi` on port 8080.
-- Existing Flask parity tests remain in place while the compatibility module is
-  still present.
-- New ASGI parity tests cover the FastAPI gateway surface and the container
-  runtime command.
-
-This ADR does not claim Flask helper retirement is complete. `asgi_app.py` still
-imports selected helpers from the existing Flask `app.py` while the migration is
-being de-risked. Full Flask dependency removal requires a later extraction or
-rewrite of shared config, SSE, stats, audit, and compatibility helpers.
+- The former Flask parity suite remains as a migrated ASGI regression oracle;
+  the Flask `app.py` source and gateway Flask dependencies are removed.
+- ASGI middleware records request counts and response times.
+- SlowAPI stores rate-limit state in the configured Redis instance so limits
+  apply across workers.
+- A verified SSE `?token=` is reconstructed as a downstream Bearer token.
+- Audit-read endpoints require the admin role and scope reads to the verified
+  tenant.
 
 ## Consequences
 
-- Positive: production container startup now exercises the FastAPI gateway path.
-- Positive: the route table is covered by ASGI tests before Flask is removed.
-- Positive: the old Flask tests remain available as a regression oracle during
-  the transition.
-- Negative: the gateway still installs Flask dependencies until helper
-  extraction is complete.
-- Negative: importing `asgi_app.py` still imports `app.py`, so this is a runtime
-  flip, not a complete source-level Flask deletion.
+- Positive: production container startup exercises the sole FastAPI/Uvicorn
+  gateway runtime.
+- Positive: gateway source and runtime dependencies no longer include Flask,
+  Flask-CORS, Flask-Limiter, Gunicorn, or Flask OpenTelemetry instrumentation.
+- Positive: the full migrated oracle and ASGI parity suites protect the route
+  table without retaining a second implementation.
+- Positive: the shared audit logger lazily integrates with Flask request context,
+  allowing Flask-free services to import it while preserving existing callers.
+- Negative: SSE still wraps the synchronous Redis pub/sub generator. Replacing
+  it with a native asynchronous Redis stream remains deferred.
 
 ## Alternatives considered
 
@@ -60,7 +64,9 @@ rewrite of shared config, SSE, stats, audit, and compatibility helpers.
 ## References
 
 - `.team/prompts/2026-06-03-kai-api-gateway-fastapi-port.md`
+- `.team/prompts/2026-06-04-kai-K1.1e-gateway-flask-removal.md`
 - `sentinel-core/backend/api-gateway/asgi_app.py`
+- `sentinel-core/backend/api-gateway/gateway_core.py`
 - `sentinel-core/backend/api-gateway/Dockerfile`
 - `sentinel-core/backend/tests/test_api_gateway_asgi.py`
 - `sentinel-core/backend/tests/test_api_gateway.py`
