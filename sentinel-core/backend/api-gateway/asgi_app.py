@@ -364,20 +364,18 @@ def get_alert_stats(request: Request) -> JSONResponse:
 
 
 @asgi.get("/api/v1/alerts/{alert_id}")
-def get_alert(alert_id: int, request: Request) -> JSONResponse:
+async def get_alert(alert_id: int, request: Request) -> Response:
     """Get specific alert details."""
     current_user = require_current_user(request)
     if isinstance(current_user, JSONResponse):
         return current_user
 
-    try:
-        response = requests.get(
-            f"{flask_gateway.app.config['ALERT_SERVICE_URL']}/api/v1/alerts/{alert_id}",
-            headers={"Authorization": request.headers.get("Authorization")},
-        )
-        return JSONResponse(response.json(), status_code=response.status_code)
-    except requests.exceptions.RequestException:
-        return JSONResponse({"error": "Alert service unavailable"}, status_code=503)
+    return await _proxy_to(
+        flask_gateway.app.config["ALERT_SERVICE_URL"],
+        f"/api/v1/alerts/{alert_id}",
+        request,
+        current_user,
+    )
 
 
 @asgi.post("/api/v1/alerts/{alert_id}/acknowledge")
@@ -387,15 +385,12 @@ async def acknowledge_alert(alert_id: int, request: Request) -> JSONResponse:
     if isinstance(current_user, JSONResponse):
         return current_user
 
-    try:
-        response = requests.post(
-            f"{flask_gateway.app.config['ALERT_SERVICE_URL']}/api/v1/alerts/{alert_id}/acknowledge",
-            headers={"Authorization": request.headers.get("Authorization")},
-            json=await request.json(),
-        )
-        return JSONResponse(response.json(), status_code=response.status_code)
-    except requests.exceptions.RequestException:
-        return JSONResponse({"error": "Alert service unavailable"}, status_code=503)
+    return await _proxy_to(
+        flask_gateway.app.config["ALERT_SERVICE_URL"],
+        f"/api/v1/alerts/{alert_id}/acknowledge",
+        request,
+        current_user,
+    )
 
 
 @asgi.post("/api/v1/alerts/{alert_id}/resolve")
@@ -405,17 +400,12 @@ async def resolve_alert(alert_id: int, request: Request) -> JSONResponse:
     if isinstance(current_user, JSONResponse):
         return current_user
 
-    try:
-        response = requests.post(
-            f"{flask_gateway.app.config['ALERT_SERVICE_URL']}/api/v1/alerts/{alert_id}/resolve",
-            headers={"Authorization": request.headers.get("Authorization")},
-            json=await request.json(),
-            params=dict(request.query_params),
-            timeout=30,
-        )
-        return JSONResponse(response.json(), status_code=response.status_code)
-    except requests.exceptions.RequestException:
-        return JSONResponse({"error": "Backend service unavailable"}, status_code=503)
+    return await _proxy_to(
+        flask_gateway.app.config["ALERT_SERVICE_URL"],
+        f"/api/v1/alerts/{alert_id}/resolve",
+        request,
+        current_user,
+    )
 
 
 @asgi.put("/api/v1/alerts/{alert_id}")
@@ -425,16 +415,12 @@ async def update_alert(alert_id: int, request: Request) -> JSONResponse:
     if isinstance(current_user, JSONResponse):
         return current_user
 
-    try:
-        response = requests.put(
-            f"{flask_gateway.app.config['ALERT_SERVICE_URL']}/api/v1/alerts/{alert_id}",
-            headers={"Authorization": request.headers.get("Authorization")},
-            json=await request.json(),
-            timeout=30,
-        )
-        return JSONResponse(response.json(), status_code=response.status_code)
-    except requests.exceptions.RequestException:
-        return JSONResponse({"error": "Backend service unavailable"}, status_code=503)
+    return await _proxy_to(
+        flask_gateway.app.config["ALERT_SERVICE_URL"],
+        f"/api/v1/alerts/{alert_id}",
+        request,
+        current_user,
+    )
 
 
 @asgi.get("/api/v1/config")
