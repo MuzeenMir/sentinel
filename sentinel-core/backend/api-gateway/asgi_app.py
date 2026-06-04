@@ -1,8 +1,4 @@
-"""FastAPI app surface for the api-gateway port.
-
-The Flask gateway remains the production runtime until K1.1e. This module grows
-route parity incrementally while reusing stable helpers from ``app.py``.
-"""
+"""FastAPI application for the API gateway."""
 
 from __future__ import annotations
 
@@ -80,7 +76,7 @@ async def not_found(request: Request, _exc: object) -> JSONResponse:
 
 
 def require_current_user(request: Request) -> dict[str, object] | JSONResponse:
-    """Resolve the authenticated user using Flask gateway token semantics."""
+    """Resolve the authenticated user using gateway token semantics."""
     auth_header = request.headers.get("authorization")
     token = None
     if auth_header and auth_header.startswith("Bearer "):
@@ -120,7 +116,7 @@ def require_role(
 
 
 def _asgi_sse_stream(channel: str, heartbeat_type: str):
-    """Wrap the Flask SSE generator so ASGI treats disconnects as clean exits."""
+    """Wrap the SSE generator so ASGI treats disconnects as clean exits."""
     try:
         yield from core._sse_pubsub_stream(channel, heartbeat_type)
     except GeneratorExit:
@@ -144,7 +140,7 @@ async def _proxy_to(
     request: Request,
     current_user: dict[str, object] | None = None,
 ) -> Response:
-    """Forward an ASGI request using the Flask gateway proxy semantics."""
+    """Forward an ASGI request using the gateway proxy semantics."""
     suffix = path_suffix.strip("/")
     if not core._PROXY_SUFFIX_RE.fullmatch(suffix):
         return JSONResponse({"error": "Invalid proxy path"}, status_code=400)
@@ -213,7 +209,7 @@ async def _validate_json_request(
         missing = [field for field in required_fields if field not in data]
         if missing:
             return JSONResponse(
-                {"error": f'Missing required fields: {", ".join(missing)}'},
+                {"error": f"Missing required fields: {', '.join(missing)}"},
                 status_code=400,
             )
     return data
@@ -221,7 +217,7 @@ async def _validate_json_request(
 
 @asgi.get("/health")
 def health_check() -> dict[str, object]:
-    """Health check endpoint matching the Flask gateway response shape."""
+    """Health check endpoint for the gateway."""
     return {
         "status": "healthy",
         "timestamp": time.time(),

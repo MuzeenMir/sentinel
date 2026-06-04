@@ -31,19 +31,10 @@ _mock_redis_from_url = _redis_patcher.start()
 _mock_redis_instance = MagicMock()
 _mock_redis_from_url.return_value = _mock_redis_instance
 
-import app as flask_gateway  # noqa: E402
 import asgi_app  # noqa: E402
 from asgi_app import asgi  # noqa: E402
 
 _redis_patcher.stop()
-
-
-@pytest.fixture()
-def flask_client():
-    flask_gateway.app.config["TESTING"] = True
-    flask_gateway.limiter.enabled = False
-    with flask_gateway.app.test_client() as client:
-        yield client
 
 
 @pytest.fixture()
@@ -66,24 +57,19 @@ def _patch_redis_clients():
     mock_rc.get.return_value = None
     mock_rc.scan_iter.return_value = iter([])
     mock_rc.incr.return_value = 1
-    with (
-        patch.object(flask_gateway, "redis_client", mock_rc),
-        patch.object(asgi_app.core, "redis_client", mock_rc),
-    ):
+    with patch.object(asgi_app.core, "redis_client", mock_rc):
         yield mock_rc
 
 
-def test_health_matches_flask_shape(flask_client, asgi_client):
-    flask_response = flask_client.get("/health")
+def test_health_returns_gateway_shape(asgi_client):
     asgi_response = asgi_client.get("/health")
 
-    assert asgi_response.status_code == flask_response.status_code == 200
-    flask_body = flask_response.get_json()
+    assert asgi_response.status_code == 200
     asgi_body = asgi_response.json()
 
-    assert asgi_body["status"] == flask_body["status"] == "healthy"
+    assert asgi_body["status"] == "healthy"
     assert isinstance(asgi_body["timestamp"], float)
-    assert asgi_body["request_stats"] == flask_body["request_stats"]
+    assert isinstance(asgi_body["request_stats"], dict)
 
 
 def test_readyz_reports_ready(asgi_client):

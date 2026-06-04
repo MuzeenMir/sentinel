@@ -46,7 +46,6 @@ from typing import Any, Dict, List, Optional
 
 import psycopg2
 import psycopg2.extras
-from flask import g
 
 from audit_merkle import canonical_event_digest
 
@@ -139,14 +138,14 @@ def audit_log(
     ts = time.time()
 
     if actor is None:
-        user = getattr(g, "current_user", None) if _in_request_context() else None
+        user = _request_context_value("current_user")
         if user:
             actor = f"user:{user.get('id', 'unknown')}"
         else:
             actor = "system"
 
-    if tenant_id is None and _in_request_context():
-        tenant_id = getattr(g, "tenant_id", None)
+    if tenant_id is None:
+        tenant_id = _request_context_value("tenant_id")
     if tenant_id is None:
         tenant_id = _default_tenant_id()
 
@@ -421,3 +420,14 @@ def _in_request_context() -> bool:
         return has_request_context()
     except Exception:
         return False
+
+
+def _request_context_value(name: str) -> Any:
+    if not _in_request_context():
+        return None
+    try:
+        from flask import g
+
+        return getattr(g, name, None)
+    except Exception:
+        return None
