@@ -17,6 +17,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
+from residency import AnthropicProvider, ResidencyConfig, resolve_residency
+
 # Latest Claude models (see CLAUDE.md / model IDs).
 DEFAULT_SYNTHESIS_MODEL = "claude-opus-4-8"
 CLASSIFY_MODEL = "claude-haiku-4-5"
@@ -67,12 +69,16 @@ class AnthropicClient:
         max_attempts: int = 3,
         backoff_base: float = 0.5,
         sleep_fn: Callable[[float], None] = time.sleep,
+        residency: Optional[ResidencyConfig] = None,
+        provider: Any = None,
     ):
         self.default_model = default_model
         self.max_tokens = max_tokens
         self.max_attempts = max_attempts
         self.backoff_base = backoff_base
         self._sleep = sleep_fn
+        # Where inference routes (default endpoint unless configured otherwise).
+        self.residency = residency if residency is not None else resolve_residency()
 
         if sdk_client is not None:
             self._sdk = sdk_client
@@ -82,13 +88,13 @@ class AnthropicClient:
         # so misconfiguration fails fast rather than at first request.
         if api_key is not None and api_key == "":
             raise LLMConfigError("ANTHROPIC_API_KEY is required for inference")
+        self._provider = provider or AnthropicProvider()
         try:
-            import anthropic  # noqa: PLC0415 (lazy by design)
+            self._sdk = self._provider.build_client(api_key, self.residency)
         except ImportError as exc:  # pragma: no cover - depends on env
             raise LLMConfigError(
                 "anthropic SDK not installed; pass sdk_client= or install anthropic"
             ) from exc
-        self._sdk = anthropic.Anthropic(api_key=api_key or None)
 
     @staticmethod
     def _cached_system(system: str) -> list[dict]:

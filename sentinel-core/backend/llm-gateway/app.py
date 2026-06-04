@@ -33,6 +33,7 @@ from cost import resolve_token_budget  # noqa: E402
 from persistence import SessionStore  # noqa: E402
 from prompts import render  # noqa: E402
 from proposals import NonceGuard, ProposalError, ProposalSigner  # noqa: E402
+from residency import resolve_residency  # noqa: E402
 from safety import RateLimiter, check_request  # noqa: E402
 from tools import (  # noqa: E402
     SERVICE_TOKEN_HEADER,
@@ -150,12 +151,18 @@ def health():
 
 @app.get("/readyz")
 def readyz():
+    residency = resolve_residency()
     return (
         jsonify(
             {
                 "status": "ready",
                 "service": SERVICE_NAME,
                 "inference_enabled": inference_enabled(),
+                # Honest visibility of WHERE inference routes (a config seam, not
+                # a residency guarantee — see ADR-021).
+                "inference_provider": residency.provider,
+                "inference_region": residency.region,
+                "inference_default_endpoint": residency.is_default,
             }
         ),
         200,
