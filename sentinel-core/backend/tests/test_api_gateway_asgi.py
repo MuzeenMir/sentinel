@@ -2,6 +2,7 @@
 
 import os
 import sys
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -53,7 +54,10 @@ def _patch_redis_clients():
     mock_rc.get.return_value = None
     mock_rc.scan_iter.return_value = iter([])
     mock_rc.incr.return_value = 1
-    with patch.object(flask_gateway, "redis_client", mock_rc):
+    with (
+        patch.object(flask_gateway, "redis_client", mock_rc),
+        patch.object(asgi_app.core, "redis_client", mock_rc),
+    ):
         yield mock_rc
 
 
@@ -75,6 +79,16 @@ def test_readyz_reports_ready(asgi_client):
 
     assert response.status_code == 200
     assert response.json() == {"status": "ready"}
+
+
+def test_gateway_core_is_framework_agnostic_and_asgi_does_not_import_flask_app():
+    gateway_dir = Path(__file__).resolve().parents[1] / "api-gateway"
+    core_source = (gateway_dir / "gateway_core.py").read_text(encoding="utf-8")
+    asgi_source = (gateway_dir / "asgi_app.py").read_text(encoding="utf-8")
+
+    assert "from flask" not in core_source
+    assert "import flask" not in core_source
+    assert "import app as flask_gateway" not in asgi_source
 
 
 def test_auth_dependency_rejects_missing_token():
@@ -472,7 +486,7 @@ def test_update_config_requires_all_sections(mock_post, asgi_client):
 def test_stats_aggregates_downstream(mock_post, asgi_client):
     mock_post.side_effect = _auth_verify_ok
     with patch.object(
-        asgi_app.flask_gateway,
+        asgi_app.core,
         "_fetch_downstream_stats",
         return_value={
             "threats_detected": 5,
@@ -499,7 +513,7 @@ def test_stats_aggregates_downstream(mock_post, asgi_client):
 def test_statistics_alias_matches_stats(mock_post, asgi_client):
     mock_post.side_effect = _auth_verify_ok
     with patch.object(
-        asgi_app.flask_gateway,
+        asgi_app.core,
         "_fetch_downstream_stats",
         return_value={"threats_detected": 1},
     ):
@@ -516,7 +530,7 @@ def test_statistics_alias_matches_stats(mock_post, asgi_client):
 def test_stats_runtime_misconfiguration_returns_503(mock_post, asgi_client):
     mock_post.side_effect = _auth_verify_ok
     with patch.object(
-        asgi_app.flask_gateway,
+        asgi_app.core,
         "_fetch_downstream_stats",
         side_effect=RuntimeError("missing token"),
     ):
@@ -981,7 +995,7 @@ def test_admin_and_tenant_mutations_require_admin(mock_post, method, path, asgi_
     assert response.json() == {"error": "Insufficient permissions"}
 
 
-@patch.object(asgi_app.flask_gateway, "query_audit_log")
+@patch.object(asgi_app.core, "query_audit_log")
 @patch("requests.post")
 def test_audit_events_reads_local_audit_log(mock_post, mock_query, asgi_client):
     mock_post.side_effect = _auth_verify_ok
@@ -999,7 +1013,7 @@ def test_audit_events_reads_local_audit_log(mock_post, mock_query, asgi_client):
     assert mock_query.call_args.kwargs["offset"] == 2
 
 
-@patch.object(asgi_app.flask_gateway, "get_audit_stats", return_value={"total": 3})
+@patch.object(asgi_app.core, "get_audit_stats", return_value={"total": 3})
 @patch("requests.post")
 def test_audit_stats_reads_local_stats(mock_post, _stats, asgi_client):
     mock_post.side_effect = _auth_verify_ok
@@ -1013,7 +1027,7 @@ def test_audit_stats_reads_local_stats(mock_post, _stats, asgi_client):
     assert response.json() == {"total": 3}
 
 
-@patch.object(asgi_app.flask_gateway, "verify_integrity")
+@patch.object(asgi_app.core, "verify_integrity")
 @patch("requests.post")
 def test_audit_verify_checks_record_integrity(mock_post, mock_verify, asgi_client):
     mock_post.side_effect = _auth_verify_ok

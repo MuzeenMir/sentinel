@@ -17,13 +17,13 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
 
-import app as flask_gateway
+import gateway_core as core
 
 
 asgi = FastAPI(title="SENTINEL API Gateway")
 asgi.add_middleware(
     CORSMiddleware,
-    allow_origins=flask_gateway._load_cors_origins(),
+    allow_origins=core._load_cors_origins(),
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -70,7 +70,7 @@ def require_current_user(request: Request) -> dict[str, object] | JSONResponse:
 
     try:
         response = requests.post(
-            f"{flask_gateway.app.config['AUTH_SERVICE_URL']}/api/v1/auth/verify",
+            f"{core.CONFIG['AUTH_SERVICE_URL']}/api/v1/auth/verify",
             headers={"Authorization": f"Bearer {token}"},
             timeout=5,
         )
@@ -99,7 +99,7 @@ def require_role(
 def _asgi_sse_stream(channel: str, heartbeat_type: str):
     """Wrap the Flask SSE generator so ASGI treats disconnects as clean exits."""
     try:
-        yield from flask_gateway._sse_pubsub_stream(channel, heartbeat_type)
+        yield from core._sse_pubsub_stream(channel, heartbeat_type)
     except GeneratorExit:
         return
 
@@ -112,7 +112,7 @@ async def _proxy_to(
 ) -> Response:
     """Forward an ASGI request using the Flask gateway proxy semantics."""
     suffix = path_suffix.strip("/")
-    if not flask_gateway._PROXY_SUFFIX_RE.fullmatch(suffix):
+    if not core._PROXY_SUFFIX_RE.fullmatch(suffix):
         return JSONResponse({"error": "Invalid proxy path"}, status_code=400)
 
     clean_suffix = "/".join(token for token in suffix.split("/") if token)
@@ -191,7 +191,7 @@ def health_check() -> dict[str, object]:
     return {
         "status": "healthy",
         "timestamp": time.time(),
-        "request_stats": flask_gateway.get_request_stats(),
+        "request_stats": core.get_request_stats(),
     }
 
 
@@ -207,7 +207,7 @@ def auth_verify(request: Request) -> JSONResponse:
     token = request.headers.get("Authorization", "").replace("Bearer ", "")
     try:
         response = requests.post(
-            f"{flask_gateway.app.config['AUTH_SERVICE_URL']}/api/v1/auth/verify",
+            f"{core.CONFIG['AUTH_SERVICE_URL']}/api/v1/auth/verify",
             headers={"Authorization": f"Bearer {token}"},
             timeout=5,
         )
@@ -222,10 +222,10 @@ def auth_verify(request: Request) -> JSONResponse:
 )
 async def auth_proxy(path: str, request: Request) -> JSONResponse:
     """Proxy authentication requests to auth service."""
-    if path.startswith("/") or not flask_gateway._AUTH_PATH_RE.fullmatch(path):
+    if path.startswith("/") or not core._AUTH_PATH_RE.fullmatch(path):
         return JSONResponse({"error": "Invalid path"}, status_code=400)
 
-    auth_url = f"{flask_gateway.app.config['AUTH_SERVICE_URL']}/api/v1/auth/{path}"
+    auth_url = f"{core.CONFIG['AUTH_SERVICE_URL']}/api/v1/auth/{path}"
     headers = {}
     auth_header = request.headers.get("Authorization")
     if auth_header:
@@ -262,7 +262,7 @@ def get_threats(request: Request) -> JSONResponse:
     params.pop("token", None)
     try:
         response = requests.get(
-            f"{flask_gateway.app.config['DATA_COLLECTOR_URL']}/api/v1/threats",
+            f"{core.CONFIG['DATA_COLLECTOR_URL']}/api/v1/threats",
             headers={"Authorization": request.headers.get("Authorization")},
             params=params,
         )
@@ -282,7 +282,7 @@ async def create_threat(request: Request) -> JSONResponse:
 
     try:
         response = requests.post(
-            f"{flask_gateway.app.config['DATA_COLLECTOR_URL']}/api/v1/threats",
+            f"{core.CONFIG['DATA_COLLECTOR_URL']}/api/v1/threats",
             headers={"Authorization": request.headers.get("Authorization")},
             json=await request.json(),
         )
@@ -300,7 +300,7 @@ async def get_threat(threat_id: int, request: Request) -> Response:
     if isinstance(current_user, JSONResponse):
         return current_user
     return await _proxy_to(
-        flask_gateway.app.config["DATA_COLLECTOR_URL"],
+        core.CONFIG["DATA_COLLECTOR_URL"],
         f"/api/v1/threats/{threat_id}",
         request,
         current_user,
@@ -318,7 +318,7 @@ def get_alerts(request: Request) -> JSONResponse:
     params.pop("token", None)
     try:
         response = requests.get(
-            f"{flask_gateway.app.config['ALERT_SERVICE_URL']}/api/v1/alerts",
+            f"{core.CONFIG['ALERT_SERVICE_URL']}/api/v1/alerts",
             headers={"Authorization": request.headers.get("Authorization")},
             params=params,
         )
@@ -336,7 +336,7 @@ async def create_alert(request: Request) -> JSONResponse:
 
     try:
         response = requests.post(
-            f"{flask_gateway.app.config['ALERT_SERVICE_URL']}/api/v1/alerts",
+            f"{core.CONFIG['ALERT_SERVICE_URL']}/api/v1/alerts",
             headers={"Authorization": request.headers.get("Authorization")},
             json=await request.json(),
         )
@@ -354,7 +354,7 @@ def get_alert_stats(request: Request) -> JSONResponse:
 
     try:
         response = requests.get(
-            f"{flask_gateway.app.config['ALERT_SERVICE_URL']}/api/v1/alerts/statistics",
+            f"{core.CONFIG['ALERT_SERVICE_URL']}/api/v1/alerts/statistics",
             headers={"Authorization": request.headers.get("Authorization")},
             params=dict(request.query_params),
         )
@@ -372,7 +372,7 @@ def get_alert(alert_id: int, request: Request) -> JSONResponse:
 
     try:
         response = requests.get(
-            f"{flask_gateway.app.config['ALERT_SERVICE_URL']}/api/v1/alerts/{alert_id}",
+            f"{core.CONFIG['ALERT_SERVICE_URL']}/api/v1/alerts/{alert_id}",
             headers={"Authorization": request.headers.get("Authorization")},
         )
         return JSONResponse(response.json(), status_code=response.status_code)
@@ -389,7 +389,7 @@ async def acknowledge_alert(alert_id: int, request: Request) -> JSONResponse:
 
     try:
         response = requests.post(
-            f"{flask_gateway.app.config['ALERT_SERVICE_URL']}/api/v1/alerts/{alert_id}/acknowledge",
+            f"{core.CONFIG['ALERT_SERVICE_URL']}/api/v1/alerts/{alert_id}/acknowledge",
             headers={"Authorization": request.headers.get("Authorization")},
             json=await request.json(),
         )
@@ -407,7 +407,7 @@ async def resolve_alert(alert_id: int, request: Request) -> JSONResponse:
 
     try:
         response = requests.post(
-            f"{flask_gateway.app.config['ALERT_SERVICE_URL']}/api/v1/alerts/{alert_id}/resolve",
+            f"{core.CONFIG['ALERT_SERVICE_URL']}/api/v1/alerts/{alert_id}/resolve",
             headers={"Authorization": request.headers.get("Authorization")},
             json=await request.json(),
             params=dict(request.query_params),
@@ -427,7 +427,7 @@ async def update_alert(alert_id: int, request: Request) -> JSONResponse:
 
     try:
         response = requests.put(
-            f"{flask_gateway.app.config['ALERT_SERVICE_URL']}/api/v1/alerts/{alert_id}",
+            f"{core.CONFIG['ALERT_SERVICE_URL']}/api/v1/alerts/{alert_id}",
             headers={"Authorization": request.headers.get("Authorization")},
             json=await request.json(),
             timeout=30,
@@ -445,7 +445,7 @@ def get_config(request: Request) -> JSONResponse:
         return current_user
 
     try:
-        return JSONResponse(flask_gateway._load_config(), status_code=200)
+        return JSONResponse(core._load_config(), status_code=200)
     except Exception:
         return JSONResponse(
             {"error": "Configuration retrieval failed"}, status_code=500
@@ -468,7 +468,7 @@ async def update_config(request: Request) -> JSONResponse:
                     {"error": f"Missing configuration section: {key}"},
                     status_code=400,
                 )
-        flask_gateway._save_config(new_config)
+        core._save_config(new_config)
         return JSONResponse(
             {"message": "Configuration updated successfully"}, status_code=200
         )
@@ -485,9 +485,9 @@ def get_statistics(request: Request) -> JSONResponse:
         return current_user
 
     try:
-        downstream = flask_gateway._fetch_downstream_stats()
+        downstream = core._fetch_downstream_stats()
         stats = {
-            "requests": flask_gateway.get_request_stats(),
+            "requests": core.get_request_stats(),
             "threats_detected": downstream.get("threats_detected", 0),
             "alerts_total": downstream.get("alerts_total", 0),
             "alerts_by_severity": downstream.get("alerts_by_severity", {}),
@@ -513,7 +513,7 @@ def stream_threats(request: Request) -> JSONResponse | StreamingResponse:
     if isinstance(current_user, JSONResponse):
         return current_user
     return StreamingResponse(
-        _asgi_sse_stream(flask_gateway.SSE_CHANNEL_THREATS, "threat_heartbeat"),
+        _asgi_sse_stream(core.SSE_CHANNEL_THREATS, "threat_heartbeat"),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
@@ -526,7 +526,7 @@ def stream_alerts(request: Request) -> JSONResponse | StreamingResponse:
     if isinstance(current_user, JSONResponse):
         return current_user
     return StreamingResponse(
-        _asgi_sse_stream(flask_gateway.SSE_CHANNEL_ALERTS, "alert_heartbeat"),
+        _asgi_sse_stream(core.SSE_CHANNEL_ALERTS, "alert_heartbeat"),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
@@ -538,7 +538,7 @@ async def get_policies(request: Request) -> Response:
     if isinstance(current_user, JSONResponse):
         return current_user
     return await _proxy_to(
-        flask_gateway.app.config["POLICY_SERVICE_URL"],
+        core.CONFIG["POLICY_SERVICE_URL"],
         "/api/v1/policies",
         request,
         current_user,
@@ -551,7 +551,7 @@ async def get_policy(policy_id: str, request: Request) -> Response:
     if isinstance(current_user, JSONResponse):
         return current_user
     return await _proxy_to(
-        flask_gateway.app.config["POLICY_SERVICE_URL"],
+        core.CONFIG["POLICY_SERVICE_URL"],
         f"/api/v1/policies/{policy_id}",
         request,
         current_user,
@@ -569,7 +569,7 @@ async def create_policy(request: Request) -> Response:
     if isinstance(validation, JSONResponse):
         return validation
     return await _proxy_to(
-        flask_gateway.app.config["POLICY_SERVICE_URL"],
+        core.CONFIG["POLICY_SERVICE_URL"],
         "/api/v1/policies",
         request,
         current_user,
@@ -582,7 +582,7 @@ async def update_policy(policy_id: str, request: Request) -> Response:
     if isinstance(current_user, JSONResponse):
         return current_user
     return await _proxy_to(
-        flask_gateway.app.config["POLICY_SERVICE_URL"],
+        core.CONFIG["POLICY_SERVICE_URL"],
         f"/api/v1/policies/{policy_id}",
         request,
         current_user,
@@ -595,7 +595,7 @@ async def delete_policy(policy_id: str, request: Request) -> Response:
     if isinstance(current_user, JSONResponse):
         return current_user
     return await _proxy_to(
-        flask_gateway.app.config["POLICY_SERVICE_URL"],
+        core.CONFIG["POLICY_SERVICE_URL"],
         f"/api/v1/policies/{policy_id}",
         request,
         current_user,
@@ -608,7 +608,7 @@ async def get_frameworks(request: Request) -> Response:
     if isinstance(current_user, JSONResponse):
         return current_user
     return await _proxy_to(
-        flask_gateway.app.config["COMPLIANCE_ENGINE_URL"],
+        core.CONFIG["COMPLIANCE_ENGINE_URL"],
         "/api/v1/frameworks",
         request,
         current_user,
@@ -621,7 +621,7 @@ async def get_framework(framework_id: str, request: Request) -> Response:
     if isinstance(current_user, JSONResponse):
         return current_user
     return await _proxy_to(
-        flask_gateway.app.config["COMPLIANCE_ENGINE_URL"],
+        core.CONFIG["COMPLIANCE_ENGINE_URL"],
         f"/api/v1/frameworks/{framework_id}",
         request,
         current_user,
@@ -631,7 +631,7 @@ async def get_framework(framework_id: str, request: Request) -> Response:
 @asgi.post("/api/v1/assess")
 async def compliance_assess(request: Request) -> Response:
     return await _auth_proxy(
-        request, flask_gateway.app.config["COMPLIANCE_ENGINE_URL"], "/api/v1/assess"
+        request, core.CONFIG["COMPLIANCE_ENGINE_URL"], "/api/v1/assess"
     )
 
 
@@ -639,7 +639,7 @@ async def compliance_assess(request: Request) -> Response:
 async def compliance_gap_analysis(request: Request) -> Response:
     return await _auth_proxy(
         request,
-        flask_gateway.app.config["COMPLIANCE_ENGINE_URL"],
+        core.CONFIG["COMPLIANCE_ENGINE_URL"],
         "/api/v1/gap-analysis",
     )
 
@@ -647,7 +647,7 @@ async def compliance_gap_analysis(request: Request) -> Response:
 @asgi.post("/api/v1/reports")
 async def compliance_reports(request: Request) -> Response:
     return await _auth_proxy(
-        request, flask_gateway.app.config["COMPLIANCE_ENGINE_URL"], "/api/v1/reports"
+        request, core.CONFIG["COMPLIANCE_ENGINE_URL"], "/api/v1/reports"
     )
 
 
@@ -655,7 +655,7 @@ async def compliance_reports(request: Request) -> Response:
 async def compliance_reports_history(request: Request) -> Response:
     return await _auth_proxy(
         request,
-        flask_gateway.app.config["COMPLIANCE_ENGINE_URL"],
+        core.CONFIG["COMPLIANCE_ENGINE_URL"],
         "/api/v1/reports/history",
     )
 
@@ -664,7 +664,7 @@ async def compliance_reports_history(request: Request) -> Response:
 async def compliance_map_policy(request: Request) -> Response:
     return await _auth_proxy(
         request,
-        flask_gateway.app.config["COMPLIANCE_ENGINE_URL"],
+        core.CONFIG["COMPLIANCE_ENGINE_URL"],
         "/api/v1/map-policy",
     )
 
@@ -673,7 +673,7 @@ async def compliance_map_policy(request: Request) -> Response:
 async def xai_explain_detection(request: Request) -> Response:
     return await _auth_proxy(
         request,
-        flask_gateway.app.config["XAI_SERVICE_URL"],
+        core.CONFIG["XAI_SERVICE_URL"],
         "/api/v1/explain/detection",
     )
 
@@ -682,7 +682,7 @@ async def xai_explain_detection(request: Request) -> Response:
 async def xai_explain_policy(request: Request) -> Response:
     return await _auth_proxy(
         request,
-        flask_gateway.app.config["XAI_SERVICE_URL"],
+        core.CONFIG["XAI_SERVICE_URL"],
         "/api/v1/explain/policy",
     )
 
@@ -690,7 +690,7 @@ async def xai_explain_policy(request: Request) -> Response:
 @asgi.get("/api/v1/audit-trail")
 async def xai_audit_trail(request: Request) -> Response:
     return await _auth_proxy(
-        request, flask_gateway.app.config["XAI_SERVICE_URL"], "/api/v1/audit-trail"
+        request, core.CONFIG["XAI_SERVICE_URL"], "/api/v1/audit-trail"
     )
 
 
@@ -698,7 +698,7 @@ async def xai_audit_trail(request: Request) -> Response:
 async def xai_report_compliance(request: Request) -> Response:
     return await _auth_proxy(
         request,
-        flask_gateway.app.config["XAI_SERVICE_URL"],
+        core.CONFIG["XAI_SERVICE_URL"],
         "/api/v1/report/compliance",
     )
 
@@ -706,49 +706,45 @@ async def xai_report_compliance(request: Request) -> Response:
 @asgi.get("/api/v1/xai/statistics")
 async def xai_statistics(request: Request) -> Response:
     return await _auth_proxy(
-        request, flask_gateway.app.config["XAI_SERVICE_URL"], "/api/v1/statistics"
+        request, core.CONFIG["XAI_SERVICE_URL"], "/api/v1/statistics"
     )
 
 
 @asgi.post("/api/v1/detect")
 async def ai_detect(request: Request) -> Response:
-    return await _auth_proxy(
-        request, flask_gateway.app.config["AI_ENGINE_URL"], "/api/v1/detect"
-    )
+    return await _auth_proxy(request, core.CONFIG["AI_ENGINE_URL"], "/api/v1/detect")
 
 
 @asgi.post("/api/v1/detect/batch")
 async def ai_detect_batch(request: Request) -> Response:
     return await _auth_proxy(
-        request, flask_gateway.app.config["AI_ENGINE_URL"], "/api/v1/detect/batch"
+        request, core.CONFIG["AI_ENGINE_URL"], "/api/v1/detect/batch"
     )
 
 
 @asgi.post("/api/v1/decide")
 async def drl_decide(request: Request) -> Response:
-    return await _auth_proxy(
-        request, flask_gateway.app.config["DRL_ENGINE_URL"], "/api/v1/decide"
-    )
+    return await _auth_proxy(request, core.CONFIG["DRL_ENGINE_URL"], "/api/v1/decide")
 
 
 @asgi.post("/api/v1/decide/batch")
 async def drl_decide_batch(request: Request) -> Response:
     return await _auth_proxy(
-        request, flask_gateway.app.config["DRL_ENGINE_URL"], "/api/v1/decide/batch"
+        request, core.CONFIG["DRL_ENGINE_URL"], "/api/v1/decide/batch"
     )
 
 
 @asgi.get("/api/v1/action-space")
 async def drl_action_space(request: Request) -> Response:
     return await _auth_proxy(
-        request, flask_gateway.app.config["DRL_ENGINE_URL"], "/api/v1/action-space"
+        request, core.CONFIG["DRL_ENGINE_URL"], "/api/v1/action-space"
     )
 
 
 @asgi.get("/api/v1/state-space")
 async def drl_state_space(request: Request) -> Response:
     return await _auth_proxy(
-        request, flask_gateway.app.config["DRL_ENGINE_URL"], "/api/v1/state-space"
+        request, core.CONFIG["DRL_ENGINE_URL"], "/api/v1/state-space"
     )
 
 
@@ -756,7 +752,7 @@ async def drl_state_space(request: Request) -> Response:
 async def hardening_scan(request: Request) -> Response:
     return await _auth_proxy(
         request,
-        flask_gateway.app.config["HARDENING_SERVICE_URL"],
+        core.CONFIG["HARDENING_SERVICE_URL"],
         "/api/v1/hardening/scan",
     )
 
@@ -765,7 +761,7 @@ async def hardening_scan(request: Request) -> Response:
 async def hardening_posture(request: Request) -> Response:
     return await _auth_proxy(
         request,
-        flask_gateway.app.config["HARDENING_SERVICE_URL"],
+        core.CONFIG["HARDENING_SERVICE_URL"],
         "/api/v1/hardening/posture",
     )
 
@@ -774,7 +770,7 @@ async def hardening_posture(request: Request) -> Response:
 async def hardening_remediations(request: Request) -> Response:
     return await _auth_proxy(
         request,
-        flask_gateway.app.config["HARDENING_SERVICE_URL"],
+        core.CONFIG["HARDENING_SERVICE_URL"],
         "/api/v1/hardening/remediations",
     )
 
@@ -783,7 +779,7 @@ async def hardening_remediations(request: Request) -> Response:
 async def hardening_remediate(check_id: str, request: Request) -> Response:
     return await _auth_proxy(
         request,
-        flask_gateway.app.config["HARDENING_SERVICE_URL"],
+        core.CONFIG["HARDENING_SERVICE_URL"],
         f"/api/v1/hardening/remediate/{check_id}",
     )
 
@@ -791,28 +787,28 @@ async def hardening_remediate(check_id: str, request: Request) -> Response:
 @asgi.get("/api/v1/hids/events")
 async def hids_events(request: Request) -> Response:
     return await _auth_proxy(
-        request, flask_gateway.app.config["HIDS_AGENT_URL"], "/api/v1/hids/events"
+        request, core.CONFIG["HIDS_AGENT_URL"], "/api/v1/hids/events"
     )
 
 
 @asgi.get("/api/v1/hids/alerts")
 async def hids_alerts(request: Request) -> Response:
     return await _auth_proxy(
-        request, flask_gateway.app.config["HIDS_AGENT_URL"], "/api/v1/hids/alerts"
+        request, core.CONFIG["HIDS_AGENT_URL"], "/api/v1/hids/alerts"
     )
 
 
 @asgi.get("/api/v1/hids/status")
 async def hids_status(request: Request) -> Response:
     return await _auth_proxy(
-        request, flask_gateway.app.config["HIDS_AGENT_URL"], "/api/v1/hids/status"
+        request, core.CONFIG["HIDS_AGENT_URL"], "/api/v1/hids/status"
     )
 
 
 @asgi.get("/api/v1/admin/users")
 async def admin_get_users(request: Request) -> Response:
     return await _role_proxy(
-        request, flask_gateway.app.config["AUTH_SERVICE_URL"], "/api/v1/auth/users"
+        request, core.CONFIG["AUTH_SERVICE_URL"], "/api/v1/auth/users"
     )
 
 
@@ -820,7 +816,7 @@ async def admin_get_users(request: Request) -> Response:
 async def admin_update_user(user_id: int, request: Request) -> Response:
     return await _role_proxy(
         request,
-        flask_gateway.app.config["AUTH_SERVICE_URL"],
+        core.CONFIG["AUTH_SERVICE_URL"],
         f"/api/v1/auth/users/{user_id}",
     )
 
@@ -828,21 +824,21 @@ async def admin_update_user(user_id: int, request: Request) -> Response:
 @asgi.get("/api/v1/traffic")
 async def get_traffic(request: Request) -> Response:
     return await _auth_proxy(
-        request, flask_gateway.app.config["DATA_COLLECTOR_URL"], "/api/v1/traffic"
+        request, core.CONFIG["DATA_COLLECTOR_URL"], "/api/v1/traffic"
     )
 
 
 @asgi.get("/api/v1/tenants")
 async def tenants_list(request: Request) -> Response:
     return await _auth_proxy(
-        request, flask_gateway.app.config["AUTH_SERVICE_URL"], "/api/v1/tenants"
+        request, core.CONFIG["AUTH_SERVICE_URL"], "/api/v1/tenants"
     )
 
 
 @asgi.post("/api/v1/tenants")
 async def tenants_create(request: Request) -> Response:
     return await _role_proxy(
-        request, flask_gateway.app.config["AUTH_SERVICE_URL"], "/api/v1/tenants"
+        request, core.CONFIG["AUTH_SERVICE_URL"], "/api/v1/tenants"
     )
 
 
@@ -850,7 +846,7 @@ async def tenants_create(request: Request) -> Response:
 async def tenant_get(tenant_pk: int, request: Request) -> Response:
     return await _auth_proxy(
         request,
-        flask_gateway.app.config["AUTH_SERVICE_URL"],
+        core.CONFIG["AUTH_SERVICE_URL"],
         f"/api/v1/tenants/{tenant_pk}",
     )
 
@@ -859,7 +855,7 @@ async def tenant_get(tenant_pk: int, request: Request) -> Response:
 async def tenant_update(tenant_pk: int, request: Request) -> Response:
     return await _role_proxy(
         request,
-        flask_gateway.app.config["AUTH_SERVICE_URL"],
+        core.CONFIG["AUTH_SERVICE_URL"],
         f"/api/v1/tenants/{tenant_pk}",
     )
 
@@ -868,7 +864,7 @@ async def tenant_update(tenant_pk: int, request: Request) -> Response:
 async def tenant_delete(tenant_pk: int, request: Request) -> Response:
     return await _role_proxy(
         request,
-        flask_gateway.app.config["AUTH_SERVICE_URL"],
+        core.CONFIG["AUTH_SERVICE_URL"],
         f"/api/v1/tenants/{tenant_pk}",
     )
 
@@ -876,7 +872,7 @@ async def tenant_delete(tenant_pk: int, request: Request) -> Response:
 @asgi.api_route("/api/v1/integrations", methods=["GET", "POST"])
 async def integrations(request: Request) -> Response:
     return await _auth_proxy(
-        request, flask_gateway.app.config["ALERT_SERVICE_URL"], "/api/v1/integrations"
+        request, core.CONFIG["ALERT_SERVICE_URL"], "/api/v1/integrations"
     )
 
 
@@ -884,7 +880,7 @@ async def integrations(request: Request) -> Response:
 async def integrations_test(request: Request) -> Response:
     return await _auth_proxy(
         request,
-        flask_gateway.app.config["ALERT_SERVICE_URL"],
+        core.CONFIG["ALERT_SERVICE_URL"],
         "/api/v1/integrations/test",
     )
 
@@ -895,7 +891,7 @@ def get_audit_events(request: Request) -> JSONResponse:
     if isinstance(current_user, JSONResponse):
         return current_user
 
-    records = flask_gateway.query_audit_log(
+    records = core.query_audit_log(
         category=request.query_params.get("category"),
         start_time=_query_float(request, "start_time"),
         end_time=_query_float(request, "end_time"),
@@ -911,7 +907,7 @@ def audit_statistics(request: Request) -> JSONResponse:
     current_user = require_current_user(request)
     if isinstance(current_user, JSONResponse):
         return current_user
-    return JSONResponse(flask_gateway.get_audit_stats(), status_code=200)
+    return JSONResponse(core.get_audit_stats(), status_code=200)
 
 
 @asgi.post("/api/v1/audit/verify")
@@ -922,7 +918,7 @@ async def audit_verify_integrity(request: Request) -> JSONResponse:
     data = await _json_body(request)
     records = data.get("records", []) if isinstance(data, dict) else []
     results = [
-        {"id": record.get("id"), "valid": flask_gateway.verify_integrity(record)}
+        {"id": record.get("id"), "valid": core.verify_integrity(record)}
         for record in records
         if isinstance(record, dict)
     ]
@@ -935,7 +931,7 @@ def audit_categories(request: Request) -> JSONResponse:
     if isinstance(current_user, JSONResponse):
         return current_user
     return JSONResponse(
-        {"categories": [category.value for category in flask_gateway.AuditCategory]},
+        {"categories": [category.value for category in core.AuditCategory]},
         status_code=200,
     )
 
