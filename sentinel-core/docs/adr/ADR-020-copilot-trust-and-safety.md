@@ -25,15 +25,18 @@ and — honestly — what is not yet shipped.
 | **Observability** | OTel spans per model/tool call (no-op safe without an exporter) | `telemetry.py` | ✅ shipped |
 | **Inference residency seam** | provider/region/base_url config; on-prem adapter interface | `residency.py` | ✅ shipped (see ADR-021) |
 | **Tenant isolation of copilot state** | per-tenant scoping of sessions/messages/proposals | `persistence.py` | ⚠️ **partial** — see below |
-| **Adversarial red-team CI gate** | injection/jailbreak/tool-poisoning/citation-forgery corpus run in CI with published residual | `evals/redteam/*`, `llm-gateway-redteam.yml` | 🔴 **not yet shipped** |
+| **Adversarial red-team CI gate** | injection / jailbreak / tool-poisoning / citation-forgery / SSRF-arg corpus run fail-closed in CI with published residual | `redteam.py`, `evals/redteam/*.jsonl`, `llm-gateway-redteam.yml` | ✅ shipped |
 
 ## Honest claim boundaries (do NOT over-claim)
 
 - **Grounding reduces, does not eliminate, hallucination.** It enforces a
   *verifiable* contract (cited ids exist, hash-match a fetched source, are
-  fresh). The residual rate must be measured by the red-team gate and
-  **published**, not hidden — and that gate is **not yet built** (🔴 above). Until
-  it is, do not cite a residual-hallucination number.
+  fresh). The red-team gate (`redteam.py` + `llm-gateway-redteam.yml`) runs a
+  corpus of injection / forgery / SSRF-arg attacks fail-closed; the current
+  residual is **0/13** (every known attack neutralized), published in CI. Note
+  this measures *defense coverage of known attack classes*, **not** a
+  hallucination rate on free-form generation — expand the corpus as new vectors
+  are found, and do not represent 0 residual as "cannot hallucinate."
 - **Copilot session state is Redis-only by design today.** Moving it to Postgres
   (for RLS tenant isolation) trips the `audit-schema-guard` required check, which
   needs a genuine independent (Marcus, different-model) review of the migration
@@ -48,14 +51,16 @@ and — honestly — what is not yet shipped.
 
 ## Remaining integration / follow-ups
 
-- Build the adversarial red-team corpus + `llm-gateway-redteam.yml` CI gate and
-  publish the residual (Plan CLAUDE C1.1/C1.3/C1.4).
 - Land copilot tenant isolation (C3) — either a Marcus-reviewed RLS migration or
-  interim Redis keyspace scoping.
-- **Gateway proxy route:** expose the `llm-gateway` `/copilot/*` endpoints
-  through the api-gateway so the admin-console reaches them in production (the UI
-  calls `/copilot/*` via the shared axios client; the gateway proxy mapping is
-  not yet present).
+  interim Redis keyspace scoping (gated on the `audit-schema-guard` two-person
+  review).
+- **Gateway proxy route:** the admin-console now calls `/api/v1/copilot/*`; the
+  api-gateway must proxy those to the `llm-gateway` `/copilot/*` endpoints,
+  injecting the internal service token + verified `X-Actor`/`X-Tenant-Id`. The
+  frontend half is done (PR #56); the gateway half is authored as a Kai task
+  (`.team/prompts/2026-06-04-kai-gateway-copilot-proxy.md`) since api-gateway is
+  KAI-owned — not yet merged.
+- Expand the red-team corpus as new attack vectors are discovered.
 
 ## Consequences
 

@@ -1,0 +1,4 @@
+{"id": "ssrf-1", "entity_id": "../../admin/keys"}
+{"id": "ssrf-2", "entity_id": "h1/../../secret"}
+{"id": "ssrf-3", "entity_id": "host one; rm -rf /"}
+{"id": "ssrf-4", "entity_id": "http://evil.test/x"}

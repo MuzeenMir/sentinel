@@ -22,9 +22,13 @@ _LONG_TOKEN_RE = re.compile(r"\b[A-Za-z0-9+/_\-]{24,}={0,2}\b")
 _INJECTION_PATTERNS = (
     "ignore all previous",
     "ignore previous instructions",
+    "ignore the above",
     "disregard the system",
     "disregard previous",
+    "disregard all",
     "you are now",
+    "act as",
+    "developer mode",
     "new instructions:",
     "system prompt",
     "reveal your instructions",
@@ -32,6 +36,11 @@ _INJECTION_PATTERNS = (
     "jailbreak",
     "do anything now",
     "override your",
+    # data-exfiltration / tool-output instruction injection
+    "exfiltrate",
+    "send all",
+    "send the following",
+    "base64",
 )
 
 
