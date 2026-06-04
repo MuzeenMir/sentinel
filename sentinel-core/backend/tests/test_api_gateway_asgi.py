@@ -281,7 +281,9 @@ def test_get_threats_strips_query_token(mock_post, mock_get, asgi_client):
     assert response.json() == {"threats": [{"id": 1}], "total": 1}
     assert mock_get.call_args.args[0] == ("http://data-collector:5001/api/v1/threats")
     assert mock_get.call_args.kwargs["params"] == {"foo": "bar"}
-    assert mock_get.call_args.kwargs["headers"] == {"Authorization": None}
+    assert mock_get.call_args.kwargs["headers"] == {
+        "Authorization": "Bearer valid-token"
+    }
 
 
 @patch("requests.post")

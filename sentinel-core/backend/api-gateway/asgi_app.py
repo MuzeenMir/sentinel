@@ -99,6 +99,7 @@ def require_current_user(request: Request) -> dict[str, object] | JSONResponse:
         if response.status_code != 200:
             return JSONResponse({"error": "Invalid token"}, status_code=401)
         user_info = response.json()
+        request.state.verified_token = token
         return dict(user_info["user"])
     except requests.exceptions.RequestException:
         return JSONResponse(
@@ -126,6 +127,17 @@ def _asgi_sse_stream(channel: str, heartbeat_type: str):
         return
 
 
+def _forward_auth_headers(request: Request) -> dict[str, str]:
+    """Return the verified bearer token for downstream requests."""
+    auth_header = request.headers.get("Authorization")
+    if auth_header:
+        return {"Authorization": auth_header}
+    verified_token = getattr(request.state, "verified_token", None)
+    if verified_token:
+        return {"Authorization": f"Bearer {verified_token}"}
+    return {}
+
+
 async def _proxy_to(
     base_url: str,
     path_suffix: str,
@@ -139,7 +151,7 @@ async def _proxy_to(
 
     clean_suffix = "/".join(token for token in suffix.split("/") if token)
     url = base_url.rstrip("/") + "/" + clean_suffix
-    headers = {"Authorization": request.headers.get("Authorization", "")}
+    headers = _forward_auth_headers(request)
     if current_user and current_user.get("tenant_id"):
         headers["X-Tenant-ID"] = str(current_user["tenant_id"])
 
@@ -285,7 +297,7 @@ def get_threats(request: Request) -> JSONResponse:
     try:
         response = requests.get(
             f"{core.CONFIG['DATA_COLLECTOR_URL']}/api/v1/threats",
-            headers={"Authorization": request.headers.get("Authorization")},
+            headers=_forward_auth_headers(request),
             params=params,
         )
         return JSONResponse(response.json(), status_code=response.status_code)
@@ -305,7 +317,7 @@ async def create_threat(request: Request) -> JSONResponse:
     try:
         response = requests.post(
             f"{core.CONFIG['DATA_COLLECTOR_URL']}/api/v1/threats",
-            headers={"Authorization": request.headers.get("Authorization")},
+            headers=_forward_auth_headers(request),
             json=await request.json(),
         )
         return JSONResponse(response.json(), status_code=response.status_code)
@@ -341,7 +353,7 @@ def get_alerts(request: Request) -> JSONResponse:
     try:
         response = requests.get(
             f"{core.CONFIG['ALERT_SERVICE_URL']}/api/v1/alerts",
-            headers={"Authorization": request.headers.get("Authorization")},
+            headers=_forward_auth_headers(request),
             params=params,
         )
         return JSONResponse(response.json(), status_code=response.status_code)
@@ -359,7 +371,7 @@ async def create_alert(request: Request) -> JSONResponse:
     try:
         response = requests.post(
             f"{core.CONFIG['ALERT_SERVICE_URL']}/api/v1/alerts",
-            headers={"Authorization": request.headers.get("Authorization")},
+            headers=_forward_auth_headers(request),
             json=await request.json(),
         )
         return JSONResponse(response.json(), status_code=response.status_code)
@@ -377,7 +389,7 @@ def get_alert_stats(request: Request) -> JSONResponse:
     try:
         response = requests.get(
             f"{core.CONFIG['ALERT_SERVICE_URL']}/api/v1/alerts/statistics",
-            headers={"Authorization": request.headers.get("Authorization")},
+            headers=_forward_auth_headers(request),
             params=dict(request.query_params),
         )
         return JSONResponse(response.json(), status_code=response.status_code)
@@ -395,7 +407,7 @@ def get_alert(alert_id: int, request: Request) -> JSONResponse:
     try:
         response = requests.get(
             f"{core.CONFIG['ALERT_SERVICE_URL']}/api/v1/alerts/{alert_id}",
-            headers={"Authorization": request.headers.get("Authorization")},
+            headers=_forward_auth_headers(request),
         )
         return JSONResponse(response.json(), status_code=response.status_code)
     except requests.exceptions.RequestException:
@@ -412,7 +424,7 @@ async def acknowledge_alert(alert_id: int, request: Request) -> JSONResponse:
     try:
         response = requests.post(
             f"{core.CONFIG['ALERT_SERVICE_URL']}/api/v1/alerts/{alert_id}/acknowledge",
-            headers={"Authorization": request.headers.get("Authorization")},
+            headers=_forward_auth_headers(request),
             json=await request.json(),
         )
         return JSONResponse(response.json(), status_code=response.status_code)
@@ -430,7 +442,7 @@ async def resolve_alert(alert_id: int, request: Request) -> JSONResponse:
     try:
         response = requests.post(
             f"{core.CONFIG['ALERT_SERVICE_URL']}/api/v1/alerts/{alert_id}/resolve",
-            headers={"Authorization": request.headers.get("Authorization")},
+            headers=_forward_auth_headers(request),
             json=await request.json(),
             params=dict(request.query_params),
             timeout=30,
@@ -450,7 +462,7 @@ async def update_alert(alert_id: int, request: Request) -> JSONResponse:
     try:
         response = requests.put(
             f"{core.CONFIG['ALERT_SERVICE_URL']}/api/v1/alerts/{alert_id}",
-            headers={"Authorization": request.headers.get("Authorization")},
+            headers=_forward_auth_headers(request),
             json=await request.json(),
             timeout=30,
         )
