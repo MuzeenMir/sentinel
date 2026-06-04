@@ -33,6 +33,24 @@ asgi.state.limiter = limiter
 asgi.add_middleware(SlowAPIMiddleware)
 
 
+@asgi.middleware("http")
+async def request_metrics(request: Request, call_next):
+    """Record request counts and response duration for the ASGI runtime."""
+    started_at = time.time()
+    core.record_request(request.url.path, request.method)
+    response = await call_next(request)
+    duration = time.time() - started_at
+    response.headers["X-Response-Time"] = f"{duration:.3f}s"
+    core.logger.info(
+        "%s %s - %s - %.3fs",
+        request.method,
+        request.url.path,
+        response.status_code,
+        duration,
+    )
+    return response
+
+
 @asgi.exception_handler(RateLimitExceeded)
 async def rate_limit_handler(
     _request: Request, _exc: RateLimitExceeded

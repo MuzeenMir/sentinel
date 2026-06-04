@@ -2,6 +2,7 @@
 
 import os
 import sys
+import fnmatch
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -79,6 +80,18 @@ def test_readyz_reports_ready(asgi_client):
 
     assert response.status_code == 200
     assert response.json() == {"status": "ready"}
+
+
+def test_asgi_middleware_records_requests_in_health_stats(asgi_client):
+    redis_state = _StatefulRedis()
+
+    with patch.object(asgi_app.core, "redis_client", redis_state):
+        asgi_client.get("/readyz")
+        asgi_client.get("/readyz")
+        response = asgi_client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json()["request_stats"]["/readyz:GET"] == 2
 
 
 def test_gateway_core_is_framework_agnostic_and_asgi_does_not_import_flask_app():
@@ -1086,3 +1099,22 @@ def _auth_verify_ok(*args, **kwargs):
     if "/auth/verify" in url:
         return _response(200, {"user": {"username": "testuser", "role": "admin"}})
     return _response(200, {})
+
+
+class _StatefulRedis:
+    def __init__(self):
+        self.values: dict[str, int | str] = {}
+
+    def incr(self, key):
+        self.values[key] = int(self.values.get(key, 0)) + 1
+        return self.values[key]
+
+    def expire(self, _key, _ttl):
+        return True
+
+    def scan_iter(self, pattern, count=100):
+        del count
+        return iter(key for key in self.values if fnmatch.fnmatch(key, pattern))
+
+    def get(self, key):
+        return self.values.get(key)
