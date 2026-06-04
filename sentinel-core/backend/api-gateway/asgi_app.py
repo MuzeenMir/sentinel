@@ -28,7 +28,11 @@ asgi.add_middleware(
     allow_headers=["*"],
 )
 
-limiter = Limiter(key_func=get_remote_address, default_limits=["200 per hour"])
+limiter = Limiter(
+    key_func=get_remote_address,
+    default_limits=["200 per hour"],
+    storage_uri=core.CONFIG["REDIS_URL"],
+)
 asgi.state.limiter = limiter
 asgi.add_middleware(SlowAPIMiddleware)
 

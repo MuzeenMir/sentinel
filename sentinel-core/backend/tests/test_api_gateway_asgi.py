@@ -9,6 +9,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests as _requests_lib
 from fastapi.testclient import TestClient
+from limits.storage import MemoryStorage
+from limits.strategies import FixedWindowRateLimiter
 from starlette.datastructures import Headers, QueryParams
 from starlette.requests import Request
 
@@ -46,7 +48,16 @@ def flask_client():
 
 @pytest.fixture()
 def asgi_client():
-    return TestClient(asgi)
+    original_storage = asgi_app.limiter._storage
+    original_limiter = asgi_app.limiter._limiter
+    test_storage = MemoryStorage()
+    asgi_app.limiter._storage = test_storage
+    asgi_app.limiter._limiter = FixedWindowRateLimiter(test_storage)
+    try:
+        yield TestClient(asgi)
+    finally:
+        asgi_app.limiter._storage = original_storage
+        asgi_app.limiter._limiter = original_limiter
 
 
 @pytest.fixture(autouse=True)
@@ -169,6 +180,10 @@ def test_rate_limit_endpoint_returns_200(asgi_client):
 
     assert response.status_code == 200
     assert response.json()["message"] == "Rate limit test successful"
+
+
+def test_rate_limiter_uses_shared_redis_storage():
+    assert asgi_app.limiter._storage_uri == asgi_app.core.CONFIG["REDIS_URL"]
 
 
 def test_rate_limit_exceeded_returns_429(asgi_client):
