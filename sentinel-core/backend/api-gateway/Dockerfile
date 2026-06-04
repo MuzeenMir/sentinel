@@ -15,7 +15,7 @@ COPY _lib/ _lib/
 
 COPY api-gateway/requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt gevent
+    && pip install --no-cache-dir -r requirements.txt
 
 COPY api-gateway/ api-gateway/
 
@@ -31,4 +31,4 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:8080/health || exit 1
 
-CMD ["gunicorn", "app:app", "-b", "0.0.0.0:8080", "-k", "gevent", "-w", "4", "--timeout", "120", "--access-logfile", "-"]
+CMD ["uvicorn", "asgi_app:asgi", "--host", "0.0.0.0", "--port", "8080", "--workers", "4", "--proxy-headers"]
