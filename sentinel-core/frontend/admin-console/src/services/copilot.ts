@@ -48,11 +48,15 @@ export interface ConfirmResponse {
  * backend verifies + audits but does not execute — the human-initiated call to
  * the policy-orchestrator does).
  */
+// Routed through the api-gateway under the standard /api/v1 prefix; the gateway
+// proxies /api/v1/copilot/* to the llm-gateway's /copilot/* endpoints.
 export const copilotApi = {
   summarize: (entityId: string) =>
-    api.post<SummarizeResponse>("/copilot/summarize", { entity_id: entityId }),
+    api.post<SummarizeResponse>("/api/v1/copilot/summarize", {
+      entity_id: entityId,
+    }),
   ask: (sessionId: string, question: string) =>
-    api.post<AskResponse>("/copilot/ask", {
+    api.post<AskResponse>("/api/v1/copilot/ask", {
       session_id: sessionId,
       question,
     }),
@@ -62,12 +66,12 @@ export const copilotApi = {
     rationale: string,
     ttlSeconds = 900,
   ) =>
-    api.post<{ proposal: CopilotProposal }>("/copilot/propose", {
+    api.post<{ proposal: CopilotProposal }>("/api/v1/copilot/propose", {
       entity_id: entityId,
       action_type: actionType,
       rationale,
       ttl_seconds: ttlSeconds,
     }),
   confirm: (proposal: CopilotProposal) =>
-    api.post<ConfirmResponse>("/copilot/confirm", { proposal }),
+    api.post<ConfirmResponse>("/api/v1/copilot/confirm", { proposal }),
 };
