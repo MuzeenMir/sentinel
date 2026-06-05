@@ -16,5 +16,6 @@ Process: [ADR-000 — ADR process](ADR-000-adr-process.md).
 | ADR-009 | DRL demotion to research | Proposed (Phase 0 ratification) | — |
 | ADR-010 | Edge LLM via llama.cpp | Proposed (Phase 0 ratification) | — |
 | [ADR-011](ADR-011-independent-review-gate.md) | Independent review gate (reframe of "two-person rule") | Accepted | 2026-05-31 |
+| [ADR-016](ADR-016-api-gateway-fastapi-runtime.md) | API gateway FastAPI runtime | Accepted | 2026-06-03 |
 
 In-flight ADRs (001–010) are referenced by `docs/revamp/SDD-002.md`. Each must land as a standalone ADR file in this directory during Phase 0 per `docs/revamp/SDP-002.md`.

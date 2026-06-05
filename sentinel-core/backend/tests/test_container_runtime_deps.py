@@ -23,6 +23,26 @@ def test_policy_orchestrator_image_copies_audit_logger_shared_module():
     assert "audit_logger.py" in dockerfile
 
 
+def test_api_gateway_container_starts_fastapi_asgi_runtime():
+    dockerfile = _read(BACKEND / "api-gateway" / "Dockerfile")
+
+    assert 'CMD ["uvicorn", "asgi_app:asgi"' in dockerfile
+    assert "app:app" not in dockerfile
+
+
+def test_api_gateway_has_no_flask_source_or_dependencies():
+    gateway = BACKEND / "api-gateway"
+    requirements = _read(gateway / "requirements.txt").lower()
+    python_source = "\n".join(
+        path.read_text(encoding="utf-8") for path in gateway.glob("*.py")
+    ).lower()
+
+    assert not (gateway / "app.py").exists()
+    assert "flask" not in requirements
+    assert "from flask" not in python_source
+    assert "import flask" not in python_source
+
+
 def test_data_collector_uses_python312_compatible_kafka_python():
     requirements = _read(BACKEND / "data-collector" / "requirements.txt")
 

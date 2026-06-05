@@ -13,6 +13,9 @@ Validates:
 import json
 import os
 import sys
+import builtins
+import importlib.util
+from pathlib import Path
 
 import pytest
 from unittest.mock import MagicMock, patch
@@ -27,6 +30,28 @@ from audit_logger import (  # noqa: E402
     verify_integrity,
     _compute_integrity_hash,
 )
+
+
+def test_audit_logger_imports_when_flask_is_unavailable(monkeypatch):
+    real_import = builtins.__import__
+
+    def import_without_flask(name, *args, **kwargs):
+        if name == "flask" or name.startswith("flask."):
+            raise ModuleNotFoundError("No module named 'flask'")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", import_without_flask)
+    module_path = Path(__file__).resolve().parents[1] / "audit_logger.py"
+    spec = importlib.util.spec_from_file_location(
+        "audit_logger_without_flask", module_path
+    )
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+
+    spec.loader.exec_module(module)
+
+    assert module._request_context_value("tenant_id") is None
 
 
 # ---------------------------------------------------------------------------

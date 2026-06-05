@@ -1,7 +1,10 @@
 """Integration tests for API Gateway health and basic endpoints."""
 
-import pytest
 from unittest.mock import patch
+
+from fastapi.testclient import TestClient
+from limits.storage import MemoryStorage
+from limits.strategies import FixedWindowRateLimiter
 
 
 class FakeRedis:
@@ -16,30 +19,29 @@ class FakeRedis:
     def keys(self, pattern):
         return []
 
+    def scan_iter(self, pattern, count=100):
+        return iter([])
+
     def get(self, key):
         return None
 
 
-@pytest.fixture
-def client():
-    """Create test client with mocked Redis (patch before app import)."""
-    import sys
-
-    # Remove app from cache so it reloads with patched redis
-    if "app" in sys.modules:
-        del sys.modules["app"]
-    with patch("redis.from_url", return_value=FakeRedis()):
-        import app as gateway_app
-
-        gateway_app.app.config["TESTING"] = True
-        with gateway_app.app.test_client() as c:
-            yield c
-
-
-def test_health_returns_200(client):
+def test_health_returns_200():
     """Health endpoint returns 200 and healthy status."""
-    rv = client.get("/health")
+    import asgi_app
+
+    test_storage = MemoryStorage()
+    with (
+        patch.object(asgi_app.core, "redis_client", FakeRedis()),
+        patch.object(asgi_app.limiter, "_storage", test_storage),
+        patch.object(
+            asgi_app.limiter,
+            "_limiter",
+            FixedWindowRateLimiter(test_storage),
+        ),
+    ):
+        rv = TestClient(asgi_app.asgi).get("/health")
     assert rv.status_code == 200
-    data = rv.get_json()
+    data = rv.json()
     assert data["status"] == "healthy"
     assert "timestamp" in data
