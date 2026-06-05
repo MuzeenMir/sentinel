@@ -47,7 +47,9 @@ def test_workflow_run_aggregate_skips_non_success_upstream_builds():
 
 def test_sbom_images_timeout_allows_heavyweight_image_scans():
     sbom_images = _job_block(_read_workflow(), "sbom-images")
-    match = re.search(r"^\s+timeout-minutes:\s*(\d+)\s*$", sbom_images, flags=re.MULTILINE)
+    match = re.search(
+        r"^\s+timeout-minutes:\s*(\d+)\s*$", sbom_images, flags=re.MULTILINE
+    )
 
     assert match, "sbom-images must set an explicit timeout"
     assert int(match.group(1)) >= 60

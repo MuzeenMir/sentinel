@@ -73,6 +73,8 @@ def test_xdp_collector_runtime_stage_does_not_install_build_packages():
         runtime_stage,
         flags=re.DOTALL,
     ):
-        installed_packages.update(re.findall(r"\b[a-z0-9][a-z0-9+.-]*\b", install_block))
+        installed_packages.update(
+            re.findall(r"\b[a-z0-9][a-z0-9+.-]*\b", install_block)
+        )
 
     assert not (installed_packages & forbidden_packages)
