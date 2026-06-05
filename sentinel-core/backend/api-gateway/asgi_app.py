@@ -415,7 +415,7 @@ async def get_alert(alert_id: int, request: Request) -> Response:
 
 
 @asgi.post("/api/v1/alerts/{alert_id}/acknowledge")
-async def acknowledge_alert(alert_id: int, request: Request) -> JSONResponse:
+async def acknowledge_alert(alert_id: int, request: Request) -> Response:
     """Acknowledge an alert."""
     current_user = require_role(request, "admin")
     if isinstance(current_user, JSONResponse):
@@ -430,7 +430,7 @@ async def acknowledge_alert(alert_id: int, request: Request) -> JSONResponse:
 
 
 @asgi.post("/api/v1/alerts/{alert_id}/resolve")
-async def resolve_alert(alert_id: int, request: Request) -> JSONResponse:
+async def resolve_alert(alert_id: int, request: Request) -> Response:
     """Resolve an alert."""
     current_user = require_role(request, "admin")
     if isinstance(current_user, JSONResponse):
@@ -445,7 +445,7 @@ async def resolve_alert(alert_id: int, request: Request) -> JSONResponse:
 
 
 @asgi.put("/api/v1/alerts/{alert_id}")
-async def update_alert(alert_id: int, request: Request) -> JSONResponse:
+async def update_alert(alert_id: int, request: Request) -> Response:
     """Update alert status."""
     current_user = require_role(request, "admin")
     if isinstance(current_user, JSONResponse):
