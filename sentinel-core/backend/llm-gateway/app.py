@@ -291,15 +291,16 @@ def copilot_propose():
                 "rationale": data["rationale"],
             },
         )
-    except InvalidEntityIdError as exc:
-        return jsonify({"error": str(exc)}), 400
+    except InvalidEntityIdError:
+        return jsonify({"error": "invalid entity_id"}), 400
     proposal = draft["result"]
 
     auditor = CopilotAuditor(actor=actor, tenant_id=_tenant(), sink=audit_sink)
     auditor.log_proposal(proposal)
 
     # Defensive: the draft must never be marked executed.
-    assert proposal["executed"] is False
+    if proposal["executed"] is not False:
+        return jsonify({"error": "invalid proposal"}), 502
     return jsonify({"proposal": proposal}), 200
 
 
@@ -315,8 +316,8 @@ def copilot_confirm():
     proposal = data.get("proposal") or data
     try:
         ProposalSigner().verify(proposal)
-    except ProposalError as exc:
-        return jsonify({"error": str(exc)}), 400
+    except ProposalError:
+        return jsonify({"error": "invalid proposal"}), 400
     if not _nonce_guard().consume(proposal["nonce"]):
         return jsonify({"error": "proposal already confirmed"}), 409
 

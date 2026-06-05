@@ -55,7 +55,8 @@ class InferenceProvider(Protocol):
     touching the gateway. The returned object must expose ``messages.create``.
     """
 
-    def build_client(self, api_key: Optional[str], config: ResidencyConfig) -> Any: ...
+    def build_client(self, api_key: Optional[str], config: ResidencyConfig) -> Any:
+        raise NotImplementedError
 
 
 class AnthropicProvider:

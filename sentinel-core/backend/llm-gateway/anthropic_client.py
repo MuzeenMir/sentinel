@@ -170,5 +170,5 @@ class AnthropicClient:
                 if attempt + 1 >= self.max_attempts or not _is_retryable(exc):
                     raise
                 self._sleep(self.backoff_base * (2**attempt))
-        # Unreachable: loop either returns or raises.
-        raise last_exc  # type: ignore[misc]  # pragma: no cover
+        # Unreachable: loop either returns or raises inside the except block.
+        raise LLMGatewayError("model request failed") from last_exc  # pragma: no cover
