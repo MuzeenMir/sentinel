@@ -44,6 +44,7 @@ CONFIG = {
         "HARDENING_SERVICE_URL", "http://hardening-service:5011"
     ),
     "HIDS_AGENT_URL": os.environ.get("HIDS_AGENT_URL", "http://hids-agent:5010"),
+    "LLM_GATEWAY_URL": os.environ.get("LLM_GATEWAY_URL", "http://llm-gateway:5012"),
     "REDIS_URL": os.environ.get("REDIS_URL", "redis://localhost:6379"),
 }
 
@@ -98,14 +99,20 @@ def get_request_stats() -> dict[str, int]:
     return stats
 
 
-def _internal_service_headers() -> dict[str, str]:
-    """Build headers for internal downstream service calls."""
+def get_internal_service_token() -> str:
+    """Return the configured internal service token or fail closed."""
     internal_service_token = os.environ.get("INTERNAL_SERVICE_TOKEN", "").strip()
     if not internal_service_token:
         raise RuntimeError(
             "INTERNAL_SERVICE_TOKEN is unset; gateway refuses to make "
             "unauthenticated downstream calls"
         )
+    return internal_service_token
+
+
+def _internal_service_headers() -> dict[str, str]:
+    """Build headers for internal downstream service calls."""
+    internal_service_token = get_internal_service_token()
     return {"Authorization": f"Bearer {internal_service_token}"}
 
 
