@@ -14,7 +14,11 @@ interface ProposalCardProps {
  * opening the dialog — `onConfirm` only fires after the human confirms inside
  * the dialog. This preserves the advisory-only / no-auto-exec invariant.
  */
-export function ProposalCard({ proposal, pending, onConfirm }: ProposalCardProps) {
+export function ProposalCard({
+  proposal,
+  pending,
+  onConfirm,
+}: ProposalCardProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
 
   return (

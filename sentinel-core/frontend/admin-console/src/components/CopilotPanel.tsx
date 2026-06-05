@@ -19,7 +19,11 @@ interface ChatTurn {
  * Grounded analyst copilot panel: summarize an incident, ask follow-ups with
  * citations, and review/confirm reversible enforcement proposals. Advisory only.
  */
-export function CopilotPanel({ initialEntityId = "" }: { initialEntityId?: string }) {
+export function CopilotPanel({
+  initialEntityId = "",
+}: {
+  initialEntityId?: string;
+}) {
   const [entityId, setEntityId] = useState(initialEntityId);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [turns, setTurns] = useState<ChatTurn[]>([]);
