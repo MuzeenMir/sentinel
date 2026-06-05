@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.4.0](https://github.com/MuzeenMir/sentinel/compare/v1.3.0...v1.4.0) (2026-06-05)
+
+
+### Features
+
+* **ai-engine:** add detection-as-code registry ([#52](https://github.com/MuzeenMir/sentinel/issues/52)) ([a76ea76](https://github.com/MuzeenMir/sentinel/commit/a76ea76023f997d27281869532f49e092453f169))
+* **api-gateway:** port gateway runtime to FastAPI ([#58](https://github.com/MuzeenMir/sentinel/issues/58)) ([c4aaa23](https://github.com/MuzeenMir/sentinel/commit/c4aaa237d32a8b15cee138b693359da22387e109))
+* **api-gateway:** proxy authenticated copilot requests ([#61](https://github.com/MuzeenMir/sentinel/issues/61)) ([70d2e13](https://github.com/MuzeenMir/sentinel/commit/70d2e1365b1f70a7110c152a093ebc92799654c3))
+* **api-gateway:** remove Flask runtime dependencies ([#59](https://github.com/MuzeenMir/sentinel/issues/59)) ([bb871d1](https://github.com/MuzeenMir/sentinel/commit/bb871d154ecea70338192320f793d3f9b792ee5f))
+* **auth-service:** encrypt MFA TOTP secrets at rest (T-027) ([#51](https://github.com/MuzeenMir/sentinel/issues/51)) ([2b52275](https://github.com/MuzeenMir/sentinel/commit/2b52275aa1d8fcbc9563a7608c6ee118323ace27))
+
+
+### Bug Fixes
+
+* **ci:** clear June security advisory drift ([#60](https://github.com/MuzeenMir/sentinel/issues/60)) ([5c5871e](https://github.com/MuzeenMir/sentinel/commit/5c5871e5a0a98981ba42f391479add4183ec92fd))
+
 ## [1.3.0](https://github.com/MuzeenMir/sentinel/compare/v1.2.0...v1.3.0) (2026-05-30)
 
 
