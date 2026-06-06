@@ -456,7 +456,7 @@ for this pass.
 
 ### Audit Schema and RLS Guard
 
-The `audit-schema-guard` workflow enforces the two-person rule for audit schema
+The `audit-schema-guard` workflow enforces the independent review gate for audit schema
 and row-level-security changes. It runs on every pull request and inspects the
 changed file list plus diff content. The guard applies when a PR touches:
 

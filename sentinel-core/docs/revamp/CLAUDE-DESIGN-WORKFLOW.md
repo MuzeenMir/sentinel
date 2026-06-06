@@ -366,7 +366,7 @@ component. Briefs:
 
 - **`crosscut-opa-policy-editor.md`.** Code-editor surface with syntax
   highlighting for Rego, dry-run output panel showing decisions against the
-  last 7 days of incidents, two-person promotion flow, version history with
+  last 7 days of incidents, independent-review-gated promotion flow, version history with
   one-click rollback. Maps to FR-CON-8.
 - **`crosscut-notifications.md`.** Per-tenant channel configuration (email /
   Slack / Teams / webhook / PagerDuty) with rate limit indicators. Maps to

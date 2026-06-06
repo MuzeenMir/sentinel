@@ -64,5 +64,5 @@ Git without silent embedded logic.
 ## OPA Deferral
 
 OPA policy bundles are intentionally out of scope for this wedge. They touch
-policy and governance boundaries that require the separate two-person review
-path. This detection-as-code flow covers Sigma and Python detectors only.
+policy and governance boundaries that require the separate independent-review
+gate. This detection-as-code flow covers Sigma and Python detectors only.

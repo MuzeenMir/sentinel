@@ -41,7 +41,7 @@
 /deploy/                                @MuzeenMir
 /opa-bundles/                           @MuzeenMir
 
-# ---- CI / supply chain (two-person rule) ----
+# ---- CI / supply chain (independent review gate) ----
 /.github/                               @MuzeenMir
 /.github/workflows/                     @MuzeenMir
 /.pre-commit-config.yaml                @MuzeenMir

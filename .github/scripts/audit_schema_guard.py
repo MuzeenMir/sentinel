@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail-closed two-person guard for audit schema and RLS changes."""
+"""Fail-closed independent-review gate for audit schema and RLS changes."""
 
 from __future__ import annotations
 
