@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.5.0](https://github.com/MuzeenMir/sentinel/compare/v1.4.0...v1.5.0) (2026-06-06)
+
+
+### Features
+
+* **opa:** add Rego detection evaluation ([#57](https://github.com/MuzeenMir/sentinel/issues/57)) ([e1396b6](https://github.com/MuzeenMir/sentinel/commit/e1396b6706f41b9e6509d5a70e414aa996aef253))
+
+
+### Bug Fixes
+
+* **ci:** harden supply-chain SBOM and xdp image build ([#63](https://github.com/MuzeenMir/sentinel/issues/63)) ([94bd399](https://github.com/MuzeenMir/sentinel/commit/94bd399e60202aea7173af77c3d67c236a1f986a))
+
+
+### Documentation
+
+* **repo:** reframe two-person rule as honest independent review gate (ADR-011) ([#55](https://github.com/MuzeenMir/sentinel/issues/55)) ([2775549](https://github.com/MuzeenMir/sentinel/commit/2775549d3978447f28573a9836931ddce55e6c72))
+
 ## [1.4.0](https://github.com/MuzeenMir/sentinel/compare/v1.3.0...v1.4.0) (2026-06-05)
 
 
