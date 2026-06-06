@@ -1,0 +1,4 @@
+{"id": "cf-1", "answer": "The host is compromised [audit:FAKE-999].", "valid_ids": ["audit:e1"]}
+{"id": "cf-2", "answer": "Threat score is critical [score:hallucinated].", "valid_ids": ["score:s1"]}
+{"id": "cf-3", "answer": "This host is definitely malicious and must be blocked now.", "valid_ids": ["audit:e1"]}
+{"id": "cf-4", "answer": "Confirmed enforcement active [enforce:made-up].", "valid_ids": []}

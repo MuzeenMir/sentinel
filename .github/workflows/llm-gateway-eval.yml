@@ -1,0 +1,39 @@
+name: llm-gateway-eval
+
+# Dedicated, isolated CI for the LLM analyst copilot (Wedge #2).
+# NOTE: this is a NEW workflow file; it intentionally does not modify any
+# existing workflow (Phase-2 independence contract — Claude owns only this file).
+
+on:
+  pull_request:
+    paths:
+      - "sentinel-core/backend/llm-gateway/**"
+      - ".github/workflows/llm-gateway-eval.yml"
+  push:
+    branches: [main]
+    paths:
+      - "sentinel-core/backend/llm-gateway/**"
+
+jobs:
+  llm-gateway:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sentinel-core/backend/llm-gateway
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest ruff
+      - name: Ruff lint + format check
+        run: |
+          ruff check .
+          ruff format --check .
+      - name: Unit + eval-harness tests
+        run: python -m pytest tests -q
+      - name: Eval harness smoke run (stub; publishes residual hallucination rate)
+        run: python -m evals.run

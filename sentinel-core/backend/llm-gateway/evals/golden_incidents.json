@@ -1,0 +1,23 @@
+[
+  {
+    "incident_id": "gi-brute-force",
+    "entity_id": "host-42",
+    "description": "Repeated failed SSH logins from a new ASN.",
+    "valid_record_ids": ["score:host-42", "audit:evt-1001", "enforce:host-42"],
+    "expect_proposal": true
+  },
+  {
+    "incident_id": "gi-benign-spike",
+    "entity_id": "host-7",
+    "description": "Transient CPU spike, no auth anomalies.",
+    "valid_record_ids": ["score:host-7", "enforce:host-7"],
+    "expect_proposal": false
+  },
+  {
+    "incident_id": "gi-no-data",
+    "entity_id": "host-unknown",
+    "description": "Entity with no telemetry; copilot must say no data available.",
+    "valid_record_ids": [],
+    "expect_proposal": false
+  }
+]
