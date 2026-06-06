@@ -46,7 +46,24 @@ jobs:
           fi
           echo "date=$DATE" >> "$GITHUB_OUTPUT"
 
+      - name: Check audit DB configured
+        id: cfg
+        env:
+          AUDIT_DATABASE_URL: ${{ secrets.AUDIT_DATABASE_URL }}
+        run: |
+          # The audit ledger DB connstring is an operational secret. Until it is
+          # set, this nightly cannot reach a ledger to anchor — that is a real
+          # gap in wedge #3 tamper-evidence, surfaced as a visible notice rather
+          # than a daily red X (a missing secret is not a build failure).
+          if [ -z "$AUDIT_DATABASE_URL" ]; then
+            echo "::notice title=Audit ledger not anchored::AUDIT_DATABASE_URL secret is unset — no reachable audit DB, so no signed Merkle root is published tonight. Wedge #3 tamper-evidence is NOT active until this secret is configured."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build daily Merkle root
+        if: steps.cfg.outputs.configured == 'true'
         env:
           AUDIT_DATABASE_URL: ${{ secrets.AUDIT_DATABASE_URL }}
         run: |
@@ -56,6 +73,7 @@ jobs:
 
       - name: Stop if no root produced
         id: check
+        if: steps.cfg.outputs.configured == 'true'
         run: |
           FILE="audit-roots/${{ steps.d.outputs.date }}.json"
           if [ -f "$FILE" ]; then echo "file=$FILE" >> "$GITHUB_OUTPUT"; else
