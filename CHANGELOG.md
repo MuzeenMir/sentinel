@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.0](https://github.com/MuzeenMir/sentinel/compare/v1.5.0...v1.6.0) (2026-06-06)
+
+
+### Features
+
+* **llm-gateway:** LLM analyst copilot — grounded, propose-only (wedge [#2](https://github.com/MuzeenMir/sentinel/issues/2)) ([#56](https://github.com/MuzeenMir/sentinel/issues/56)) ([0fd0456](https://github.com/MuzeenMir/sentinel/commit/0fd0456956669b5c30277b85aef803e4c5927d3c))
+
 ## [1.5.0](https://github.com/MuzeenMir/sentinel/compare/v1.4.0...v1.5.0) (2026-06-06)
 
 
