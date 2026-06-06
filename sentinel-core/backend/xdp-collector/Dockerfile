@@ -1,11 +1,8 @@
-FROM python:3.12-slim@sha256:090ba77e2958f6af52a5341f788b50b032dd4ca28377d2893dcf1ecbdfdfe203
+FROM python:3.12-slim@sha256:090ba77e2958f6af52a5341f788b50b032dd4ca28377d2893dcf1ecbdfdfe203 AS builder
 LABEL maintainer="SENTINEL Team"
 LABEL description="SENTINEL XDP collector — high-speed eBPF/XDP packet inspection"
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        curl \
-        iproute2 \
-        libelf1 \
         libbpf-dev \
         clang \
         llvm \
@@ -21,6 +18,24 @@ COPY _lib/ _lib/
 COPY ebpf-lib/ ebpf_lib/
 
 RUN make -C ebpf_lib xdp
+
+FROM python:3.12-slim@sha256:090ba77e2958f6af52a5341f788b50b032dd4ca28377d2893dcf1ecbdfdfe203 AS runtime
+LABEL maintainer="SENTINEL Team"
+LABEL description="SENTINEL XDP collector — high-speed eBPF/XDP packet inspection"
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        curl \
+        iproute2 \
+        libelf1 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY auth_middleware.py observability.py metrics.py resilience.py tenant_middleware.py ./
+COPY integrations/ integrations/
+COPY _lib/ _lib/
+COPY ebpf-lib/ ebpf_lib/
+COPY --from=builder /app/ebpf_lib/compiled/xdp/xdp_flow.o ebpf_lib/compiled/xdp/xdp_flow.o
 
 COPY xdp-collector/requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip \
