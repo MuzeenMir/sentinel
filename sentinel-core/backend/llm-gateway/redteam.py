@@ -68,6 +68,11 @@ def _ssrf_caught(case: dict) -> bool:
 
 _CHECKS = (
     ("prompt_injection.jsonl", _injection_caught),
+    # Jailbreak and tool-output poisoning are injection-class attacks via
+    # different vectors (direct user vs malicious instructions inside untrusted
+    # tool output); the same detector must neutralize both.
+    ("jailbreak.jsonl", _injection_caught),
+    ("tool_output_poisoning.jsonl", _injection_caught),
     ("citation_forgery.jsonl", _forgery_caught),
     ("ssrf_args.jsonl", _ssrf_caught),
 )
