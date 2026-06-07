@@ -127,8 +127,102 @@ def diff_published(
 
 
 # --------------------------------------------------------------------------- #
+# Cosign signature gating (pure core, unit-tested)
+# --------------------------------------------------------------------------- #
+
+
+def signature_failures(sig_results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Published roots whose detached cosign signature did not verify."""
+    return [
+        {"date": r["date"], "reason": r["reason"]}
+        for r in sig_results
+        if not r["valid"]
+    ]
+
+
+def trusted_published(
+    published: List[Dict[str, Any]], sig_results: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
+    """Keep only published roots whose cosign signature verified.
+
+    A forged root with a bad/absent signature must never anchor the chain
+    comparison — otherwise an attacker who can write both the DB and the
+    published-roots directory could hide a tamper.
+    """
+    valid = {r["date"] for r in sig_results if r["valid"]}
+    return [p for p in published if p["date"] in valid]
+
+
+# --------------------------------------------------------------------------- #
 # I/O wrappers (DB + published roots) — thin, exercised in integration
 # --------------------------------------------------------------------------- #
+
+
+def cosign_verify_blob(
+    blob_path: str,
+    sig_path: str,
+    cert_path: str,
+    *,
+    cert_identity_regexp: str,
+    cert_oidc_issuer: str,
+) -> bool:  # pragma: no cover
+    """Verify a keyless (Fulcio/OIDC) cosign detached signature over ``blob_path``.
+
+    Returns True on a good signature, False if cosign rejects it. Raising would
+    abort the whole run; instead a bad day is reported as a signature failure.
+    """
+    import subprocess
+
+    try:
+        subprocess.run(
+            [
+                "cosign",
+                "verify-blob",
+                "--signature",
+                sig_path,
+                "--certificate",
+                cert_path,
+                "--certificate-identity-regexp",
+                cert_identity_regexp,
+                "--certificate-oidc-issuer",
+                cert_oidc_issuer,
+                blob_path,
+            ],
+            check=True,
+            capture_output=True,
+        )
+        return True
+    except subprocess.CalledProcessError:
+        return False
+
+
+def verify_published_signatures(published_dir: str, verify_fn) -> List[Dict[str, Any]]:
+    """Verify the cosign signature of every ``<date>.json`` root in a directory.
+
+    ``verify_fn(blob, sig, cert) -> bool`` is injected so the pairing logic is
+    testable without cosign installed. Each result is ``{date, valid, reason}``
+    where ``reason`` is ``None`` / ``"signature_invalid"`` / ``"signature_missing"``.
+    """
+    results = []
+    if not os.path.isdir(published_dir):
+        return results
+    for name in sorted(os.listdir(published_dir)):
+        if not name.endswith(".json"):
+            continue
+        date = name[: -len(".json")]
+        blob = os.path.join(published_dir, name)
+        sig = blob + ".sig"
+        cert = blob + ".pem"
+        if not (os.path.exists(sig) and os.path.exists(cert)):
+            results.append(
+                {"date": date, "valid": False, "reason": "signature_missing"}
+            )
+            continue
+        ok = bool(verify_fn(blob, sig, cert))
+        results.append(
+            {"date": date, "valid": ok, "reason": None if ok else "signature_invalid"}
+        )
+    return results
 
 
 def fetch_rows(database_url: str) -> List[Dict[str, Any]]:  # pragma: no cover
@@ -185,6 +279,19 @@ def main(argv: Optional[List[str]] = None) -> int:  # pragma: no cover
         default=os.environ.get("AUDIT_ROOTS_DIR", "audit-roots"),
         help="Directory of nightly published signed root JSON files.",
     )
+    parser.add_argument(
+        "--cert-identity-regexp",
+        default=os.environ.get("AUDIT_COSIGN_IDENTITY_REGEXP"),
+        help="cosign keyless certificate identity regexp (the signing workflow "
+        "SAN). Required to cryptographically trust published roots.",
+    )
+    parser.add_argument(
+        "--cert-oidc-issuer",
+        default=os.environ.get(
+            "AUDIT_COSIGN_OIDC_ISSUER", "https://token.actions.githubusercontent.com"
+        ),
+        help="cosign keyless certificate OIDC issuer.",
+    )
     args = parser.parse_args(argv)
 
     if not args.database_url:
@@ -195,13 +302,47 @@ def main(argv: Optional[List[str]] = None) -> int:  # pragma: no cover
     tampers = find_row_tampers(rows)
     computed = chain_roots(compute_daily_roots(rows))
     published = load_published_roots(args.published_dir)
-    divergences = diff_published(computed, published) if published else []
+
+    # Cryptographically gate which published roots may anchor the chain.
+    sig_fails: List[Dict[str, Any]] = []
+    if published and args.cert_identity_regexp:
+
+        def _verify(blob, sig, cert):
+            return cosign_verify_blob(
+                blob,
+                sig,
+                cert,
+                cert_identity_regexp=args.cert_identity_regexp,
+                cert_oidc_issuer=args.cert_oidc_issuer,
+            )
+
+        sig_results = verify_published_signatures(args.published_dir, _verify)
+        sig_fails = signature_failures(sig_results)
+        trusted = trusted_published(published, sig_results)
+    else:
+        if published:
+            print(
+                "WARNING: cosign signature verification skipped "
+                "(--cert-identity-regexp not set); published roots are NOT "
+                "cryptographically trusted — integrity only.",
+                file=sys.stderr,
+            )
+        trusted = published
+
+    divergences = diff_published(computed, trusted) if trusted else []
 
     if tampers:
         first = tampers[0]
         print(
             f"TAMPER: row id={first['id']} stored={first['stored'][:16]}… "
             f"recomputed={first['recomputed'][:16]}…  ({len(tampers)} total)",
+            file=sys.stderr,
+        )
+    if sig_fails:
+        first = sig_fails[0]
+        print(
+            f"SIGNATURE FAILURE: {first['date']} {first['reason']} "
+            f"({len(sig_fails)} total)",
             file=sys.stderr,
         )
     if divergences:
@@ -212,15 +353,15 @@ def main(argv: Optional[List[str]] = None) -> int:  # pragma: no cover
             file=sys.stderr,
         )
 
-    if tampers or divergences:
+    if tampers or sig_fails or divergences:
         return 1
 
     print(
         f"OK: {len(rows)} rows, {len(computed)} daily roots verified"
         + (
-            f" against {len(published)} published roots"
-            if published
-            else " (no published roots supplied — per-row integrity only)"
+            f" against {len(trusted)} cosign-verified published roots"
+            if trusted
+            else " (no trusted published roots — per-row integrity only)"
         )
     )
     return 0
