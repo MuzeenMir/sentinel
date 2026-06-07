@@ -2,6 +2,7 @@
 
 import os
 import sys
+from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
@@ -52,10 +53,27 @@ def _register(
     )
 
 
+def _login(
+    client: TestClient,
+    username: str = "testuser",
+    password=VALID_PASSWORD,
+):
+    return client.post(
+        "/api/v1/auth/login",
+        json={
+            "username": username,
+            "password": password,
+        },
+    )
+
+
 def _reset_db() -> None:
     with asgi_app.flask_auth.app.app_context():
+        db.session.remove()
         db.drop_all()
         db.create_all()
+    asgi_app.flask_auth.redis_client.reset_mock()
+    asgi_app.flask_auth.redis_client.get.return_value = None
 
 
 def test_health_matches_flask_contract():
@@ -121,3 +139,78 @@ def test_register_weak_password_returns_requirements(monkeypatch):
     body = response.json()
     assert body["error"] == "Password does not meet security requirements"
     assert "Minimum 8 characters" in body["requirements"]
+
+
+def test_login_success_matches_flask_contract(monkeypatch):
+    monkeypatch.setattr(asgi_app.flask_auth, "audit_log", lambda *a, **k: "audit_stub")
+    _reset_db()
+    client = TestClient(asgi)
+    assert _register(client).status_code == 201
+
+    response = _login(client)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "access_token" in body
+    assert "refresh_token" in body
+    assert body["token_type"] == "Bearer"
+    assert body["expires_in"] == 24 * 60 * 60
+    assert body["user"]["username"] == "testuser"
+
+
+def test_login_missing_fields_returns_400(monkeypatch):
+    monkeypatch.setattr(asgi_app.flask_auth, "audit_log", lambda *a, **k: "audit_stub")
+    _reset_db()
+
+    response = TestClient(asgi).post("/api/v1/auth/login", json={})
+
+    assert response.status_code == 400
+    assert response.json() == {"error": "Username and password required"}
+
+
+def test_login_invalid_password_returns_401(monkeypatch):
+    monkeypatch.setattr(asgi_app.flask_auth, "audit_log", lambda *a, **k: "audit_stub")
+    _reset_db()
+    client = TestClient(asgi)
+    assert _register(client).status_code == 201
+
+    response = _login(client, password="wrong")
+
+    assert response.status_code == 401
+    assert response.json() == {"error": "Invalid credentials"}
+
+
+def test_login_locked_account_rejects_before_password_check(monkeypatch):
+    monkeypatch.setattr(asgi_app.flask_auth, "audit_log", MagicMock())
+    _reset_db()
+    client = TestClient(asgi)
+    assert _register(client).status_code == 201
+    with asgi_app.flask_auth.app.app_context():
+        user = asgi_app.flask_auth.User.query.filter_by(username="testuser").first()
+        user.failed_login_attempts = 5
+        user.locked_until = datetime.utcnow() + timedelta(minutes=15)
+        db.session.commit()
+
+    with patch.object(
+        asgi_app.flask_auth.User,
+        "check_password",
+        side_effect=AssertionError("password checked for locked user"),
+    ):
+        response = _login(client)
+
+    assert response.status_code == 403
+    body = response.json()
+    assert "temporarily locked" in body["error"].lower()
+    assert body["retry_after"] >= 0
+
+
+def test_login_non_string_credentials_return_400(monkeypatch):
+    monkeypatch.setattr(asgi_app.flask_auth, "audit_log", lambda *a, **k: "audit_stub")
+    _reset_db()
+
+    response = TestClient(asgi).post(
+        "/api/v1/auth/login", json={"username": "testuser", "password": 123}
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {"error": "Username and password must be strings"}
