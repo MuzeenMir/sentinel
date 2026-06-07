@@ -153,6 +153,41 @@ def trusted_published(
     return [p for p in published if p["date"] in valid]
 
 
+def build_report(
+    rows: List[Dict[str, Any]],
+    computed: List[Dict[str, Any]],
+    trusted: List[Dict[str, Any]],
+    tampers: List[Dict[str, Any]],
+    sig_fails: List[Dict[str, Any]],
+    divergences: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Machine-readable verdict consumed by the read-only auditor UI.
+
+    Carries the overall pass/fail plus the *first* failure of each kind (the
+    CLI reports first-divergent-day; the UI surfaces the same), and a per-day
+    summary flagging which days are anchored by a cosign-trusted root.
+    """
+    trusted_dates = {p["date"] for p in trusted}
+    return {
+        "ok": not (tampers or sig_fails or divergences),
+        "row_count": len(rows),
+        "daily_root_count": len(computed),
+        "trusted_root_count": len(trusted),
+        "first_tamper": tampers[0] if tampers else None,
+        "first_signature_failure": sig_fails[0] if sig_fails else None,
+        "first_divergence": divergences[0] if divergences else None,
+        "daily": [
+            {
+                "date": entry["date"],
+                "count": entry["count"],
+                "root": entry["root"],
+                "trusted": entry["date"] in trusted_dates,
+            }
+            for entry in computed
+        ],
+    }
+
+
 # --------------------------------------------------------------------------- #
 # I/O wrappers (DB + published roots) — thin, exercised in integration
 # --------------------------------------------------------------------------- #
@@ -292,6 +327,11 @@ def main(argv: Optional[List[str]] = None) -> int:  # pragma: no cover
         ),
         help="cosign keyless certificate OIDC issuer.",
     )
+    parser.add_argument(
+        "--report-json",
+        default=os.environ.get("AUDIT_VERIFY_REPORT"),
+        help="Write the machine-readable verdict here for the auditor UI to render.",
+    )
     args = parser.parse_args(argv)
 
     if not args.database_url:
@@ -330,6 +370,21 @@ def main(argv: Optional[List[str]] = None) -> int:  # pragma: no cover
         trusted = published
 
     divergences = diff_published(computed, trusted) if trusted else []
+
+    if args.report_json:
+        from datetime import datetime, timezone
+
+        report = build_report(
+            rows=rows,
+            computed=computed,
+            trusted=trusted,
+            tampers=tampers,
+            sig_fails=sig_fails,
+            divergences=divergences,
+        )
+        report["generated_at"] = datetime.now(timezone.utc).isoformat()
+        with open(args.report_json, "w") as fh:
+            json.dump(report, fh, indent=2, sort_keys=True)
 
     if tampers:
         first = tampers[0]

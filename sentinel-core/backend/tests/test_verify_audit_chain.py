@@ -19,6 +19,7 @@ from verify_audit_chain import (  # noqa: E402
     signature_failures,
     trusted_published,
     verify_published_signatures,
+    build_report,
 )
 
 
@@ -186,3 +187,53 @@ def test_verify_published_signatures_pairs_blob_sig_cert(tmp_path):
     }
     # verifier is only invoked when both sig + cert are present
     assert sorted(seen) == ["2026-05-30.json", "2026-05-31.json"]
+
+
+# --------------------------------------------------------------------------- #
+# Machine-readable report (C7) — the auditor UI renders exactly this verdict.
+# --------------------------------------------------------------------------- #
+
+
+def test_build_report_clean_ledger_is_ok():
+    rows = [_row(1, "2026-05-30T01:00:00Z"), _row(2, "2026-05-31T01:00:00Z")]
+    computed = chain_roots(compute_daily_roots(rows))
+    trusted = [{"date": c["date"], "root": c["root"]} for c in computed]
+    report = build_report(
+        rows=rows,
+        computed=computed,
+        trusted=trusted,
+        tampers=[],
+        sig_fails=[],
+        divergences=[],
+    )
+    assert report["ok"] is True
+    assert report["row_count"] == 2
+    assert report["daily_root_count"] == 2
+    assert report["trusted_root_count"] == 2
+    assert report["first_tamper"] is None
+    assert report["first_signature_failure"] is None
+    assert report["first_divergence"] is None
+    assert [d["date"] for d in report["daily"]] == ["2026-05-30", "2026-05-31"]
+    assert all(d["trusted"] for d in report["daily"])
+
+
+def test_build_report_surfaces_first_failures_and_is_not_ok():
+    rows = [_row(1, "2026-05-30T01:00:00Z"), _row(2, "2026-05-31T01:00:00Z")]
+    computed = chain_roots(compute_daily_roots(rows))
+    # only the first day's root is cosign-trusted
+    trusted = [{"date": computed[0]["date"], "root": computed[0]["root"]}]
+    report = build_report(
+        rows=rows,
+        computed=computed,
+        trusted=trusted,
+        tampers=[{"id": 2, "stored": "ab", "recomputed": "cd"}],
+        sig_fails=[{"date": "2026-05-31", "reason": "signature_invalid"}],
+        divergences=[{"date": "2026-05-31", "reason": "missing_published_root"}],
+    )
+    assert report["ok"] is False
+    assert report["first_tamper"]["id"] == 2
+    assert report["first_signature_failure"]["date"] == "2026-05-31"
+    assert report["first_divergence"]["date"] == "2026-05-31"
+    daily = {d["date"]: d for d in report["daily"]}
+    assert daily["2026-05-30"]["trusted"] is True
+    assert daily["2026-05-31"]["trusted"] is False
