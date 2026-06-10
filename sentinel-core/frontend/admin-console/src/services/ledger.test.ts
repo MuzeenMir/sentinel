@@ -9,7 +9,10 @@ describe("parseLedgerReport", () => {
       daily_root_count: 2,
       trusted_root_count: 1,
       first_tamper: { id: 7, stored: "ab", recomputed: "cd" },
-      first_signature_failure: { date: "2026-05-31", reason: "signature_invalid" },
+      first_signature_failure: {
+        date: "2026-05-31",
+        reason: "signature_invalid",
+      },
       first_divergence: { date: "2026-05-31", reason: "root_mismatch" },
       daily: [{ date: "2026-05-31", count: 2, root: "ff", trusted: false }],
       generated_at: "2026-06-07T00:00:00+00:00",
