@@ -148,9 +148,24 @@ def trusted_published(
     A forged root with a bad/absent signature must never anchor the chain
     comparison — otherwise an attacker who can write both the DB and the
     published-roots directory could hide a tamper.
+
+    Trust is bound to the (date, root) pair: the root value must equal the
+    one inside the cosign-verified blob, so a valid signature for one blob
+    can never bless a different root that merely shares its date.
     """
-    valid = {r["date"] for r in sig_results if r["valid"]}
-    return [p for p in published if p["date"] in valid]
+    valid = {(r["date"], r.get("root")) for r in sig_results if r["valid"]}
+    return [p for p in published if (p["date"], p.get("root")) in valid]
+
+
+def unverified_failures(published: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Failures for published roots when signature verification cannot run.
+
+    Fail closed: if roots were published but the verifier has no
+    ``--cert-identity-regexp`` to check them against, every published root is
+    reported as a signature failure rather than silently trusted — otherwise
+    a mis-configured verifier run would bless a tampered ledger.
+    """
+    return [{"date": p["date"], "reason": "identity_not_configured"} for p in published]
 
 
 def build_report(
@@ -235,8 +250,10 @@ def verify_published_signatures(published_dir: str, verify_fn) -> List[Dict[str,
     """Verify the cosign signature of every ``<date>.json`` root in a directory.
 
     ``verify_fn(blob, sig, cert) -> bool`` is injected so the pairing logic is
-    testable without cosign installed. Each result is ``{date, valid, reason}``
-    where ``reason`` is ``None`` / ``"signature_invalid"`` / ``"signature_missing"``.
+    testable without cosign installed. Each result is ``{date, valid, reason,
+    root}`` where ``reason`` is ``None`` / ``"signature_invalid"`` /
+    ``"signature_missing"``. ``root`` is read from the *verified blob itself*
+    so trust can be bound to the signed content, not just the filename date.
     """
     results = []
     if not os.path.isdir(published_dir):
@@ -250,12 +267,29 @@ def verify_published_signatures(published_dir: str, verify_fn) -> List[Dict[str,
         cert = blob + ".pem"
         if not (os.path.exists(sig) and os.path.exists(cert)):
             results.append(
-                {"date": date, "valid": False, "reason": "signature_missing"}
+                {
+                    "date": date,
+                    "valid": False,
+                    "reason": "signature_missing",
+                    "root": None,
+                }
             )
             continue
         ok = bool(verify_fn(blob, sig, cert))
+        root = None
+        if ok:
+            try:
+                with open(blob) as fh:
+                    root = json.load(fh).get("root")
+            except (ValueError, OSError):
+                ok = False
         results.append(
-            {"date": date, "valid": ok, "reason": None if ok else "signature_invalid"}
+            {
+                "date": date,
+                "valid": ok,
+                "reason": None if ok else "signature_invalid",
+                "root": root,
+            }
         )
     return results
 
@@ -361,13 +395,17 @@ def main(argv: Optional[List[str]] = None) -> int:  # pragma: no cover
         trusted = trusted_published(published, sig_results)
     else:
         if published:
+            # Fail closed: published roots we cannot verify are signature
+            # failures, never silent anchors. A mis-configured verifier must
+            # not return OK against a potentially tampered ledger.
             print(
-                "WARNING: cosign signature verification skipped "
-                "(--cert-identity-regexp not set); published roots are NOT "
-                "cryptographically trusted — integrity only.",
+                "ERROR: published roots present but --cert-identity-regexp "
+                "is not set; refusing to trust unverified roots. Set "
+                "AUDIT_COSIGN_IDENTITY_REGEXP or pass --cert-identity-regexp.",
                 file=sys.stderr,
             )
-        trusted = published
+            sig_fails = unverified_failures(published)
+        trusted = []
 
     divergences = diff_published(computed, trusted) if trusted else []
 

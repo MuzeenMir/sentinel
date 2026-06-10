@@ -18,6 +18,7 @@ from verify_audit_chain import (  # noqa: E402
     diff_published,
     signature_failures,
     trusted_published,
+    unverified_failures,
     verify_published_signatures,
     build_report,
 )
@@ -129,11 +130,39 @@ def test_trusted_published_excludes_unsigned_roots():
         {"date": "2026-05-31", "root": "bb"},
     ]
     sig_results = [
-        {"date": "2026-05-30", "valid": True, "reason": None},
-        {"date": "2026-05-31", "valid": False, "reason": "signature_invalid"},
+        {"date": "2026-05-30", "valid": True, "reason": None, "root": "aa"},
+        {
+            "date": "2026-05-31",
+            "valid": False,
+            "reason": "signature_invalid",
+            "root": None,
+        },
     ]
     trusted = trusted_published(published, sig_results)
     assert [p["date"] for p in trusted] == ["2026-05-30"]
+
+
+def test_trusted_published_binds_trust_to_root_content_not_just_date():
+    # A valid signature blesses the root inside the verified blob — never a
+    # different root that merely shares the date (substitution attack).
+    published = [{"date": "2026-05-30", "root": "substituted"}]
+    sig_results = [
+        {"date": "2026-05-30", "valid": True, "reason": None, "root": "signed-root"}
+    ]
+    assert trusted_published(published, sig_results) == []
+
+
+def test_unverified_failures_fail_closed_when_identity_not_configured():
+    # Published roots with no identity regexp to verify against must surface
+    # as signature failures (fail closed), not as silently trusted anchors.
+    published = [
+        {"date": "2026-05-30", "root": "aa"},
+        {"date": "2026-05-31", "root": "bb"},
+    ]
+    fails = unverified_failures(published)
+    assert [f["date"] for f in fails] == ["2026-05-30", "2026-05-31"]
+    assert all(f["reason"] == "identity_not_configured" for f in fails)
+    assert unverified_failures([]) == []
 
 
 def test_forged_root_with_bad_signature_is_not_trusted_for_divergence():
@@ -160,7 +189,8 @@ def test_verify_published_signatures_pairs_blob_sig_cert(tmp_path):
     # date1: full triple, verifier returns True  -> valid
     # date2: json + sig + cert, verifier returns False -> signature_invalid
     # date3: json only (no .sig/.pem)             -> signature_missing
-    for date in ("2026-05-30", "2026-05-31", "2026-06-01"):
+    (tmp_path / "2026-05-30.json").write_text('{"root": "r1"}')
+    for date in ("2026-05-31", "2026-06-01"):
         (tmp_path / f"{date}.json").write_text("{}")
     for date in ("2026-05-30", "2026-05-31"):
         (tmp_path / f"{date}.json.sig").write_text("sig")
@@ -175,15 +205,20 @@ def test_verify_published_signatures_pairs_blob_sig_cert(tmp_path):
     results = verify_published_signatures(str(tmp_path), verify_fn=fake_verify)
     by_date = {r["date"]: r for r in results}
     assert by_date["2026-05-30"]["valid"] is True
+    # root is read from the cosign-verified blob itself, binding trust to
+    # the signed content rather than the filename date.
+    assert by_date["2026-05-30"]["root"] == "r1"
     assert by_date["2026-05-31"] == {
         "date": "2026-05-31",
         "valid": False,
         "reason": "signature_invalid",
+        "root": None,
     }
     assert by_date["2026-06-01"] == {
         "date": "2026-06-01",
         "valid": False,
         "reason": "signature_missing",
+        "root": None,
     }
     # verifier is only invoked when both sig + cert are present
     assert sorted(seen) == ["2026-05-30.json", "2026-05-31.json"]
