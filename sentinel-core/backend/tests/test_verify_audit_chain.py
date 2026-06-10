@@ -189,7 +189,7 @@ def test_verify_published_signatures_pairs_blob_sig_cert(tmp_path):
     # date1: full triple, verifier returns True  -> valid
     # date2: json + sig + cert, verifier returns False -> signature_invalid
     # date3: json only (no .sig/.pem)             -> signature_missing
-    (tmp_path / "2026-05-30.json").write_text('{"root": "r1"}')
+    (tmp_path / "2026-05-30.json").write_text('{"date": "2026-05-30", "root": "r1"}')
     for date in ("2026-05-31", "2026-06-01"):
         (tmp_path / f"{date}.json").write_text("{}")
     for date in ("2026-05-30", "2026-05-31"):
@@ -222,6 +222,25 @@ def test_verify_published_signatures_pairs_blob_sig_cert(tmp_path):
     }
     # verifier is only invoked when both sig + cert are present
     assert sorted(seen) == ["2026-05-30.json", "2026-05-31.json"]
+
+
+def test_verify_published_signatures_rejects_filename_date_mismatch(tmp_path):
+    # A validly signed blob whose internal date disagrees with its filename
+    # can never anchor anything — it must be a failure, not a silent
+    # downgrade of the run to unanchored/integrity-only.
+    (tmp_path / "2026-05-30.json").write_text('{"date": "2026-05-29", "root": "r1"}')
+    (tmp_path / "2026-05-30.json.sig").write_text("sig")
+    (tmp_path / "2026-05-30.json.pem").write_text("cert")
+
+    results = verify_published_signatures(str(tmp_path), verify_fn=lambda *a: True)
+    assert results == [
+        {
+            "date": "2026-05-30",
+            "valid": False,
+            "reason": "date_mismatch",
+            "root": None,
+        }
+    ]
 
 
 # --------------------------------------------------------------------------- #

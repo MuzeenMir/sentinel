@@ -284,20 +284,20 @@ def verify_published_signatures(published_dir: str, verify_fn) -> List[Dict[str,
             continue
         ok = bool(verify_fn(blob, sig, cert))
         root = None
+        reason = None if ok else "signature_invalid"
         if ok:
             try:
                 with open(blob) as fh:
-                    root = json.load(fh).get("root")
+                    payload = json.load(fh)
+                root = payload.get("root")
+                # A verified blob whose internal date disagrees with its
+                # filename date can never anchor anything — surface it as a
+                # failure instead of silently producing an unanchored run.
+                if payload.get("date") != date:
+                    ok, reason, root = False, "date_mismatch", None
             except (ValueError, OSError):
-                ok = False
-        results.append(
-            {
-                "date": date,
-                "valid": ok,
-                "reason": None if ok else "signature_invalid",
-                "root": root,
-            }
-        )
+                ok, reason = False, "signature_invalid"
+        results.append({"date": date, "valid": ok, "reason": reason, "root": root})
     return results
 
 
@@ -413,6 +413,15 @@ def main(argv: Optional[List[str]] = None) -> int:  # pragma: no cover
             )
             sig_fails = unverified_failures(published)
         trusted = []
+
+    # Belt and braces: roots were published but none became a trusted anchor
+    # and nothing was flagged — published-but-unanchorable must fail closed,
+    # not silently downgrade the run to integrity-only.
+    if published and not trusted and not sig_fails:
+        sig_fails = [
+            {"date": p.get("date"), "reason": "unanchorable_published_root"}
+            for p in published
+        ]
 
     divergences = diff_published(computed, trusted) if trusted else []
 
