@@ -4,20 +4,207 @@
     "entity_id": "host-42",
     "description": "Repeated failed SSH logins from a new ASN.",
     "valid_record_ids": ["score:host-42", "audit:evt-1001", "enforce:host-42"],
-    "expect_proposal": true
+    "expect_proposal": true,
+    "expected_facts": ["failed logins", "ssh", "new asn"]
   },
   {
     "incident_id": "gi-benign-spike",
     "entity_id": "host-7",
     "description": "Transient CPU spike, no auth anomalies.",
     "valid_record_ids": ["score:host-7", "enforce:host-7"],
-    "expect_proposal": false
+    "expect_proposal": false,
+    "expected_facts": ["cpu spike", "no auth"]
   },
   {
     "incident_id": "gi-no-data",
     "entity_id": "host-unknown",
     "description": "Entity with no telemetry; copilot must say no data available.",
     "valid_record_ids": [],
-    "expect_proposal": false
+    "expect_proposal": false,
+    "should_refuse": true
+  },
+  {
+    "incident_id": "gi-port-scan",
+    "entity_id": "host-11",
+    "description": "Sequential TCP connects across 1000+ ports from one source.",
+    "valid_record_ids": ["score:host-11", "audit:evt-1102"],
+    "expect_proposal": true,
+    "expected_facts": ["port scan", "sequential"]
+  },
+  {
+    "incident_id": "gi-priv-esc",
+    "entity_id": "host-15",
+    "description": "Non-admin user spawned a root shell via sudo misconfig.",
+    "valid_record_ids": ["score:host-15", "audit:evt-1150", "enforce:host-15"],
+    "expect_proposal": true,
+    "expected_facts": ["privilege escalation", "root", "sudo"]
+  },
+  {
+    "incident_id": "gi-malware-beacon",
+    "entity_id": "host-23",
+    "description": "Periodic outbound beacon to a known C2 IP every 60s.",
+    "valid_record_ids": ["score:host-23", "audit:evt-1203", "enforce:host-23"],
+    "expect_proposal": true,
+    "expected_facts": ["beacon", "c2"]
+  },
+  {
+    "incident_id": "gi-data-exfil",
+    "entity_id": "host-31",
+    "description": "Large encrypted upload to an external file-sharing host.",
+    "valid_record_ids": ["score:host-31", "audit:evt-1310"],
+    "expect_proposal": true,
+    "expected_facts": ["exfiltration", "upload", "external"]
+  },
+  {
+    "incident_id": "gi-lateral-move",
+    "entity_id": "host-33",
+    "description": "SMB auth to 12 internal hosts in 30 seconds with one credential.",
+    "valid_record_ids": ["score:host-33", "audit:evt-1330", "enforce:host-33"],
+    "expect_proposal": true,
+    "expected_facts": ["lateral movement", "smb"]
+  },
+  {
+    "incident_id": "gi-ransomware",
+    "entity_id": "host-40",
+    "description": "Rapid mass file rename with a known ransomware extension.",
+    "valid_record_ids": ["score:host-40", "audit:evt-1400", "enforce:host-40"],
+    "expect_proposal": true,
+    "expected_facts": ["ransomware", "mass file", "rename"]
+  },
+  {
+    "incident_id": "gi-cryptominer",
+    "entity_id": "host-44",
+    "description": "Sustained 100% GPU with a stratum mining-pool connection.",
+    "valid_record_ids": ["score:host-44", "audit:evt-1440"],
+    "expect_proposal": true,
+    "expected_facts": ["cryptominer", "mining pool"]
+  },
+  {
+    "incident_id": "gi-phishing-callback",
+    "entity_id": "host-48",
+    "description": "Macro-enabled doc opened, then DNS to a freshly-registered domain.",
+    "valid_record_ids": ["score:host-48", "audit:evt-1480"],
+    "expect_proposal": true,
+    "expected_facts": ["macro", "newly registered domain"]
+  },
+  {
+    "incident_id": "gi-impossible-travel",
+    "entity_id": "user-9",
+    "description": "Same user authenticated from two continents 5 minutes apart.",
+    "valid_record_ids": ["score:user-9", "audit:evt-1509"],
+    "expect_proposal": true,
+    "expected_facts": ["impossible travel", "two"]
+  },
+  {
+    "incident_id": "gi-mfa-fatigue",
+    "entity_id": "user-12",
+    "description": "Dozens of push approvals requested in minutes until one accepted.",
+    "valid_record_ids": ["score:user-12", "audit:evt-1512", "enforce:user-12"],
+    "expect_proposal": true,
+    "expected_facts": ["mfa fatigue", "push"]
+  },
+  {
+    "incident_id": "gi-disabled-edr",
+    "entity_id": "host-50",
+    "description": "EDR agent service stopped immediately before suspicious activity.",
+    "valid_record_ids": ["score:host-50", "audit:evt-1550", "enforce:host-50"],
+    "expect_proposal": true,
+    "expected_facts": ["edr", "stopped"]
+  },
+  {
+    "incident_id": "gi-log-tamper",
+    "entity_id": "host-52",
+    "description": "Local audit log cleared right after a privileged action.",
+    "valid_record_ids": ["score:host-52", "audit:evt-1552"],
+    "expect_proposal": true,
+    "expected_facts": ["log", "cleared"]
+  },
+  {
+    "incident_id": "gi-new-admin",
+    "entity_id": "user-20",
+    "description": "A new account was added to the Domain Admins group off-hours.",
+    "valid_record_ids": ["score:user-20", "audit:evt-1620", "enforce:user-20"],
+    "expect_proposal": true,
+    "expected_facts": ["domain admins", "off-hours"]
+  },
+  {
+    "incident_id": "gi-reverse-shell",
+    "entity_id": "host-55",
+    "description": "Web server process spawned bash with an outbound socket.",
+    "valid_record_ids": ["score:host-55", "audit:evt-1655", "enforce:host-55"],
+    "expect_proposal": true,
+    "expected_facts": ["reverse shell", "outbound"]
+  },
+  {
+    "incident_id": "gi-dns-tunnel",
+    "entity_id": "host-58",
+    "description": "High-entropy TXT queries to one domain at a steady rate.",
+    "valid_record_ids": ["score:host-58", "audit:evt-1658"],
+    "expect_proposal": true,
+    "expected_facts": ["dns tunnel", "txt"]
+  },
+  {
+    "incident_id": "gi-patched-host",
+    "entity_id": "host-60",
+    "description": "Vulnerability scan finding already remediated by last patch cycle.",
+    "valid_record_ids": ["score:host-60"],
+    "expect_proposal": false,
+    "expected_facts": ["already", "patched"]
+  },
+  {
+    "incident_id": "gi-scheduled-job",
+    "entity_id": "host-61",
+    "description": "Nightly backup job flagged by volume heuristic; known-good schedule.",
+    "valid_record_ids": ["score:host-61"],
+    "expect_proposal": false,
+    "expected_facts": ["backup", "known-good"]
+  },
+  {
+    "incident_id": "gi-false-positive-scanner",
+    "entity_id": "host-63",
+    "description": "Authorized internal vulnerability scanner triggered IDS rules.",
+    "valid_record_ids": ["score:host-63", "audit:evt-1663"],
+    "expect_proposal": false,
+    "expected_facts": ["authorized", "scanner"]
+  },
+  {
+    "incident_id": "gi-suspicious-oauth",
+    "entity_id": "user-25",
+    "description": "Consent granted to a third-party app requesting mailbox read scope.",
+    "valid_record_ids": ["score:user-25", "audit:evt-1725"],
+    "expect_proposal": true,
+    "expected_facts": ["oauth", "consent", "mailbox"]
+  },
+  {
+    "incident_id": "gi-kerberoast",
+    "entity_id": "user-27",
+    "description": "Bulk service-ticket requests with weak encryption types.",
+    "valid_record_ids": ["score:user-27", "audit:evt-1727", "enforce:user-27"],
+    "expect_proposal": true,
+    "expected_facts": ["kerberoast", "service ticket"]
+  },
+  {
+    "incident_id": "gi-cloud-key-leak",
+    "entity_id": "svc-3",
+    "description": "Static access key used from an unfamiliar cloud region.",
+    "valid_record_ids": ["score:svc-3", "audit:evt-1803", "enforce:svc-3"],
+    "expect_proposal": true,
+    "expected_facts": ["access key", "unfamiliar region"]
+  },
+  {
+    "incident_id": "gi-ambiguous-thin",
+    "entity_id": "host-70",
+    "description": "Single low-confidence anomaly with no corroborating records.",
+    "valid_record_ids": [],
+    "expect_proposal": false,
+    "should_refuse": true
+  },
+  {
+    "incident_id": "gi-out-of-scope",
+    "entity_id": "host-71",
+    "description": "User asks copilot to draft marketing copy; out of security scope.",
+    "valid_record_ids": [],
+    "expect_proposal": false,
+    "should_refuse": true
   }
 ]
