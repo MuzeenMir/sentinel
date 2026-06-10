@@ -79,8 +79,10 @@ def make_inference_client():
     adapter (inference sovereignty); the default is the hosted Anthropic client.
     Both expose the same ``complete(...) -> LLMResponse`` contract, so the
     copilot is provider-agnostic and on-prem is a config swap, not a code change.
+    Credentials are resolved per provider inside ``build()`` (ANTHROPIC_API_KEY
+    vs LOCAL_LLM_API_KEY) so the hosted key is never sent to a local endpoint.
     """
-    return ProviderRouter.from_env().build(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+    return ProviderRouter.from_env().build()
 
 
 def make_copilot_context(actor: str, tenant_id=None) -> SimpleNamespace:

@@ -54,8 +54,15 @@ class ProviderRouter:
                     or source.get("INFERENCE_BASE_URL")
                     or ""
                 )
+            # Credential scoping: the local endpoint authenticates with its
+            # own key. The hosted Anthropic credential must never be sent to
+            # a non-Anthropic endpoint.
+            if "api_key" not in kwargs:
+                kwargs["api_key"] = source.get("LOCAL_LLM_API_KEY")
             return LocalLLMClient(**kwargs)
 
         from anthropic_client import AnthropicClient
 
+        if "api_key" not in kwargs:
+            kwargs["api_key"] = source.get("ANTHROPIC_API_KEY")
         return AnthropicClient(**kwargs)

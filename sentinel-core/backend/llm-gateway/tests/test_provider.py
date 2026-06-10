@@ -156,3 +156,24 @@ def test_app_make_inference_client_selects_local(monkeypatch):
     client = app.make_inference_client()
     assert type(client).__name__ == "LocalLLMClient"
     assert client.base_url == "http://llamacpp:8080"
+
+
+# --- credential scoping: hosted key never reaches the local endpoint ---------
+
+
+def test_local_provider_does_not_inherit_anthropic_key(monkeypatch):
+    monkeypatch.setenv("INFERENCE_PROVIDER", "local")
+    monkeypatch.setenv("LOCAL_LLM_BASE_URL", "http://llamacpp:8080")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-hosted-secret")
+    monkeypatch.delenv("LOCAL_LLM_API_KEY", raising=False)
+    client = ProviderRouter.from_env().build()
+    assert client.api_key is None  # hosted credential not forwarded
+
+
+def test_local_provider_uses_its_own_key(monkeypatch):
+    monkeypatch.setenv("INFERENCE_PROVIDER", "local")
+    monkeypatch.setenv("LOCAL_LLM_BASE_URL", "http://llamacpp:8080")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-hosted-secret")
+    monkeypatch.setenv("LOCAL_LLM_API_KEY", "local-endpoint-key")
+    client = ProviderRouter.from_env().build()
+    assert client.api_key == "local-endpoint-key"
