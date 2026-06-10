@@ -36,3 +36,22 @@ def test_token_budget_isolated_per_tenant(fake_redis):
     assert q.consume_tokens("tenant-a", 100).allowed is True
     assert q.consume_tokens("tenant-a", 1).allowed is False
     assert q.consume_tokens("tenant-b", 100).allowed is True
+
+
+def test_rejected_consume_rolls_back_reservation(fake_redis):
+    q = TenantQuota(fake_redis, max_tokens=100, window=60)
+    assert q.consume_tokens("tenant-a", 60).allowed is True
+    assert q.consume_tokens("tenant-a", 60).allowed is False  # 120 > 100, rolled back
+    assert q.consume_tokens("tenant-a", 40).allowed is True  # 60 + 40 fits
+
+
+def test_consume_does_not_extend_running_window(fake_redis):
+    # Regression: TTL must be set once at window creation. Re-setting it on
+    # every consume slides the window forward, so a busy tenant's budget
+    # would never reset.
+    q = TenantQuota(fake_redis, max_tokens=100, window=60)
+    q.consume_tokens("tenant-a", 10)
+    q.consume_tokens("tenant-a", 10)
+    q.consume_tokens("tenant-a", 10)
+    tok_key = q._tok_key("tenant-a")
+    assert [c for c in fake_redis.expire_calls if c[0] == tok_key] == [(tok_key, 60)]

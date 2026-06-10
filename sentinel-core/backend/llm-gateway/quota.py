@@ -58,13 +58,18 @@ class TenantQuota:
     def consume_tokens(self, tenant_id: str, tokens: int) -> QuotaResult:
         """Reserve ``tokens`` against the tenant's window budget.
 
-        Reserves only if it fits, so a rejected call does not consume budget.
+        INCRBY-then-check so concurrent callers cannot both slip under the
+        limit (a rejected call rolls its reservation back and consumes no
+        budget). The TTL is set only when the key is created — consuming more
+        tokens never extends an already-running window.
         """
         key = self._tok_key(tenant_id)
-        current = int(self.redis.get(key) or 0)
-        if current + tokens > self.max_tokens:
+        total = self.redis.incrby(key, tokens)
+        if total == tokens:
+            self.redis.expire(key, self.window)
+        if total > self.max_tokens:
+            self.redis.decrby(key, tokens)
             return QuotaResult(False, self.window, "token budget exceeded")
-        self.redis.set(key, current + tokens, ex=self.window)
         return QuotaResult(True)
 
 
