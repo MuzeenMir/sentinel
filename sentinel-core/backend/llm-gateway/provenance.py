@@ -60,6 +60,7 @@ class ProvenanceResult:
     unverifiable_ids: list[str] = field(default_factory=list)
     stale_ids: list[str] = field(default_factory=list)
     reason: Optional[str] = None
+    mutated_ids: list[str] = field(default_factory=list)
 
 
 def verify_citations(
@@ -68,10 +69,29 @@ def verify_citations(
     *,
     now: Optional[float] = None,
     freshness_seconds: int = DEFAULT_FRESHNESS_SECONDS,
+    current_hashes: Optional[dict[str, str]] = None,
 ) -> ProvenanceResult:
+    """Verify cited ids against captured provenance.
+
+    Rejects, in order: ids with no captured source (forged/unverifiable);
+    ids whose source content hash *changed* since capture when ``current_hashes``
+    is supplied (mutation/tamper — opt-in re-fetch check); and ids fetched
+    outside the freshness window (stale by age).
+    """
     ts = int(time.time() if now is None else now)
     cited = list(cited_ids)
     unverifiable = [c for c in cited if c not in provenance]
+    mutated = (
+        [
+            c
+            for c in cited
+            if c in provenance
+            and c in current_hashes
+            and current_hashes[c] != provenance[c].hash
+        ]
+        if current_hashes is not None
+        else []
+    )
     stale = [
         c
         for c in cited
@@ -84,6 +104,16 @@ def verify_citations(
             unverifiable,
             stale,
             f"citations without a verifiable source record: {', '.join(unverifiable)}",
+            mutated_ids=mutated,
+        )
+    if mutated:
+        return ProvenanceResult(
+            False,
+            cited,
+            unverifiable,
+            stale,
+            f"citations whose source content was mutated since capture: {', '.join(mutated)}",
+            mutated_ids=mutated,
         )
     if stale:
         return ProvenanceResult(
@@ -92,8 +122,9 @@ def verify_citations(
             unverifiable,
             stale,
             f"citations beyond the freshness window: {', '.join(stale)}",
+            mutated_ids=mutated,
         )
-    return ProvenanceResult(True, cited, [], [])
+    return ProvenanceResult(True, cited, [], [], mutated_ids=mutated)
 
 
 def citation_hashes(
