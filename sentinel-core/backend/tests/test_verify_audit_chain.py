@@ -242,6 +242,7 @@ def test_build_report_clean_ledger_is_ok():
         divergences=[],
     )
     assert report["ok"] is True
+    assert report["anchored"] is True
     assert report["row_count"] == 2
     assert report["daily_root_count"] == 2
     assert report["trusted_root_count"] == 2
@@ -272,3 +273,42 @@ def test_build_report_surfaces_first_failures_and_is_not_ok():
     daily = {d["date"]: d for d in report["daily"]}
     assert daily["2026-05-30"]["trusted"] is True
     assert daily["2026-05-31"]["trusted"] is False
+
+
+def test_build_report_unanchored_run_is_ok_but_not_anchored():
+    # No published roots at all: per-row/chain integrity can pass, but the
+    # report must say so honestly — anchored=false, no day trusted — so the
+    # UI never presents an unanchored run as "verified".
+    rows = [_row(1, "2026-05-30T01:00:00Z")]
+    computed = chain_roots(compute_daily_roots(rows))
+    report = build_report(
+        rows=rows,
+        computed=computed,
+        trusted=[],
+        tampers=[],
+        sig_fails=[],
+        divergences=[],
+    )
+    assert report["ok"] is True
+    assert report["anchored"] is False
+    assert not any(d["trusted"] for d in report["daily"])
+
+
+def test_build_report_day_trust_binds_to_root_value_not_date():
+    # A cosign-trusted published root exists for the date, but the computed
+    # root differs (divergence). The mismatched computed root must NOT be
+    # marked trusted by date alone.
+    rows = [_row(1, "2026-05-30T01:00:00Z")]
+    computed = chain_roots(compute_daily_roots(rows))
+    trusted = [{"date": computed[0]["date"], "root": "different-signed-root"}]
+    divergences = diff_published(computed, trusted)
+    report = build_report(
+        rows=rows,
+        computed=computed,
+        trusted=trusted,
+        tampers=[],
+        sig_fails=[],
+        divergences=divergences,
+    )
+    assert report["ok"] is False
+    assert report["daily"][0]["trusted"] is False

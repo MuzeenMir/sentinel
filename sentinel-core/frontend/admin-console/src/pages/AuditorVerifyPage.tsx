@@ -50,25 +50,46 @@ export function AuditorVerifyPage() {
 }
 
 function Verdict({ report }: { report: LedgerReport }) {
+  // Three honest states: verified (ok + anchored to cosign-trusted roots),
+  // integrity-only (ok but no signed anchor — must not claim "verified"),
+  // failed. Anchoring is what makes the verdict externally provable.
+  const verified = report.ok && report.anchored;
+  const integrityOnly = report.ok && !report.anchored;
   return (
     <div className="space-y-6">
       <div
         className={`card flex items-center gap-4 p-6 ${
-          report.ok ? "border-emerald-600/40" : "border-red-600/40"
+          verified
+            ? "border-emerald-600/40"
+            : integrityOnly
+              ? "border-amber-600/40"
+              : "border-red-600/40"
         }`}
       >
-        {report.ok ? (
+        {verified ? (
           <ShieldCheck className="h-10 w-10 shrink-0 text-emerald-400" />
         ) : (
-          <ShieldAlert className="h-10 w-10 shrink-0 text-red-400" />
+          <ShieldAlert
+            className={`h-10 w-10 shrink-0 ${
+              integrityOnly ? "text-amber-400" : "text-red-400"
+            }`}
+          />
         )}
         <div>
           <h2
             className={`text-xl font-bold ${
-              report.ok ? "text-emerald-300" : "text-red-300"
+              verified
+                ? "text-emerald-300"
+                : integrityOnly
+                  ? "text-amber-300"
+                  : "text-red-300"
             }`}
           >
-            {report.ok ? "Ledger verified" : "Verification failed"}
+            {verified
+              ? "Ledger verified"
+              : integrityOnly
+                ? "Integrity OK — unanchored (no cosign-trusted roots)"
+                : "Verification failed"}
           </h2>
           <p className="text-sm text-slate-400">
             {report.row_count} rows · {report.daily_root_count} daily roots ·{" "}

@@ -30,6 +30,7 @@ function renderPage() {
 
 const cleanReport: LedgerReport = {
   ok: true,
+  anchored: true,
   row_count: 2,
   daily_root_count: 2,
   trusted_root_count: 2,
@@ -45,6 +46,7 @@ const cleanReport: LedgerReport = {
 
 const tamperedReport: LedgerReport = {
   ok: false,
+  anchored: true,
   row_count: 2,
   daily_root_count: 2,
   trusted_root_count: 1,
@@ -84,6 +86,20 @@ describe("AuditorVerifyPage", () => {
     expect(screen.getByText(/^untrusted$/i)).toBeInTheDocument();
     // the first tampered row is surfaced
     expect(screen.getByTestId("first-tamper")).toHaveTextContent("2");
+  });
+
+  it("does not claim 'verified' for an unanchored integrity-only run", async () => {
+    mockFetch.mockResolvedValue({
+      ...cleanReport,
+      anchored: false,
+      trusted_root_count: 0,
+      daily: cleanReport.daily.map((d) => ({ ...d, trusted: false })),
+    });
+    renderPage();
+    expect(
+      await screen.findByText(/integrity ok — unanchored/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/ledger verified/i)).not.toBeInTheDocument();
   });
 
   it("renders an error state when the report cannot be loaded", async () => {

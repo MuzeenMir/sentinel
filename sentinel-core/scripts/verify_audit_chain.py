@@ -181,10 +181,17 @@ def build_report(
     Carries the overall pass/fail plus the *first* failure of each kind (the
     CLI reports first-divergent-day; the UI surfaces the same), and a per-day
     summary flagging which days are anchored by a cosign-trusted root.
+
+    ``anchored`` is false when no cosign-trusted published root exists at
+    all — the run proved per-row/chain integrity but is not anchored to any
+    signed external root, and the UI must not present it as "verified".
+    A day is ``trusted`` only when the *computed* root equals a trusted
+    published root — matching on date alone could bless a mismatched root.
     """
-    trusted_dates = {p["date"] for p in trusted}
+    trusted_pairs = {(p["date"], p.get("root")) for p in trusted}
     return {
         "ok": not (tampers or sig_fails or divergences),
+        "anchored": len(trusted) > 0,
         "row_count": len(rows),
         "daily_root_count": len(computed),
         "trusted_root_count": len(trusted),
@@ -196,7 +203,7 @@ def build_report(
                 "date": entry["date"],
                 "count": entry["count"],
                 "root": entry["root"],
-                "trusted": entry["date"] in trusted_dates,
+                "trusted": (entry["date"], entry["root"]) in trusted_pairs,
             }
             for entry in computed
         ],

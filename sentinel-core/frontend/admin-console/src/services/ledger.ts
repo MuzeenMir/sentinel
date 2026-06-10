@@ -33,6 +33,9 @@ export interface LedgerDivergence {
 
 export interface LedgerReport {
   ok: boolean;
+  /** False when no cosign-trusted published root anchored the run —
+   * integrity-only, must not be presented as "verified". */
+  anchored: boolean;
   row_count: number;
   daily_root_count: number;
   trusted_root_count: number;
@@ -52,11 +55,15 @@ export const DEFAULT_REPORT_URL = "/audit/verify-report.json";
 export function parseLedgerReport(raw: unknown): LedgerReport {
   const r = (raw ?? {}) as Record<string, unknown>;
   const daily = Array.isArray(r.daily) ? (r.daily as LedgerDay[]) : [];
+  const trustedCount = Number(r.trusted_root_count ?? 0);
   return {
     ok: Boolean(r.ok),
+    // Older reports lack the field; infer from the trusted-root count so an
+    // unanchored run is never rendered as verified.
+    anchored: r.anchored !== undefined ? Boolean(r.anchored) : trustedCount > 0,
     row_count: Number(r.row_count ?? 0),
     daily_root_count: Number(r.daily_root_count ?? 0),
-    trusted_root_count: Number(r.trusted_root_count ?? 0),
+    trusted_root_count: trustedCount,
     first_tamper: (r.first_tamper as LedgerTamper | null) ?? null,
     first_signature_failure:
       (r.first_signature_failure as LedgerSignatureFailure | null) ?? null,
