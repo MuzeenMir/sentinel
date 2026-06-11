@@ -26,7 +26,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from observability import configure_logging  # noqa: E402
 from metrics import init_metrics  # noqa: E402
 
-from anthropic_client import AnthropicClient  # noqa: E402
+from provider import ProviderRouter  # noqa: E402
 from audit import CopilotAuditor  # noqa: E402
 from copilot import Copilot  # noqa: E402
 from cost import resolve_token_budget  # noqa: E402
@@ -72,11 +72,24 @@ def make_registry() -> ToolRegistry:
     )
 
 
+def make_inference_client():
+    """Build the inference client for the configured provider (C1).
+
+    ``INFERENCE_PROVIDER=local`` selects the self-hostable llama.cpp / Gemma
+    adapter (inference sovereignty); the default is the hosted Anthropic client.
+    Both expose the same ``complete(...) -> LLMResponse`` contract, so the
+    copilot is provider-agnostic and on-prem is a config swap, not a code change.
+    Credentials are resolved per provider inside ``build()`` (ANTHROPIC_API_KEY
+    vs LOCAL_LLM_API_KEY) so the hosted key is never sent to a local endpoint.
+    """
+    return ProviderRouter.from_env().build()
+
+
 def make_copilot_context(actor: str, tenant_id=None) -> SimpleNamespace:
     """Build the per-request copilot stack. Overridden in tests to avoid network."""
     registry = make_registry()
     auditor = CopilotAuditor(actor=actor, tenant_id=tenant_id, sink=audit_sink)
-    client = AnthropicClient(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+    client = make_inference_client()
     copilot = Copilot(
         client=client,
         registry=registry,
