@@ -24,6 +24,7 @@ class FakeRedis:
 
     def __init__(self):
         self.store = {}
+        self.expire_calls = []
 
     def setex(self, key, ttl, value):
         self.store[key] = value
@@ -45,10 +46,19 @@ class FakeRedis:
         return items[start : end + 1]
 
     def expire(self, key, ttl):
+        self.expire_calls.append((key, ttl))
         return True
 
     def incr(self, key):
         self.store[key] = int(self.store.get(key, 0)) + 1
+        return self.store[key]
+
+    def incrby(self, key, amount):
+        self.store[key] = int(self.store.get(key, 0)) + amount
+        return self.store[key]
+
+    def decrby(self, key, amount):
+        self.store[key] = int(self.store.get(key, 0)) - amount
         return self.store[key]
 
     def delete(self, *keys):
