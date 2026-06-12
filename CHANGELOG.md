@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.1](https://github.com/MuzeenMir/sentinel/compare/v1.7.0...v1.7.1) (2026-06-12)
+
+
+### Bug Fixes
+
+* **console:** pin app tsconfig types to stop implicit [@types](https://github.com/types) scan breaking Docker build ([#73](https://github.com/MuzeenMir/sentinel/issues/73)) ([55eaca1](https://github.com/MuzeenMir/sentinel/commit/55eaca1942afb6b7b017e629e4f444b01d346b7d))
+
 ## [1.7.0](https://github.com/MuzeenMir/sentinel/compare/v1.6.0...v1.7.0) (2026-06-12)
 
 
