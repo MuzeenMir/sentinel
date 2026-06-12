@@ -127,8 +127,178 @@ def diff_published(
 
 
 # --------------------------------------------------------------------------- #
+# Cosign signature gating (pure core, unit-tested)
+# --------------------------------------------------------------------------- #
+
+
+def signature_failures(sig_results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Published roots whose detached cosign signature did not verify."""
+    return [
+        {"date": r["date"], "reason": r["reason"]}
+        for r in sig_results
+        if not r["valid"]
+    ]
+
+
+def trusted_published(
+    published: List[Dict[str, Any]], sig_results: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
+    """Keep only published roots whose cosign signature verified.
+
+    A forged root with a bad/absent signature must never anchor the chain
+    comparison — otherwise an attacker who can write both the DB and the
+    published-roots directory could hide a tamper.
+
+    Trust is bound to the (date, root) pair: the root value must equal the
+    one inside the cosign-verified blob, so a valid signature for one blob
+    can never bless a different root that merely shares its date.
+    """
+    valid = {(r["date"], r.get("root")) for r in sig_results if r["valid"]}
+    return [p for p in published if (p["date"], p.get("root")) in valid]
+
+
+def unverified_failures(published: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Failures for published roots when signature verification cannot run.
+
+    Fail closed: if roots were published but the verifier has no
+    ``--cert-identity-regexp`` to check them against, every published root is
+    reported as a signature failure rather than silently trusted — otherwise
+    a mis-configured verifier run would bless a tampered ledger.
+    """
+    return [{"date": p["date"], "reason": "identity_not_configured"} for p in published]
+
+
+def build_report(
+    rows: List[Dict[str, Any]],
+    computed: List[Dict[str, Any]],
+    trusted: List[Dict[str, Any]],
+    tampers: List[Dict[str, Any]],
+    sig_fails: List[Dict[str, Any]],
+    divergences: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Machine-readable verdict consumed by the read-only auditor UI.
+
+    Carries the overall pass/fail plus the *first* failure of each kind (the
+    CLI reports first-divergent-day; the UI surfaces the same), and a per-day
+    summary flagging which days are anchored by a cosign-trusted root.
+
+    ``anchored`` is false when no cosign-trusted published root exists at
+    all — the run proved per-row/chain integrity but is not anchored to any
+    signed external root, and the UI must not present it as "verified".
+    A day is ``trusted`` only when the *computed* root equals a trusted
+    published root — matching on date alone could bless a mismatched root.
+    """
+    trusted_pairs = {(p["date"], p.get("root")) for p in trusted}
+    return {
+        "ok": not (tampers or sig_fails or divergences),
+        "anchored": len(trusted) > 0,
+        "row_count": len(rows),
+        "daily_root_count": len(computed),
+        "trusted_root_count": len(trusted),
+        "first_tamper": tampers[0] if tampers else None,
+        "first_signature_failure": sig_fails[0] if sig_fails else None,
+        "first_divergence": divergences[0] if divergences else None,
+        "daily": [
+            {
+                "date": entry["date"],
+                "count": entry["count"],
+                "root": entry["root"],
+                "trusted": (entry["date"], entry["root"]) in trusted_pairs,
+            }
+            for entry in computed
+        ],
+    }
+
+
+# --------------------------------------------------------------------------- #
 # I/O wrappers (DB + published roots) — thin, exercised in integration
 # --------------------------------------------------------------------------- #
+
+
+def cosign_verify_blob(
+    blob_path: str,
+    sig_path: str,
+    cert_path: str,
+    *,
+    cert_identity_regexp: str,
+    cert_oidc_issuer: str,
+) -> bool:  # pragma: no cover
+    """Verify a keyless (Fulcio/OIDC) cosign detached signature over ``blob_path``.
+
+    Returns True on a good signature, False if cosign rejects it. Raising would
+    abort the whole run; instead a bad day is reported as a signature failure.
+    """
+    import subprocess
+
+    try:
+        subprocess.run(
+            [
+                "cosign",
+                "verify-blob",
+                "--signature",
+                sig_path,
+                "--certificate",
+                cert_path,
+                "--certificate-identity-regexp",
+                cert_identity_regexp,
+                "--certificate-oidc-issuer",
+                cert_oidc_issuer,
+                blob_path,
+            ],
+            check=True,
+            capture_output=True,
+        )
+        return True
+    except subprocess.CalledProcessError:
+        return False
+
+
+def verify_published_signatures(published_dir: str, verify_fn) -> List[Dict[str, Any]]:
+    """Verify the cosign signature of every ``<date>.json`` root in a directory.
+
+    ``verify_fn(blob, sig, cert) -> bool`` is injected so the pairing logic is
+    testable without cosign installed. Each result is ``{date, valid, reason,
+    root}`` where ``reason`` is ``None`` / ``"signature_invalid"`` /
+    ``"signature_missing"``. ``root`` is read from the *verified blob itself*
+    so trust can be bound to the signed content, not just the filename date.
+    """
+    results = []
+    if not os.path.isdir(published_dir):
+        return results
+    for name in sorted(os.listdir(published_dir)):
+        if not name.endswith(".json"):
+            continue
+        date = name[: -len(".json")]
+        blob = os.path.join(published_dir, name)
+        sig = blob + ".sig"
+        cert = blob + ".pem"
+        if not (os.path.exists(sig) and os.path.exists(cert)):
+            results.append(
+                {
+                    "date": date,
+                    "valid": False,
+                    "reason": "signature_missing",
+                    "root": None,
+                }
+            )
+            continue
+        ok = bool(verify_fn(blob, sig, cert))
+        root = None
+        reason = None if ok else "signature_invalid"
+        if ok:
+            try:
+                with open(blob) as fh:
+                    payload = json.load(fh)
+                root = payload.get("root")
+                # A verified blob whose internal date disagrees with its
+                # filename date can never anchor anything — surface it as a
+                # failure instead of silently producing an unanchored run.
+                if payload.get("date") != date:
+                    ok, reason, root = False, "date_mismatch", None
+            except (ValueError, OSError):
+                ok, reason = False, "signature_invalid"
+        results.append({"date": date, "valid": ok, "reason": reason, "root": root})
+    return results
 
 
 def fetch_rows(database_url: str) -> List[Dict[str, Any]]:  # pragma: no cover
@@ -185,6 +355,24 @@ def main(argv: Optional[List[str]] = None) -> int:  # pragma: no cover
         default=os.environ.get("AUDIT_ROOTS_DIR", "audit-roots"),
         help="Directory of nightly published signed root JSON files.",
     )
+    parser.add_argument(
+        "--cert-identity-regexp",
+        default=os.environ.get("AUDIT_COSIGN_IDENTITY_REGEXP"),
+        help="cosign keyless certificate identity regexp (the signing workflow "
+        "SAN). Required to cryptographically trust published roots.",
+    )
+    parser.add_argument(
+        "--cert-oidc-issuer",
+        default=os.environ.get(
+            "AUDIT_COSIGN_OIDC_ISSUER", "https://token.actions.githubusercontent.com"
+        ),
+        help="cosign keyless certificate OIDC issuer.",
+    )
+    parser.add_argument(
+        "--report-json",
+        default=os.environ.get("AUDIT_VERIFY_REPORT"),
+        help="Write the machine-readable verdict here for the auditor UI to render.",
+    )
     args = parser.parse_args(argv)
 
     if not args.database_url:
@@ -195,13 +383,75 @@ def main(argv: Optional[List[str]] = None) -> int:  # pragma: no cover
     tampers = find_row_tampers(rows)
     computed = chain_roots(compute_daily_roots(rows))
     published = load_published_roots(args.published_dir)
-    divergences = diff_published(computed, published) if published else []
+
+    # Cryptographically gate which published roots may anchor the chain.
+    sig_fails: List[Dict[str, Any]] = []
+    if published and args.cert_identity_regexp:
+
+        def _verify(blob, sig, cert):
+            return cosign_verify_blob(
+                blob,
+                sig,
+                cert,
+                cert_identity_regexp=args.cert_identity_regexp,
+                cert_oidc_issuer=args.cert_oidc_issuer,
+            )
+
+        sig_results = verify_published_signatures(args.published_dir, _verify)
+        sig_fails = signature_failures(sig_results)
+        trusted = trusted_published(published, sig_results)
+    else:
+        if published:
+            # Fail closed: published roots we cannot verify are signature
+            # failures, never silent anchors. A mis-configured verifier must
+            # not return OK against a potentially tampered ledger.
+            print(
+                "ERROR: published roots present but --cert-identity-regexp "
+                "is not set; refusing to trust unverified roots. Set "
+                "AUDIT_COSIGN_IDENTITY_REGEXP or pass --cert-identity-regexp.",
+                file=sys.stderr,
+            )
+            sig_fails = unverified_failures(published)
+        trusted = []
+
+    # Belt and braces: roots were published but none became a trusted anchor
+    # and nothing was flagged — published-but-unanchorable must fail closed,
+    # not silently downgrade the run to integrity-only.
+    if published and not trusted and not sig_fails:
+        sig_fails = [
+            {"date": p.get("date"), "reason": "unanchorable_published_root"}
+            for p in published
+        ]
+
+    divergences = diff_published(computed, trusted) if trusted else []
+
+    if args.report_json:
+        from datetime import datetime, timezone
+
+        report = build_report(
+            rows=rows,
+            computed=computed,
+            trusted=trusted,
+            tampers=tampers,
+            sig_fails=sig_fails,
+            divergences=divergences,
+        )
+        report["generated_at"] = datetime.now(timezone.utc).isoformat()
+        with open(args.report_json, "w") as fh:
+            json.dump(report, fh, indent=2, sort_keys=True)
 
     if tampers:
         first = tampers[0]
         print(
             f"TAMPER: row id={first['id']} stored={first['stored'][:16]}… "
             f"recomputed={first['recomputed'][:16]}…  ({len(tampers)} total)",
+            file=sys.stderr,
+        )
+    if sig_fails:
+        first = sig_fails[0]
+        print(
+            f"SIGNATURE FAILURE: {first['date']} {first['reason']} "
+            f"({len(sig_fails)} total)",
             file=sys.stderr,
         )
     if divergences:
@@ -212,15 +462,15 @@ def main(argv: Optional[List[str]] = None) -> int:  # pragma: no cover
             file=sys.stderr,
         )
 
-    if tampers or divergences:
+    if tampers or sig_fails or divergences:
         return 1
 
     print(
         f"OK: {len(rows)} rows, {len(computed)} daily roots verified"
         + (
-            f" against {len(published)} published roots"
-            if published
-            else " (no published roots supplied — per-row integrity only)"
+            f" against {len(trusted)} cosign-verified published roots"
+            if trusted
+            else " (no trusted published roots — per-row integrity only)"
         )
     )
     return 0

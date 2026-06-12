@@ -38,6 +38,11 @@ const Users = lazy(() =>
 const AuditLog = lazy(() =>
   import("./pages/AuditLog").then((m) => ({ default: m.AuditLog })),
 );
+const AuditorVerify = lazy(() =>
+  import("./pages/AuditorVerifyPage").then((m) => ({
+    default: m.AuditorVerifyPage,
+  })),
+);
 const Tenants = lazy(() =>
   import("./pages/Tenants").then((m) => ({ default: m.Tenants })),
 );
@@ -112,6 +117,7 @@ function App() {
           <Route path="/hids" element={<HidsEvents />} />
           <Route path="/users" element={<Users />} />
           <Route path="/audit" element={<AuditLog />} />
+          <Route path="/audit-verify" element={<AuditorVerify />} />
           <Route path="/tenants" element={<Tenants />} />
           <Route path="/mfa-setup" element={<MfaSetup />} />
           <Route path="/siem" element={<SiemConfig />} />

@@ -20,6 +20,7 @@ import {
   ShieldCheck,
   Plug,
   Sparkles,
+  FileCheck,
 } from "lucide-react";
 import { useAuthStore } from "../store/authStore";
 
@@ -34,6 +35,7 @@ const navigation = [
   { name: "HIDS", to: "/hids", icon: Eye },
   { name: "Users", to: "/users", icon: Users },
   { name: "Audit Log", to: "/audit", icon: ClipboardList },
+  { name: "Ledger Verify", to: "/audit-verify", icon: FileCheck },
   { name: "Tenants", to: "/tenants", icon: Building2 },
   { name: "MFA Setup", to: "/mfa-setup", icon: ShieldCheck },
   { name: "SIEM / Integrations", to: "/siem", icon: Plug },
