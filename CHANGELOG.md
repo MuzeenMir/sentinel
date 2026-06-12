@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.7.0](https://github.com/MuzeenMir/sentinel/compare/v1.6.0...v1.7.0) (2026-06-12)
+
+
+### Features
+
+* **audit:** auditor-facing ledger verification — cosign-gated verifier + console verdict page (Plan CLAUDE C7) ([#71](https://github.com/MuzeenMir/sentinel/issues/71)) ([19be56f](https://github.com/MuzeenMir/sentinel/commit/19be56f91e3b5984411ec1cc7ac2f0bb462de692))
+* **llm-gateway:** broaden red-team gate with jailbreak + tool-output poisoning (C3) ([#68](https://github.com/MuzeenMir/sentinel/issues/68)) ([be69234](https://github.com/MuzeenMir/sentinel/commit/be69234c2449cc422d3b0abc67db21a2aed36b07))
+* **llm-gateway:** inference provider abstraction + local self-host adapter (Plan CLAUDE C1) ([#66](https://github.com/MuzeenMir/sentinel/issues/66)) ([9084196](https://github.com/MuzeenMir/sentinel/commit/90841968097dc53b94db2c38ef07ed93eb9bed92))
+* **llm-gateway:** model-quality eval gate with published thresholds (C2) ([#67](https://github.com/MuzeenMir/sentinel/issues/67)) ([b9c9a35](https://github.com/MuzeenMir/sentinel/commit/b9c9a3535bbb99f337f331126827b74eb23983db))
+* **llm-gateway:** per-tenant inference quota + token budget (Plan CLAUDE C5) ([#70](https://github.com/MuzeenMir/sentinel/issues/70)) ([63ee04b](https://github.com/MuzeenMir/sentinel/commit/63ee04b5b4946d43cc26d112917f785999b2fe08))
+* **llm-gateway:** reject citations whose source content was mutated (C4) ([#69](https://github.com/MuzeenMir/sentinel/issues/69)) ([8b4fc73](https://github.com/MuzeenMir/sentinel/commit/8b4fc73a2204e859856047fe20c4b969d72ba1cf))
+
 ## [1.6.0](https://github.com/MuzeenMir/sentinel/compare/v1.5.0...v1.6.0) (2026-06-06)
 
 
