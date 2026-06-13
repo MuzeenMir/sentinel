@@ -1,0 +1,79 @@
+name: 🐛 Bug report
+description: Report something that is broken or behaves incorrectly.
+title: "bug: <short summary>"
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug. Please keep it honest and specific — logs and exact
+        steps get issues fixed faster than descriptions. **Do not** report security
+        vulnerabilities here; use a private security advisory instead.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: A clear description of the bug and what you expected instead.
+      placeholder: |
+        Expected: ...
+        Actual: ...
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Minimal, ordered steps. Include commands and any relevant config.
+      placeholder: |
+        1. `cd sentinel-core && docker compose up -d`
+        2. Call `GET /...`
+        3. Observe ...
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      description: Which part of the system? (Maps loosely to commit scopes.)
+      options:
+        - console (api-gateway / auth / dashboard)
+        - controller (alert / policy-orchestrator / audit)
+        - analyzer (ai-engine / xai / stream)
+        - collector (data-collector / agent / sensors)
+        - llm-gateway
+        - frontend / admin-console
+        - infrastructure / deploy / CI
+        - docs
+        - other / not sure
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs / output
+      description: Paste logs or error output. This is automatically formatted as code.
+      render: shell
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      description: Release tag (e.g. `v1.1.3`) or commit SHA you are running.
+      placeholder: v1.1.3
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Docker version, Python/Node versions — whatever is relevant.
+      placeholder: |
+        OS: Ubuntu 22.04
+        Docker: 26.x
+        Python: 3.12
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-submission checks
+      options:
+        - label: I searched existing issues and this is not a duplicate.
+          required: true
+        - label: This is NOT a security vulnerability (those go through a private advisory).
+          required: true

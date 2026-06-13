@@ -1,0 +1,13 @@
+# Issue template chooser config.
+# Blank issues are disabled so reports land in a structured form.
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Questions & ideas (Discussions)
+    url: https://github.com/MuzeenMir/sentinel/discussions
+    about: Open-ended questions, design ideas, and Q&A belong in Discussions, not issues.
+  - name: 🔒 Security vulnerability
+    url: https://github.com/MuzeenMir/sentinel/security/advisories/new
+    about: Do NOT open a public issue for security problems. Report privately via a security advisory.
+  - name: 📖 Contributing guide
+    url: https://github.com/MuzeenMir/sentinel/blob/main/CONTRIBUTING.md
+    about: Read this before filing — it covers Conventional Commits, scopes, and the review gates.
