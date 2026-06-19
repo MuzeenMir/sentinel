@@ -5,6 +5,7 @@
     "unit",
     "security",
     "build",
-    "integration-migrations"
+    "integration-migrations",
+    "audit-schema-guard"
   ]
 }
