@@ -34,6 +34,7 @@ from auth_middleware import require_auth, require_role
 from tenant_middleware import require_tenant
 from observability import configure_logging
 from metrics import init_metrics, HARDENING_POSTURE
+from ebpf_lib import EBPF_AVAILABLE
 from ebpf_lib.loader import ProgramLoader
 from _lib.net import bind_host
 
@@ -847,44 +848,84 @@ class CISBenchmarkEngine:
 
 
 class EBPFEnforcer:
-    """Loads and manages LSM eBPF programs for runtime policy enforcement."""
+    """Loads and manages LSM eBPF programs for runtime policy enforcement.
+
+    On hosts without kernel eBPF support (containers, missing CAP_BPF, or no
+    compiled LSM object) the loader degrades to a dry-run stub: programs are
+    not attached and policies are recorded but never enforced. ``is_degraded()``
+    reports that state so API responses and health checks do not misrepresent a
+    no-op as live enforcement (audit SUB-03 / Wave A3).
+    """
 
     def __init__(self) -> None:
         self._loader: Optional[ProgramLoader] = None
         self._enforcing = False
         self._policies: Dict[str, dict] = {}
+        # True until a real kernel load (fd >= 0) proves enforcement is live.
+        self._degraded = True
 
     def start(self) -> None:
         try:
             self._loader = ProgramLoader()
-            self._loader.load(
+            info = self._loader.load(
                 name="lsm/policy_enforce",
                 prog_type="lsm",
                 attach_target="socket_bind",
             )
-            logger.info("eBPF LSM enforcement program loaded")
+            # fd < 0 means the loader ran in dry-run/stub mode (no bcc bindings
+            # or no kernel eBPF) — the program is NOT attached, so nothing is
+            # actually enforced even though load() "succeeded".
+            self._degraded = not (EBPF_AVAILABLE and info.fd >= 0)
+            if self._degraded:
+                logger.warning(
+                    "eBPF LSM program loaded in dry-run mode (fd=%d); runtime "
+                    "enforcement is INACTIVE — policies are recorded but not "
+                    "enforced",
+                    info.fd,
+                )
+            else:
+                logger.info("eBPF LSM enforcement program loaded and attached")
         except FileNotFoundError:
+            self._degraded = True
             logger.warning(
                 "LSM eBPF objects not found; enforcement disabled. "
                 "Compile with 'make' in ebpf-lib/."
             )
         except Exception as e:
+            self._degraded = True
             logger.error("eBPF enforcement init failed: %s", e)
+
+    def is_degraded(self) -> bool:
+        """True when kernel enforcement is unavailable (dry-run / no-op)."""
+        return self._degraded
 
     def set_mode(self, enforcing: bool) -> None:
         self._enforcing = enforcing
         logger.info("Enforcement mode: %s", "ENFORCE" if enforcing else "AUDIT")
 
-    def is_enforcing(self) -> bool:
+    def is_mode_requested(self) -> bool:
+        """Configured posture (what the operator asked for), regardless of
+        whether the kernel can actually enforce it."""
         return self._enforcing
 
-    def add_port_policy(self, port: int, allowed_comm: str) -> None:
+    def is_enforcing(self) -> bool:
+        # Only truly enforcing when enforce mode is requested AND the kernel
+        # program is actually attached (not degraded/dry-run).
+        return self._enforcing and not self._degraded
+
+    def add_port_policy(self, port: int, allowed_comm: str) -> bool:
+        """Record a port-bind policy.
+
+        Returns True when the policy is actually enforced by the kernel, False
+        when only recorded in dry-run mode.
+        """
         self._policies[f"port:{port}"] = {
             "port": port,
             "allowed_comm": allowed_comm,
             "type": "port_bind",
         }
         logger.info("Port policy: %d -> %s", port, allowed_comm)
+        return not self._degraded
 
     def get_policies(self) -> Dict[str, dict]:
         return dict(self._policies)
@@ -1008,6 +1049,7 @@ def health():
             "service": "hardening-service",
             "posture_score": service.stats.to_dict().get("posture_score", 0),
             "ebpf_enforcing": service.enforcer.is_enforcing(),
+            "ebpf_degraded": service.enforcer.is_degraded(),
         }
     ), 200
 
@@ -1091,13 +1133,21 @@ def rollback():
 @require_auth
 @require_role("admin", "operator")
 def get_enforcement():
-    return jsonify(
-        {
-            "mode": "enforce" if service.enforcer.is_enforcing() else "audit",
-            "policies": service.enforcer.get_policies(),
-            "active_count": service.enforcer.get_active_count(),
-        }
-    ), 200
+    degraded = service.enforcer.is_degraded()
+    body = {
+        "mode": "enforce" if service.enforcer.is_mode_requested() else "audit",
+        "enforced": service.enforcer.is_enforcing(),
+        "degraded": degraded,
+        "dry_run": degraded,
+        "policies": service.enforcer.get_policies(),
+        "active_count": service.enforcer.get_active_count(),
+    }
+    if degraded:
+        body["warning"] = (
+            "eBPF enforcement unavailable on this host; policies are recorded "
+            "but NOT enforced (dry-run)."
+        )
+    return jsonify(body), 200
 
 
 @app.route("/enforce/mode", methods=["POST"])
@@ -1107,7 +1157,19 @@ def set_enforcement_mode():
     data = request.get_json() or {}
     mode = data.get("mode", "audit")
     service.enforcer.set_mode(mode == "enforce")
-    return jsonify({"mode": mode}), 200
+    degraded = service.enforcer.is_degraded()
+    body = {
+        "mode": mode,
+        "enforced": service.enforcer.is_enforcing(),
+        "degraded": degraded,
+        "dry_run": degraded,
+    }
+    if degraded and mode == "enforce":
+        body["warning"] = (
+            "eBPF enforcement unavailable on this host; mode recorded but NOT "
+            "enforced (dry-run)."
+        )
+    return jsonify(body), 200
 
 
 @app.route("/enforce/port", methods=["POST"])
@@ -1117,8 +1179,22 @@ def add_port_enforcement():
     data = request.get_json()
     if not data or "port" not in data or "allowed_comm" not in data:
         return jsonify({"error": "port and allowed_comm required"}), 400
-    service.enforcer.add_port_policy(data["port"], data["allowed_comm"])
-    return jsonify({"status": "ok"}), 200
+    enforced = service.enforcer.add_port_policy(data["port"], data["allowed_comm"])
+    degraded = service.enforcer.is_degraded()
+    body = {
+        "status": "ok" if enforced else "recorded",
+        "enforced": enforced,
+        "degraded": degraded,
+        "dry_run": degraded,
+    }
+    if degraded:
+        body["warning"] = (
+            "eBPF enforcement unavailable on this host; policy recorded but "
+            "NOT enforced (dry-run)."
+        )
+    # 202 Accepted (recorded, not acted on) when enforcement is degraded; the
+    # caller must not interpret this as an active kernel policy.
+    return jsonify(body), (200 if enforced else 202)
 
 
 # ── Startup ───────────────────────────────────────────────────────────

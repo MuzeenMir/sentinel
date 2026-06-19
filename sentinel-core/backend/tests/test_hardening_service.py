@@ -218,3 +218,66 @@ class TestFlaskApp:
         assert resp.status_code == 200
         data = resp.get_json()
         assert "mode" in data
+
+    def test_health_reports_ebpf_degraded(self):
+        # No kernel eBPF / bcc / compiled object in the test env, so the
+        # enforcer must report a degraded (no-op) posture rather than claiming
+        # to enforce (audit SUB-03 / Wave A3).
+        resp = self.client.get("/health")
+        data = resp.get_json()
+        assert data["ebpf_degraded"] is True
+        assert data["ebpf_enforcing"] is False
+
+    def test_enforce_get_surfaces_dry_run(self):
+        resp = self.client.get("/enforce", headers=self._headers())
+        data = resp.get_json()
+        assert data["degraded"] is True
+        assert data["dry_run"] is True
+        assert data["enforced"] is False
+        assert "warning" in data
+
+    def test_enforce_port_returns_202_and_not_ok_when_degraded(self):
+        resp = self.client.post(
+            "/enforce/port",
+            headers=self._headers(),
+            json={"port": 8080, "allowed_comm": "nginx"},
+        )
+        # Must not pretend the no-op policy is live: 202 Accepted, not 200 "ok".
+        assert resp.status_code == 202
+        data = resp.get_json()
+        assert data["status"] == "recorded"
+        assert data["enforced"] is False
+        assert data["dry_run"] is True
+
+    def test_enforce_mode_enforce_flags_degraded(self):
+        resp = self.client.post(
+            "/enforce/mode",
+            headers=self._headers(),
+            json={"mode": "enforce"},
+        )
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["mode"] == "enforce"
+        assert data["enforced"] is False
+        assert data["degraded"] is True
+        assert "warning" in data
+
+
+class TestEBPFEnforcer:
+    def test_degraded_by_default(self):
+        enforcer = hardening_app.EBPFEnforcer()
+        assert enforcer.is_degraded() is True
+        assert enforcer.is_enforcing() is False
+
+    def test_set_mode_does_not_fake_enforcement_when_degraded(self):
+        enforcer = hardening_app.EBPFEnforcer()
+        enforcer.set_mode(True)
+        # Requested posture is enforce, but actual enforcement is still off.
+        assert enforcer.is_mode_requested() is True
+        assert enforcer.is_enforcing() is False
+
+    def test_add_port_policy_returns_false_when_degraded(self):
+        enforcer = hardening_app.EBPFEnforcer()
+        enforced = enforcer.add_port_policy(8080, "nginx")
+        assert enforced is False
+        assert "port:8080" in enforcer.get_policies()
