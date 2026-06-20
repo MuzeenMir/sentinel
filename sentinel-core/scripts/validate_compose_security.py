@@ -10,8 +10,22 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 COMPOSE = ROOT / "docker-compose.yml"
+PROD_COMPOSE = ROOT / "docker-compose.prod.yml"
 INSTALLER = ROOT / "agent" / "install.sh"
 API_GATEWAY_TEST = ROOT / "backend" / "tests" / "test_api_gateway.py"
+
+# Prod-overlay app services that must run hardened (audit SEC-01/07 / Wave C3).
+# Stateful infra images (postgres/redis/elasticsearch) are intentionally excluded.
+PROD_HARDENED_SERVICES = {
+    "auth-service",
+    "api-gateway",
+    "admin-console",
+    "ai-engine",
+    "alert-service",
+    "reverse-proxy",
+}
+# Services that legitimately need a writable rootfs (no read_only assertion).
+PROD_READONLY_EXEMPT = {"ai-engine"}
 
 FORBIDDEN_DEFAULTS = [
     "POSTGRES_PASSWORD:-",
@@ -166,6 +180,50 @@ def check_api_gateway_tests(errors: list[str]) -> None:
         errors.append("api-gateway tests must include viewer forbidden coverage")
 
 
+def check_image_digest_pinning(text: str, errors: list[str]) -> None:
+    """Every pulled image must be digest-pinned (audit SEC-02 / Wave C3).
+
+    Mutable tags (e.g. ``:latest``, ``:7.5.0``) are reproducibility and
+    supply-chain risks. Services built from a local ``build:`` context have no
+    ``image:`` key and are exempt.
+    """
+    for match in re.finditer(r"^\s*image:\s*(?P<ref>\S+)", text, flags=re.MULTILINE):
+        ref = match.group("ref").strip().strip("\"'")
+        if "@sha256:" in ref:
+            continue
+        # Locally-built images use `build:` in real compose and carry no registry
+        # path or tag; only third-party *pulls* (a registry/org path "/" or a
+        # ":tag") must be digest-pinned.
+        if "/" in ref or ":" in ref:
+            errors.append(f"image not digest-pinned: {ref}")
+
+
+def check_prod_hardening(errors: list[str]) -> None:
+    """Prod overlay app services must drop all caps, block privilege escalation,
+    and (unless exempt) run a read-only rootfs (audit SEC-01/07 / Wave C3)."""
+    if not PROD_COMPOSE.is_file():
+        errors.append(f"prod overlay missing: {PROD_COMPOSE.name}")
+        return
+
+    text = PROD_COMPOSE.read_text(encoding="utf-8")
+    blocks = service_blocks(text)
+    cap_drop_all = re.compile(r"cap_drop:\s*\n\s*-\s*ALL", flags=re.MULTILINE)
+
+    for name in sorted(PROD_HARDENED_SERVICES):
+        block = blocks.get(name)
+        if block is None:
+            errors.append(f"prod overlay missing hardened service: {name}")
+            continue
+        if not cap_drop_all.search(block):
+            errors.append(f"{name} (prod) must set cap_drop: [ALL]")
+        if "no-new-privileges:true" not in block:
+            errors.append(f"{name} (prod) must set no-new-privileges:true")
+        if name not in PROD_READONLY_EXEMPT and not re.search(
+            r"^\s*read_only:\s*true\s*$", block, flags=re.MULTILINE
+        ):
+            errors.append(f"{name} (prod) must set read_only: true")
+
+
 def main() -> int:
     text = COMPOSE.read_text(encoding="utf-8")
     errors: list[str] = []
@@ -190,6 +248,8 @@ def main() -> int:
     check_auth_lockout_env(blocks, errors)
     check_installer(errors)
     check_api_gateway_tests(errors)
+    check_image_digest_pinning(text, errors)
+    check_prod_hardening(errors)
 
     for name, block in blocks.items():
         ports = port_entries(block)
