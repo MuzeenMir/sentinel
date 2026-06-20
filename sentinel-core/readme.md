@@ -225,7 +225,12 @@ terraform apply
 - RBAC enforced at the auth service.
 - Audit logging via `backend/audit_logger.py` (v2 moves this into a Postgres-role-enforced append-only table).
 
-**Known gaps** (driving v2): no production-grade multi-tenancy, LLM-assisted triage not shipped, SOC2 not certified, SBOM + image signing not in CI.
+**Shipped since this list was first written** (audit 2026-06-19, DOC-05/ARC-03):
+- Multi-tenant isolation **is** implemented — Postgres Row-Level Security on 13 tables with per-transaction tenant binding that fails closed to zero rows (`backend/migrations/.../enable_rls.py`, `_lib/tenancy.py`).
+- LLM-assisted triage **is** shipped — the `llm-gateway` analyst copilot (advisory/propose-only, grounded with citations).
+- SBOM (CycloneDX) **and** cosign image signing run in CI.
+
+**Remaining gaps** (driving v2): SOC2 not certified; tenant-isolation hardening still maturing (not independently pen-tested); LLM copilot is advisory only (no autonomous enforcement by design).
 
 ## License
 

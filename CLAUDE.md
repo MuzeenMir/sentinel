@@ -19,9 +19,9 @@ Use this file for Claude Code sessions in this repository. Primary application c
 - `controller` ← alert-service + policy-orchestrator (read) + audit
 - `analyzer` ← ai-engine + xai-service + Bytewax stream
 - `collector` ← data-collector + agent-grpc + sensor skeletons (Falco/Suricata/Wazuh/OpenSCAP)
-- `llm-gateway` ← new (Gemma 4, TurboQuant); Phase 1 = shell returning 410
+- `llm-gateway` ← new; Phase 1 = shell returning 410. **Now shipped (Phase 2, as of v1.7.x):** a real grounded, tool-using *analyst copilot* — advisory only (summarize incidents from real backend data, answer with citations, **propose** reversible enforcement that a human confirms via policy-orchestrator). Inference via the Anthropic API, optional (serves `/health` + reports inference disabled when no key). See `sentinel-core/backend/llm-gateway/app.py`. The "410 shell" line above is historical.
 
-**Phase 0 (CLOSED 2026-05-23, EXITED 2026-05-25, baseline plan = `docs/superpowers/plans/2026-05-07-phase-0-security-stabilization.md`):** stabilize. Closure review: `sentinel-core/docs/reviews/phase-0-critical-fixes.md` (Closure Addendum 2026-05-23, T-028 runtime addendum 2026-05-26). All source-spec closure gaps G1–G7 + G9 closed in code on `main`; required CI gates green; the 7-day clock was retired as a redundant buffer once T-029 made `integration-migrations` required and main stayed green through the Phase 0 exit decision. Current release pointer: v1.1.3; v1.2.0 release PR pending. Status:
+**Phase 0 (CLOSED 2026-05-23, EXITED 2026-05-25, baseline plan = `docs/superpowers/plans/2026-05-07-phase-0-security-stabilization.md`):** stabilize. Closure review: `sentinel-core/docs/reviews/phase-0-critical-fixes.md` (Closure Addendum 2026-05-23, T-028 runtime addendum 2026-05-26). All source-spec closure gaps G1–G7 + G9 closed in code on `main`; required CI gates green; the 7-day clock was retired as a redundant buffer once T-029 made `integration-migrations` required and main stayed green through the Phase 0 exit decision. **Current release pointer: v1.7.1** (release-please; was v1.1.3 when this section was first written — the Phase-0 history below is preserved as-is, but `main` has shipped through Phase 2 LLM-copilot work C1–C7). Status:
 - ✅ 9 split CI workflows present (build/e2e-smoke/integration/lint/release-please/sbom/security/typecheck/unit)
 - ✅ CODEOWNERS at repo root
 - ✅ CONTRIBUTING.md
@@ -41,9 +41,9 @@ Use this file for Claude Code sessions in this repository. Primary application c
 - 🟡 OTel pilot landed in `api-gateway` (Phase 0 scope); broad rollout = Phase 1
 - 🟡 honest README, `sentinel-core/`→root flatten — deferred to Phase 1 / not blocking exit
 
-Phase 1 active tickets:
-- T-031 [P1] — audit_log writes from Redis to PostgreSQL; branch `feat/phase-1-audit-log-redis-to-pg`, rebased onto main after T-028 PR #41; audit-schema independent review pending.
-- T-027 [P2] — SSO/SAML secret encryption-at-rest for `saml_configs` and `oidc_configs`.
+Phase 1 tickets (both now CLOSED — were "active" when written):
+- ✅ T-031 [P1] — audit_log writes migrated Redis → PostgreSQL (merged PR #46 `944cd31`).
+- ✅ T-027 [P2] — secret encryption-at-rest: AES-256-GCM envelope primitive + MFA TOTP secrets encrypted (merged PR #51 `2b52275`). Note: per audit SEC-05, the `saml_configs`/`oidc_configs` columns remain plaintext because those tables are currently unused — close the wording gap when DB-backed SSO config actually lands.
 
 Phase 1 parked follow-ups:
 - T-021 (xdp-collector multi-stage Dockerfile)
@@ -51,13 +51,13 @@ Phase 1 parked follow-ups:
 
 Exit gate: Phase 0 exited 2026-05-25. The original 2026-05-23 → 2026-05-30 green-clock buffer is historical only, not an active gate.
 
-**Phase 1 (8 wks, active):** consolidate behind `USE_V2_*` JWT flags — shared `backend/_lib/` (cim, tenancy, otel, audit, llm_client), Helm scaffold, PG16 + pgvector + RLS, Kafka 3 per-tenant topics, Redis 7, Tempo. Exit: `sentinel-internal` canary runs 14 days on v2 with zero P0/P1 regressions.
+**Phase 1 (8 wks, active):** consolidate behind `USE_V2_*` JWT flags — shared `backend/_lib/`, Helm scaffold, PG16 + pgvector + RLS, Kafka 3 per-tenant topics, Redis 7, Tempo. Exit: `sentinel-internal` canary runs 14 days on v2 with zero P0/P1 regressions. **Reality check (audit DOC-03/ARC-02):** `backend/_lib/` currently contains only `net.py` + `tenancy.py` (the planned `cim`/`otel`/`audit`/`llm_client` modules are not yet there); `USE_V2_*` strangler routing is largely vestigial (only one flag is load-bearing in policy-orchestrator). Do not describe these as achieved.
 
 **Hard constraints:**
 - No LLM output reaches enforcement adapters — write actions require human approval.
 - Audit log is append-only at the Postgres role level (not app code).
 - DRL demoted to research; no Kubernetes role permissions.
-- Python 3.12+ backend, FastAPI (Flask sunset by Phase 2); TypeScript 5.x strict, React 18.
+- Python 3.12+ backend, FastAPI (Flask sunsetting; `api-gateway` already ported — see `backend/api-gateway/asgi_app.py` — other services migrate through Phase 2); TypeScript 5.x strict, React 18.
 - Conventional Commits mandatory; squash-merge only; signed commits on `main`.
 - Independent review gate for OPA bundles, model promotions, Helm prod values, RLS policies, and audit schemas: changes here require an independent review by the **Marcus review agent — a DIFFERENT model than the executor** — recorded via an `Audit-Reviewed-by: <bot> (automated)` trailer plus maintainer `Audit-Approved-by: Mir`, enforced by the `audit-schema-guard` check. This is a **mistake-catching quality gate + tamper-evident audit trail, NOT human separation of duties**; with a single-human team it is not a regulatory two-person control and must not be marketed as one. See `.team/agents/marcus-audit-reviewer.md` and ADR-011.
 
