@@ -3,6 +3,13 @@ name: llm-gateway-eval
 # Dedicated, isolated CI for the LLM analyst copilot (Wedge #2).
 # NOTE: this is a NEW workflow file; it intentionally does not modify any
 # existing workflow (Phase-2 independence contract — Claude owns only this file).
+#
+# SCOPE (audit CI-03): the eval step is PLUMBING ONLY. It runs the eval harness
+# against a deterministic reference stub (evals/run.py::_reference_runner) to
+# prove the harness + thresholds wire up — it does NOT exercise a live model and
+# is NOT a quality gate. The real quality eval (live/local provider) is run
+# manually/nightly and its residuals are published in ADR-022. Do not promote
+# this step to a required check as if it measured model quality.
 
 on:
   pull_request:
@@ -35,5 +42,5 @@ jobs:
           ruff format --check .
       - name: Unit + eval-harness tests
         run: python -m pytest tests -q
-      - name: Eval harness smoke run (stub; publishes residual hallucination rate)
+      - name: Eval harness plumbing smoke (stub runner, NOT a model quality gate)
         run: python -m evals.run

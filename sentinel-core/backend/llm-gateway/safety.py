@@ -19,28 +19,43 @@ _EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
 _OPENAI_KEY_RE = re.compile(r"sk-[A-Za-z0-9_\-]{6,}")
 _LONG_TOKEN_RE = re.compile(r"\b[A-Za-z0-9+/_\-]{24,}={0,2}\b")
 
+# Literal fast-path strings. Kept for readability and as a cheap first pass, but
+# they are NOT the detection of record: matching only these would overfit to the
+# exact wording of the red-team corpus (a detector that "tests itself"). The
+# regex layer below is what generalizes to paraphrased / obfuscated attacks, and
+# the held-out red-team corpus (evals/redteam/*_heldout.jsonl) exercises payloads
+# that are intentionally absent from this list.
 _INJECTION_PATTERNS = (
-    "ignore all previous",
-    "ignore previous instructions",
-    "ignore the above",
-    "disregard the system",
-    "disregard previous",
-    "disregard all",
-    "you are now",
-    "act as",
     "developer mode",
-    "new instructions:",
-    "system prompt",
-    "reveal your instructions",
-    "reveal your system",
-    "jailbreak",
     "do anything now",
-    "override your",
-    # data-exfiltration / tool-output instruction injection
-    "exfiltrate",
-    "send all",
-    "send the following",
+    "jailbreak",
     "base64",
+)
+
+# Intent-structured patterns: match the *shape* of an injection (verb + target),
+# not a fixed phrase, so paraphrases are caught without enumerating every wording.
+_OVERRIDE_VERB = (
+    r"(?:ignore|disregard|forget|overlook|bypass|override|drop|discard|skip)"
+)
+_PRIOR = r"(?:previous|prior|earlier|above|preceding|all|any|the\s+system|your)"
+_DIRECTIVE = r"(?:instruction|rule|directive|direction|guideline|guard\s*rail|policy|polic(?:y|ies)|restriction|constraint|safety|prompt)"
+_REVEAL_VERB = r"(?:reveal|show|print|expose|leak|disclose|repeat|output|dump)"
+_SYSTEM_TARGET = r"(?:system|initial|hidden|original|developer)\s+(?:prompt|instruction|message|directive)"
+_PERSONA = r"(?:act|behave|respond|roleplay|role-?play)\s+as|pretend(?:\s+to\s+be|\s+you\s+are)|you\s+are\s+now|from\s+now\s+on\s+you|henceforth\s+you"
+_UNRESTRICTED = r"(?:no|without|zero|bypass(?:ing)?|disable[ds]?|disabling)\s+(?:guard\s*rails?|restrictions?|safety|filters?|limits?|policy|policies|rules?)"
+_EXFIL = r"(?:exfiltrate|exfil)\b|(?:send|transmit|forward|leak|upload|post|deliver)\s+(?:all|the|every|each|your)?\s*(?:session\s+)?(?:token|secret|credential|audit\s+log|password|api\s+key)"
+
+_INJECTION_REGEXES = tuple(
+    re.compile(pattern, re.IGNORECASE)
+    for pattern in (
+        rf"{_OVERRIDE_VERB}\s+(?:\w+\s+){{0,4}}?{_PRIOR}?\s*(?:\w+\s+){{0,3}}?{_DIRECTIVE}",
+        rf"{_REVEAL_VERB}\s+(?:\w+\s+){{0,4}}?{_SYSTEM_TARGET}",
+        _PERSONA,
+        _UNRESTRICTED,
+        _EXFIL,
+        r"new\s+instructions?\s*:",
+        r"\bunrestricted\b.*\b(?:assistant|model|mode|ai)\b",
+    )
 )
 
 
@@ -53,7 +68,9 @@ def redact_pii(text: str) -> str:
 
 def detect_injection(text: str) -> bool:
     lowered = text.lower()
-    return any(p in lowered for p in _INJECTION_PATTERNS)
+    if any(p in lowered for p in _INJECTION_PATTERNS):
+        return True
+    return any(rx.search(text) for rx in _INJECTION_REGEXES)
 
 
 def wrap_untrusted(content: str) -> str:

@@ -11,6 +11,15 @@ defense that must neutralize it, and we assert the attack does not succeed:
 `run_redteam()` returns a report with a **residual** = attacks that slipped
 through / total. The CI gate (`tests/test_redteam.py` + `llm-gateway-redteam.yml`)
 fails if residual > 0. The number is published, not hidden.
+
+Scope / honest limits: this is a **defensive-coverage gate for the pattern
+detectors**, NOT a live-model adversarial evaluation. To guard against the
+detector merely "testing itself" (every corpus phrase also being a literal
+match string), the corpus includes a **held-out** set
+(`injection_heldout.jsonl`) of paraphrased / obfuscated payloads that are
+intentionally absent from `safety._INJECTION_PATTERNS`; they are only caught by
+the generalizing regex layer. Real adversarial robustness against a live model
+is a separate, ungated nightly/manual exercise.
 """
 
 from __future__ import annotations
@@ -73,6 +82,10 @@ _CHECKS = (
     # tool output); the same detector must neutralize both.
     ("jailbreak.jsonl", _injection_caught),
     ("tool_output_poisoning.jsonl", _injection_caught),
+    # Held-out paraphrases absent from safety._INJECTION_PATTERNS: these only
+    # pass because the regex layer generalizes, not because the corpus matches
+    # itself (audit CI-02 / Wave A5).
+    ("injection_heldout.jsonl", _injection_caught),
     ("citation_forgery.jsonl", _forgery_caught),
     ("ssrf_args.jsonl", _ssrf_caught),
 )
