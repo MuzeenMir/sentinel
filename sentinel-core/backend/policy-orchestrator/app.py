@@ -10,7 +10,7 @@ import os
 import sys
 import logging
 from datetime import datetime, timedelta, timezone
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, g
 from flask_cors import CORS
 import redis
 
@@ -630,14 +630,21 @@ def get_statistics():
 
 @app.route("/api/v1/policies/auto-apply", methods=["POST"])
 @require_auth
+@require_role("admin")
 @require_tenant
 def auto_apply_policy():
     """
     Apply a policy decision emitted by the DRL engine / Flink feed job.
 
-    This endpoint is called by internal services (drl_feed_job) only.
-    It creates a time-limited firewall rule without requiring admin RBAC so
-    that automated pipeline decisions reach the firewall in real-time.
+    SECURITY (audit SEC-04 / Wave B3): this endpoint writes firewall rules, so
+    it is admin-gated like every other mutating policy route — it previously
+    required only authentication, letting any authenticated principal (e.g. a
+    viewer or analyst) write enforcement rules, which weakened the
+    "write actions require human approval" invariant. DRL is demoted/de-wired,
+    so there is no live automated caller today. If the drl_feed_job is ever
+    re-wired, its service identity must present an admin role OR be re-routed
+    through the human-confirmed propose→approve→enforce path (see the
+    enforcement-actions confirm flow), not bypass RBAC here.
 
     Request body:
     {
@@ -682,6 +689,18 @@ def auto_apply_policy():
             policy_id,
             data.get("action"),
             data.get("source", {}).get("ip", "n/a"),
+        )
+
+        audit_log(
+            AuditCategory.POLICY,
+            "policy_auto_applied",
+            tenant_id=get_tenant_id(),
+            detail={
+                "policy_id": policy_id,
+                "action": data.get("action"),
+                "source_ip": data.get("source", {}).get("ip", "n/a"),
+                "actor": getattr(g, "current_user", {}).get("username"),
+            },
         )
 
         return jsonify(
