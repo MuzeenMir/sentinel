@@ -29,7 +29,7 @@ def valid_compose_text() -> str:
     return """
 services:
   postgres:
-    image: postgres:13
+    image: postgres:13@sha256:1111111111111111111111111111111111111111111111111111111111111111
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
   db-migrate:
@@ -43,7 +43,7 @@ services:
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:?set ADMIN_PASSWORD}
       - LOCKOUT_THRESHOLD=5
   grafana:
-    image: grafana/grafana:10.4.0
+    image: grafana/grafana:10.4.0@sha256:2222222222222222222222222222222222222222222222222222222222222222
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:?set GRAFANA_PASSWORD}
   flink-drl-feed:
@@ -172,6 +172,89 @@ def test_validator_rejects_host_network_even_when_profiled(
     assert validator.main() == 1
     captured = capsys.readouterr()
     assert "host network mode is forbidden: xdp-collector" in captured.err
+
+
+# Audit SEC-07 / Wave C3: the validator must assert the actual container-hardening
+# posture (digest pinning + prod cap_drop/no-new-privileges/read_only), not just
+# its own internal logic.
+
+
+def test_valid_fixture_passes_all_invariants(tmp_path, monkeypatch):
+    repo_core = Path(__file__).resolve().parents[2]
+    validator = load_validator(repo_core)
+    compose = tmp_path / "compose.yml"
+    compose.write_text(valid_compose_text(), encoding="utf-8")
+    monkeypatch.setattr(validator, "COMPOSE", compose)
+    # The fixture is digest-pinned + classified, and the real prod overlay is
+    # hardened, so every invariant (incl. the new C3 checks) holds.
+    assert validator.main() == 0
+
+
+def test_digest_pinning_flags_unpinned_pull():
+    repo_core = Path(__file__).resolve().parents[2]
+    validator = load_validator(repo_core)
+    errors: list[str] = []
+    validator.check_image_digest_pinning("    image: redis:7-alpine\n", errors)
+    assert any("not digest-pinned: redis:7-alpine" in e for e in errors)
+
+
+def test_digest_pinning_exempts_local_builds_and_accepts_pinned():
+    repo_core = Path(__file__).resolve().parents[2]
+    validator = load_validator(repo_core)
+    errors: list[str] = []
+    validator.check_image_digest_pinning(
+        "    image: sentinel-auth-service\n" "    image: postgres:13@sha256:abcdef\n",
+        errors,
+    )
+    assert errors == []
+
+
+def test_prod_hardening_flags_missing_cap_drop(tmp_path, monkeypatch):
+    repo_core = Path(__file__).resolve().parents[2]
+    validator = load_validator(repo_core)
+    prod = tmp_path / "prod.yml"
+    prod.write_text(
+        """services:
+  auth-service:
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(validator, "PROD_COMPOSE", prod)
+    errors: list[str] = []
+    validator.check_prod_hardening(errors)
+    assert any("auth-service (prod) must set cap_drop: [ALL]" in e for e in errors)
+
+
+def test_prod_hardening_flags_missing_read_only(tmp_path, monkeypatch):
+    repo_core = Path(__file__).resolve().parents[2]
+    validator = load_validator(repo_core)
+    prod = tmp_path / "prod.yml"
+    prod.write_text(
+        """services:
+  auth-service:
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(validator, "PROD_COMPOSE", prod)
+    errors: list[str] = []
+    validator.check_prod_hardening(errors)
+    assert any("auth-service (prod) must set read_only: true" in e for e in errors)
+
+
+def test_prod_hardening_accepts_real_overlay():
+    repo_core = Path(__file__).resolve().parents[2]
+    validator = load_validator(repo_core)
+    errors: list[str] = []
+    validator.check_prod_hardening(errors)
+    # The committed docker-compose.prod.yml is hardened (A4) — no findings.
+    assert errors == []
 
 
 def test_validator_rejects_host_network_localhost_kafka_dependency(
