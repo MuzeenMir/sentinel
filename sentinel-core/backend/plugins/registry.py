@@ -1,5 +1,12 @@
 """Plugin registry for the SENTINEL backend.
 
+STATUS: EXPERIMENTAL / NOT WIRED (audit SUB-02, 2026-06-19). This registry and
+loader are functional but no runtime service discovers or starts plugins yet —
+there are zero non-test importers. It ships as an extension SDK + reference
+example (plugins/examples/), covered by a smoke test (tests/test_plugins.py),
+not as an active runtime subsystem. Do not advertise runtime plugin support
+until a service calls discover_plugins()/start_all() in production.
+
 Plugins extend SENTINEL at runtime — custom detectors, new compliance
 frameworks, additional hardening checks, etc.  The registry manages
 discovery, lifecycle, and health for every loaded plugin.

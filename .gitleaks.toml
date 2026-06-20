@@ -7,13 +7,18 @@ useDefault = true
 # Global allowlist: example values inside documentation should not trigger the scanner.
 # Real secrets must never land in these paths either, but placeholder JWT/example tokens
 # are common in API docs and examples, and their entropy can trip generic-api-key.
+#
+# A2 (CI-04, audit 2026-06-19): the previous blanket `.*/tests?/.*` and `.*/fixtures/.*`
+# path allowlists made any real credential committed under ANY test/fixture path invisible.
+# Removed. Placeholder-shaped tokens in tests are still suppressed by the `regexes` block
+# below (which applies on every path), so we keep that protection without the blanket bypass.
+# To allow a specific non-secret high-entropy fixture, add a narrowly-scoped entry
+# (exact file path or value-regex) — never a directory-wide bypass.
 [allowlist]
 description = "Allowlist documentation / example placeholders + vendored / virtualenv trees"
 paths = [
   '''sentinel-core/docs/.*\.md''',
   '''.*\.example($|\.)''',
-  '''.*/fixtures/.*''',
-  '''.*/tests?/.*''',
   # Accidentally-committed Python virtualenvs (gitignored post-cleanup, but
   # history scans still see library internals — Pillow, ONNX, etc. — whose
   # source code trips generic-api-key / aws-access-token false positives).
@@ -25,7 +30,7 @@ paths = [
   '''(^|/)node_modules/.*''',
 ]
 regexes = [
-  # Common placeholder sentinels
+  # Common placeholder sentinels (apply on every path, incl. tests/fixtures)
   '''<[A-Z_]+>''',
   '''YOUR_[A-Z_]+''',
   '''\beyJ\.{3}''',   # truncated JWT-style placeholders like "eyJ..."

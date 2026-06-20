@@ -1,9 +1,14 @@
 name: llm-gateway-redteam
 
-# Adversarial red-team gate for the LLM analyst copilot (Wedge #2, Plan CLAUDE C1).
-# NEW workflow file; it does not modify any existing workflow (independence
-# contract — Claude owns only the llm-gateway-*.yml files). The gate fails closed
-# if ANY attack in the corpus slips through, and publishes the residual.
+# Defensive-coverage gate for the LLM analyst copilot pattern detectors
+# (Wedge #2, Plan CLAUDE C1). Scope: asserts the safety/grounding/tool-arg
+# detectors neutralize a fixed adversarial corpus — including a HELD-OUT set of
+# paraphrases not present in safety._INJECTION_PATTERNS, so the gate cannot pass
+# by the corpus matching itself (audit CI-02). This is NOT a live-model
+# adversarial evaluation; real model robustness is an ungated nightly/manual
+# exercise. The gate fails closed if any corpus attack slips through, and
+# publishes the residual. NEW workflow file; it does not modify any existing
+# workflow (independence contract — Claude owns only the llm-gateway-*.yml files).
 
 on:
   pull_request:

@@ -1,7 +1,7 @@
 services:
   # PostgreSQL database with health check
   postgres:
-    image: postgres:13
+    image: postgres:13@sha256:1094e2cdc5605e5c7914633bcd93758a9c52ae8c8b2855ddd1c3a8afbe4795d5
     container_name: sentinel-postgres
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-sentinel}
@@ -20,7 +20,7 @@ services:
 
   # Redis for caching and session management
   redis:
-    image: redis:7-alpine
+    image: redis:7-alpine@sha256:b1addbe72465a718643cff9e60a58e6df1841e29d6d7d60c9a85d8d72f08d1a7
     container_name: sentinel-redis
     volumes:
       - redis_data:/data
@@ -94,7 +94,7 @@ services:
 
   # Kafka for message queuing
   zookeeper:
-    image: confluentinc/cp-zookeeper:latest
+    image: confluentinc/cp-zookeeper:7.5.0@sha256:d18e7b3a81326dd278a5f2121b29a7f009582e0b0f5552165eb5efc83533a52b
     container_name: sentinel-zookeeper
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
@@ -103,7 +103,7 @@ services:
       - sentinel-network
 
   kafka:
-    image: confluentinc/cp-kafka:7.5.0
+    image: confluentinc/cp-kafka:7.5.0@sha256:69022c46b7f4166ecf21689ab4c20d030b0a62f2d744c20633abfc7c0040fa80
     container_name: sentinel-kafka
     depends_on:
       - zookeeper
@@ -286,7 +286,7 @@ services:
 
   # Elasticsearch for logging (optional)
   elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.0
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.0@sha256:4f588d1001c207d6217e61747df8752c5d2a04c41e3a235c621bfa3a57e352f5
     container_name: sentinel-elasticsearch
     environment:
       - discovery.type=single-node
@@ -299,7 +299,7 @@ services:
 
   # Kibana for log visualization (optional)
   kibana:
-    image: docker.elastic.co/kibana/kibana:7.17.0
+    image: docker.elastic.co/kibana/kibana:7.17.0@sha256:7963042ab4dfe95a5577c6c1bcb871a1c63cb1e92f61403945f298ba0a7dcbfe
     container_name: sentinel-kibana
     environment:
       ELASTICSEARCH_HOSTS: http://elasticsearch:9200
@@ -471,7 +471,10 @@ services:
       # Compose bridge peers need the HTTP listener on the container interface.
       - SENTINEL_BIND_HOST=0.0.0.0
     volumes:
-      - /etc:/host/etc:rw
+      # Read-only host config: posture assessment + FIM only. Active CIS
+      # remediation that writes host /etc requires an explicit operator
+      # override (mount :rw) and is intentionally not the default (audit SEC-03).
+      - /etc:/host/etc:ro
       - /proc:/host/proc:ro
       - hardening_backups:/var/lib/sentinel/backups
     depends_on:
@@ -483,7 +486,18 @@ services:
         condition: service_started
     networks:
       - sentinel-network
-    privileged: true
+    # Least privilege instead of always-on privileged:true (audit SEC-03).
+    # eBPF LSM attach needs these caps; if the kernel still refuses, the
+    # service reports degraded mode rather than silently no-op'ing (SUB-03).
+    cap_drop:
+      - ALL
+    cap_add:
+      - BPF
+      - PERFMON
+      - SYS_ADMIN
+      - SYS_RESOURCE
+    security_opt:
+      - no-new-privileges:true
     restart: unless-stopped
 
   # Admin Console (production-ready build)
@@ -505,7 +519,7 @@ services:
 
   # Prometheus metrics collection
   prometheus:
-    image: prom/prometheus:v2.51.0
+    image: prom/prometheus:v2.51.0@sha256:3305cd2e483c13364c94ae4905368eb425c9fa804f8e523ee47d8bf4de9d87a2
     container_name: sentinel-prometheus
     volumes:
       - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
@@ -519,7 +533,7 @@ services:
 
   # Grafana dashboards
   grafana:
-    image: grafana/grafana:10.4.0
+    image: grafana/grafana:10.4.0@sha256:c7ae30e06ee76656f4faf37df1f0d0dfb6941a706b66800a7b289a304d31d771
     container_name: sentinel-grafana
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:?set GRAFANA_PASSWORD}
@@ -540,7 +554,7 @@ services:
   # then export OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4317 before restarting
   # the api-gateway container.
   tempo:
-    image: grafana/tempo:2.5.0
+    image: grafana/tempo:2.5.0@sha256:be9fb28c0479e90e1e3d65bf94578e312c55d708250b2f018c1f6bb4c1e56788
     container_name: sentinel-tempo
     profiles: ["observability"]
     command: ["-config.file=/etc/tempo/tempo.yaml"]
