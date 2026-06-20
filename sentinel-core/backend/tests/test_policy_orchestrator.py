@@ -192,8 +192,8 @@ RealPolicyEngine = _pe_mod.PolicyEngine
 sys.modules["policies.policy_engine"].PolicyEngine = RealPolicyEngine
 sys.modules["policies.rule_generator"].RuleGenerator = lambda: _mock_rule_generator
 sys.modules["vendors.vendor_factory"].VendorFactory = lambda: _mock_vendor_factory
-sys.modules["validation.policy_validator"].PolicyValidator = (
-    lambda: _mock_policy_validator
+sys.modules["validation.policy_validator"].PolicyValidator = lambda: (
+    _mock_policy_validator
 )
 
 # Drop cached app module so our patches take effect.
@@ -745,6 +745,21 @@ class TestAutoApplyPolicy:
         )
         assert resp.status_code == 201
         assert resp.get_json()["action"] == "MONITOR"
+
+    def test_auto_apply_is_admin_gated_in_source(self):
+        """Audit SEC-04 / Wave B3: auto-apply writes firewall rules and must be
+        admin-gated. Runtime RBAC is stubbed out in this suite (passthrough
+        require_role), so assert the decorator at the source level — the same
+        approach used for the enforcement-actions confirm route.
+        """
+        with open(os.path.join(_orch_dir, "app.py"), encoding="utf-8") as fh:
+            src = fh.read()
+        route_idx = src.index('@app.route("/api/v1/policies/auto-apply"')
+        # The decorator stack immediately above the function must include the
+        # admin role gate.
+        func_idx = src.index("def auto_apply_policy", route_idx)
+        decorators = src[route_idx:func_idx]
+        assert '@require_role("admin")' in decorators
 
 
 # -------------------------------------------------------------------
