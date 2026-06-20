@@ -6,6 +6,11 @@
     "security",
     "build",
     "integration-migrations",
+    "integration-compose",
+    "e2e-smoke-api",
+    "e2e-smoke-ui",
+    "sbom",
+    "detections-validate",
     "audit-schema-guard"
   ]
 }

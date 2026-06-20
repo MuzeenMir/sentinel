@@ -1,30 +1,15 @@
 name: detections-validate
 
 on:
+  # No path filter (audit CI-08 / Wave B1): this is now a REQUIRED check, so it
+  # must report a status on EVERY PR. A path-filtered required check never
+  # reports on PRs that don't touch the filtered paths and would block them
+  # forever. The job is lightweight — it validates the committed detection
+  # content and runs the detection unit tests regardless of what changed.
   pull_request:
     branches: [main, develop]
-    paths:
-      - 'sentinel-core/detections/**'
-      - 'sentinel-core/backend/detection_engine/**'
-      - 'sentinel-core/backend/policy-orchestrator/detection_rules.py'
-      - 'sentinel-core/backend/policy-orchestrator/rego/**'
-      - 'sentinel-core/backend/tests/test_detection_rules.py'
-      - 'sentinel-core/backend/tests/test_detection_engine.py'
-      - 'sentinel-core/backend/tests/test_validate_detections.py'
-      - 'sentinel-core/scripts/validate_detections.py'
-      - '.github/workflows/detections-validate.yml'
   push:
     branches: [main, develop]
-    paths:
-      - 'sentinel-core/detections/**'
-      - 'sentinel-core/backend/detection_engine/**'
-      - 'sentinel-core/backend/policy-orchestrator/detection_rules.py'
-      - 'sentinel-core/backend/policy-orchestrator/rego/**'
-      - 'sentinel-core/backend/tests/test_detection_rules.py'
-      - 'sentinel-core/backend/tests/test_detection_engine.py'
-      - 'sentinel-core/backend/tests/test_validate_detections.py'
-      - 'sentinel-core/scripts/validate_detections.py'
-      - '.github/workflows/detections-validate.yml'
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
