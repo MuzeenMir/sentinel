@@ -18,3 +18,4 @@ prometheus-client>=0.17.1
 alembic>=1.13.0
 SQLAlchemy>=2.0.0
 cryptography>=42.0.0  # AES-256-GCM secret envelope (T-027)
+pydantic>=2.4,<3  # request-body validation schemas (SEC-06)

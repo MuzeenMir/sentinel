@@ -23,7 +23,10 @@ import bcrypt
 import pyotp
 from flask import Blueprint, jsonify, redirect, request
 
+from pydantic import ValidationError
+
 from secret_crypto import decrypt, encrypt
+from schemas import ScimUserCreateSchema, ScimUserReplaceSchema
 from flask_jwt_extended import (
     create_access_token,
     create_refresh_token,
@@ -608,36 +611,37 @@ def scim_list_users():
     ), 200
 
 
+def _scim_error(detail: str, status: int):
+    """Return a SCIM 2.0 Error response with the given detail/status."""
+    return jsonify(
+        {
+            "schemas": ["urn:ietf:params:scim:api:messages:2.0:Error"],
+            "detail": detail,
+            "status": str(status),
+        }
+    ), status
+
+
+def _first_error(exc: ValidationError) -> str:
+    """Render the first pydantic validation error as a SCIM detail string."""
+    err = exc.errors()[0]
+    field = ".".join(str(p) for p in err["loc"])
+    return f"{field}: {err['msg']}" if field else err["msg"]
+
+
 @scim_bp.route("/Users", methods=["POST"])
 @_scim_auth_required
 def scim_create_user():
     """SCIM 2.0 CreateUser endpoint — provisions user in Sentinel DB."""
-    data = request.get_json() or {}
-    schemas = data.get("schemas", [])
+    try:
+        payload = ScimUserCreateSchema.model_validate(
+            request.get_json(silent=True) or {}
+        )
+    except ValidationError as exc:
+        return _scim_error(_first_error(exc), 400)
 
-    if "urn:ietf:params:scim:schemas:core:2.0:User" not in schemas:
-        return jsonify(
-            {
-                "schemas": ["urn:ietf:params:scim:api:messages:2.0:Error"],
-                "detail": "Invalid schema",
-                "status": "400",
-            }
-        ), 400
-
-    username = data.get("userName")
-    if not username:
-        return jsonify(
-            {
-                "schemas": ["urn:ietf:params:scim:api:messages:2.0:Error"],
-                "detail": "userName required",
-                "status": "400",
-            }
-        ), 400
-
-    email = None
-    emails = data.get("emails", [])
-    if emails:
-        email = emails[0].get("value")
+    username = payload.userName
+    email = payload.primary_email()
 
     # Check for existing user
     existing = _User.query.filter(
@@ -707,15 +711,20 @@ def scim_update_user(user_id: str):
             }
         ), 404
 
-    data = request.get_json() or {}
+    try:
+        payload = ScimUserReplaceSchema.model_validate(
+            request.get_json(silent=True) or {}
+        )
+    except ValidationError as exc:
+        return _scim_error(_first_error(exc), 400)
 
-    if "userName" in data:
-        user.username = data["userName"]
-    emails = data.get("emails", [])
-    if emails:
-        user.email = emails[0].get("value", user.email)
-    if "active" in data:
-        user.status = _UserStatus.ACTIVE if data["active"] else _UserStatus.INACTIVE
+    if payload.userName is not None:
+        user.username = payload.userName
+    primary = payload.primary_email()
+    if primary is not None:
+        user.email = primary
+    if payload.active is not None:
+        user.status = _UserStatus.ACTIVE if payload.active else _UserStatus.INACTIVE
 
     _db.session.commit()
     return jsonify(_user_to_scim(user)), 200
