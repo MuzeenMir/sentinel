@@ -124,7 +124,7 @@ PR #32 was closed without merging — a documented decision pattern: when a clos
 
 ### Carry-over tickets filed during T-014 / T-030 (Phase 1 scope)
 
-- **T-027** — encryption-at-rest for SSO/SAML secrets in `saml_configs.sp_private_key` and `oidc_configs.client_secret` (Phase 0 accepted plaintext; promote to pgcrypto / KMS in Phase 1).
+- **T-027** — encryption-at-rest for SSO/SAML secrets in `saml_configs.sp_private_key` and `oidc_configs.client_secret` (Phase 0 accepted plaintext; promote to pgcrypto / KMS in Phase 1). **Post-exit update (2026-06-21):** T-027 shipped (PR #51) covering **`users.mfa_secret` only**; the two SSO config columns above remain **plaintext and unused** — the SAML/OIDC code is env-backed (`SAML_SP_KEY`/`OIDC_CLIENT_SECRET`), so nothing reads those columns. Encrypting them is deferred until DB-backed SSO config lands (audit **SEC-05**). Do not read "T-027 done" as "SSO secrets encrypted".
 - **T-031** — audit_log writes from Redis to PostgreSQL (filed as the T-028 Scope A boundary; closes the actual audit pipeline against the PG role-level append-only surface).
 
 Closed after this addendum:
@@ -138,7 +138,7 @@ Phase 0 is **exited** as of 2026-05-25. All source-spec closure gaps (G1–G7, G
 The original **7-day green clock** started 2026-05-23 with the T-030 merge (`6085027`) and was retired on 2026-05-25 as a redundant buffer after required-check coverage was expanded and main stayed green. release-please cut **v1.1.0** (`b652bd4`) alongside the T-030 merge; later release PRs advanced the v1.1.x line.
 
 Outstanding caveats (do not reset the clock; tracked in Phase 1):
-- T-027 secret encryption-at-rest remains open for Phase 1.
+- T-027 secret encryption-at-rest: shipped for `users.mfa_secret` (PR #51); SSO/SAML config-column encryption (`saml_configs.sp_private_key`, `oidc_configs.client_secret`) remains deferred — columns are plaintext **and unused** (env-backed code), see audit SEC-05.
 - T-031 Redis→PG audit_log migration remains open for Phase 1 audit-surface consolidation.
 - G6 runtime cap behavior on Docker host with working apt mirror is still unverified.
 - Standing carry-over: `6a3eae2 (#24)` non-conventional commit will be missed by release-please auto-changelog at the next release cut.

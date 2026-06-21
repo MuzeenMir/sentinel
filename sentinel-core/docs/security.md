@@ -337,9 +337,14 @@ envelope** (`secret_crypto.py`), independent of disk/volume encryption:
 - Requires the `20260530_002_mfa_secret_text` migration (widens the column to TEXT).
 
 **Honest claim boundary**: this is a **single application-layer KEK**. KMS-backed
-keys and per-tenant DEKs are a documented follow-up — do not claim them. The
-env-backed SAML/OIDC secrets are not yet DB-persisted, so they are out of scope
-for this pass.
+keys and per-tenant DEKs are a documented follow-up — do not claim them. T-027
+covers `users.mfa_secret` **only**. The SSO config columns
+`saml_configs.sp_private_key` and `oidc_configs.client_secret` are **plaintext**,
+but those tables are currently **unused**: the SAML/OIDC code paths read keys and
+secrets from environment variables (`SAML_SP_KEY`, `OIDC_CLIENT_SECRET`), not the
+database. Those columns are encrypted at rest only when DB-backed SSO config
+actually lands — tracked as audit finding **SEC-05**. Do not claim SSO/SAML
+secret encryption-at-rest before then.
 
 ### In Transit
 
