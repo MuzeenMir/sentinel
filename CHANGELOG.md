@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.7.2](https://github.com/MuzeenMir/sentinel/compare/v1.7.1...v1.7.2) (2026-06-21)
+
+
+### Bug Fixes
+
+* audit Wave A remediation — make advertised controls actually enforce ([#77](https://github.com/MuzeenMir/sentinel/issues/77)) ([4d90ce0](https://github.com/MuzeenMir/sentinel/commit/4d90ce0ddef91a2b785d900cb7b477d5d0b9149e))
+* **frontend:** npm audit fix — clear high/moderate advisories (security gate) ([#81](https://github.com/MuzeenMir/sentinel/issues/81)) ([40fe1ec](https://github.com/MuzeenMir/sentinel/commit/40fe1eced3d4021ad838b21f30c2c40972500cd0))
+* **policy-orchestrator:** admin-gate /policies/auto-apply (SEC-04) ([#79](https://github.com/MuzeenMir/sentinel/issues/79)) ([51373eb](https://github.com/MuzeenMir/sentinel/commit/51373eb896d2242482fb3616f52db20ecac090f4))
+
+
+### Documentation
+
+* add 2026-06-19 read-only code audit of main @ v1.7.1 ([#76](https://github.com/MuzeenMir/sentinel/issues/76)) ([fa78148](https://github.com/MuzeenMir/sentinel/commit/fa78148c9b4508bf14f4dfdf1b600f9cc20f339d))
+* sync CLAUDE.md + readme to shipped reality at v1.7.1 (DOC-01..06, ARC-02/03) ([#78](https://github.com/MuzeenMir/sentinel/issues/78)) ([1d46085](https://github.com/MuzeenMir/sentinel/commit/1d4608590ab4d9ea8d1d9a25780f5180576e0e9f))
+
 ## [1.7.1](https://github.com/MuzeenMir/sentinel/compare/v1.7.0...v1.7.1) (2026-06-12)
 
 
