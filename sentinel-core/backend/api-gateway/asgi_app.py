@@ -81,13 +81,22 @@ async def not_found(request: Request, _exc: object) -> JSONResponse:
     )
 
 
-def require_current_user(request: Request) -> dict[str, object] | JSONResponse:
-    """Resolve the authenticated user using gateway token semantics."""
+def require_current_user(
+    request: Request, *, allow_query_token: bool = False
+) -> dict[str, object] | JSONResponse:
+    """Resolve the authenticated user using gateway token semantics.
+
+    SEC-09: a JWT in ``?token=`` leaks via access logs, the Referer header, and
+    proxy caches, so query-param tokens are honored only when
+    ``allow_query_token`` is set. That opt-in is used solely by the SSE stream
+    routes, where the browser ``EventSource`` API cannot send an Authorization
+    header.
+    """
     auth_header = request.headers.get("authorization")
     token = None
     if auth_header and auth_header.startswith("Bearer "):
         token = auth_header.split(" ", 1)[1]
-    elif request.query_params.get("token"):
+    elif allow_query_token and request.query_params.get("token"):
         token = request.query_params.get("token")
     if not token:
         return JSONResponse({"error": "Authorization token required"}, status_code=401)
@@ -531,7 +540,8 @@ def get_statistics(request: Request) -> JSONResponse:
 @asgi.get("/api/v1/stream/threats", response_model=None)
 def stream_threats(request: Request) -> JSONResponse | StreamingResponse:
     """Stream real-time threat events via Redis pub/sub."""
-    current_user = require_current_user(request)
+    # EventSource cannot set headers, so SSE accepts ?token= (see SEC-09 note).
+    current_user = require_current_user(request, allow_query_token=True)
     if isinstance(current_user, JSONResponse):
         return current_user
     return StreamingResponse(
@@ -544,7 +554,8 @@ def stream_threats(request: Request) -> JSONResponse | StreamingResponse:
 @asgi.get("/api/v1/stream/alerts", response_model=None)
 def stream_alerts(request: Request) -> JSONResponse | StreamingResponse:
     """Stream real-time alert events via Redis pub/sub."""
-    current_user = require_current_user(request)
+    # EventSource cannot set headers, so SSE accepts ?token= (see SEC-09 note).
+    current_user = require_current_user(request, allow_query_token=True)
     if isinstance(current_user, JSONResponse):
         return current_user
     return StreamingResponse(

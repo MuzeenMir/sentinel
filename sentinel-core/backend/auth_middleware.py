@@ -63,11 +63,16 @@ def _verify_token(token: str) -> Optional[dict]:
 
 
 def _extract_token() -> Optional[str]:
-    """Extract Bearer token from the Authorization header or query param."""
+    """Extract the Bearer token from the Authorization header.
+
+    SEC-09: a JWT supplied via ``?token=`` leaks through access logs, the
+    Referer header, and proxy caches, so the Authorization header is the only
+    accepted source.
+    """
     auth_header = request.headers.get("Authorization", "")
     if auth_header.startswith("Bearer "):
         return auth_header[7:]
-    return request.args.get("token")
+    return None
 
 
 def require_auth(f):

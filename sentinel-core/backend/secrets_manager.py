@@ -52,11 +52,20 @@ class SecretsManager:
         vault_token: Optional[str] = None,
         vault_mount: str = "secret",
         aws_region: Optional[str] = None,
+        strict: Optional[bool] = None,
     ):
         if getattr(self, "_initialized", False):
             return
 
         self._backend = (backend or os.environ.get("SECRETS_BACKEND", "env")).lower()
+        # SEC-10: in strict mode an external-backend failure fails closed
+        # (raises) instead of silently degrading to environment variables.
+        self._strict = (
+            strict
+            if strict is not None
+            else os.environ.get("SECRETS_STRICT", "").strip().lower()
+            in ("1", "true", "yes", "on")
+        )
         self._cache_ttl = cache_ttl
         self._cache: dict[str, _CacheEntry] = {}
         self._lock = threading.Lock()
@@ -73,9 +82,10 @@ class SecretsManager:
 
         self._initialized = True
         logger.info(
-            "SecretsManager initialized: backend=%s cache_ttl=%ds",
+            "SecretsManager initialized: backend=%s cache_ttl=%ds strict=%s",
             self._backend,
             cache_ttl,
+            self._strict,
         )
 
     def get_secret(self, name: str) -> str:
@@ -104,7 +114,13 @@ class SecretsManager:
         if self._backend == "aws":
             try:
                 return self._fetch_aws(name)
-            except Exception:
+            except Exception as exc:
+                if self._strict:
+                    raise RuntimeError(
+                        f"AWS Secrets Manager unavailable for '{name}'; "
+                        "SECRETS_STRICT set, refusing env fallback for "
+                        "backend 'aws'"
+                    ) from exc
                 logger.warning(
                     "AWS Secrets Manager unavailable for '%s'; falling back to env",
                     name,
@@ -115,7 +131,12 @@ class SecretsManager:
         if self._backend == "vault":
             try:
                 return self._fetch_vault(name)
-            except Exception:
+            except Exception as exc:
+                if self._strict:
+                    raise RuntimeError(
+                        f"Vault unavailable for '{name}'; SECRETS_STRICT set, "
+                        "refusing env fallback for backend 'vault'"
+                    ) from exc
                 logger.warning(
                     "Vault unavailable for '%s'; falling back to env",
                     name,
