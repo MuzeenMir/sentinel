@@ -134,13 +134,26 @@ def test_auth_dependency_returns_503_when_auth_service_unavailable(_post):
 
 
 @patch("requests.post")
-def test_auth_dependency_accepts_token_via_query_param(mock_post):
+def test_auth_dependency_rejects_query_param_token_by_default(mock_post):
+    # SEC-09: query-param JWTs leak via logs/Referer; rejected unless a route
+    # explicitly opts in (only the header-less SSE streams do).
+    request = _request(query_string="token=query-token")
+
+    response = asgi_app.require_current_user(request)
+
+    assert response.status_code == 401
+    assert response.body == b'{"error":"Authorization token required"}'
+    mock_post.assert_not_called()
+
+
+@patch("requests.post")
+def test_auth_dependency_accepts_query_param_token_when_allowed(mock_post):
     mock_post.return_value = _response(
         200, {"user": {"username": "sse-user", "role": "viewer", "tenant_id": 7}}
     )
     request = _request(query_string="token=query-token")
 
-    user = asgi_app.require_current_user(request)
+    user = asgi_app.require_current_user(request, allow_query_token=True)
 
     assert user == {"username": "sse-user", "role": "viewer", "tenant_id": 7}
     assert mock_post.call_args.kwargs["headers"] == {
@@ -276,7 +289,12 @@ def test_get_threats_strips_query_token(mock_post, mock_get, asgi_client):
     mock_post.side_effect = _auth_verify_ok
     mock_get.return_value = _response(200, {"threats": [{"id": 1}], "total": 1})
 
-    response = asgi_client.get("/api/v1/threats?token=valid-token&foo=bar")
+    # Auth via header (SEC-09: query token no longer accepted on proxy routes);
+    # a stray ?token= must still be stripped before forwarding downstream.
+    response = asgi_client.get(
+        "/api/v1/threats?token=valid-token&foo=bar",
+        headers={"Authorization": "Bearer valid-token"},
+    )
 
     assert response.status_code == 200
     assert response.json() == {"threats": [{"id": 1}], "total": 1}
@@ -333,7 +351,10 @@ def test_get_alerts_strips_query_token(mock_post, mock_get, asgi_client):
     mock_post.side_effect = _auth_verify_ok
     mock_get.return_value = _response(200, {"alerts": []})
 
-    response = asgi_client.get("/api/v1/alerts?token=valid-token&status=open")
+    response = asgi_client.get(
+        "/api/v1/alerts?token=valid-token&status=open",
+        headers={"Authorization": "Bearer valid-token"},
+    )
 
     assert response.status_code == 200
     assert response.json() == {"alerts": []}
@@ -598,6 +619,35 @@ def test_stream_threats_requires_auth(asgi_client):
 
     assert response.status_code == 401
     assert response.json() == {"error": "Authorization token required"}
+
+
+@patch("requests.post")
+def test_stream_threats_accepts_query_param_token(mock_post, asgi_client):
+    # EventSource cannot set headers, so the SSE routes deliberately keep
+    # ?token= support (the one place SEC-09's header-only rule can't apply).
+    mock_post.side_effect = _auth_verify_ok
+    mock_pubsub = MagicMock()
+    mock_pubsub.get_message = MagicMock(side_effect=[None, GeneratorExit()])
+    mock_redis_conn = MagicMock()
+    mock_redis_conn.pubsub.return_value = mock_pubsub
+
+    with patch("redis.from_url", return_value=mock_redis_conn):
+        with asgi_client.stream(
+            "GET", "/api/v1/stream/threats?token=valid-token"
+        ) as response:
+            assert response.status_code == 200
+            assert response.headers["content-type"].startswith("text/event-stream")
+
+
+@patch("requests.post")
+def test_non_stream_route_rejects_query_param_token(mock_post, asgi_client):
+    # SEC-09: a JWT supplied only via ?token= must not authenticate a normal
+    # proxy route — no header, no access.
+    response = asgi_client.get("/api/v1/threats?token=valid-token")
+
+    assert response.status_code == 401
+    assert response.json() == {"error": "Authorization token required"}
+    mock_post.assert_not_called()
 
 
 def test_404_handler_matches_gateway_shape(asgi_client):

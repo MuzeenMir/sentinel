@@ -346,12 +346,12 @@ class TestRequireAuth:
 
     @patch("requests.get", return_value=_mock_response(200, {"threats": []}))
     @patch("requests.post", side_effect=_auth_verify_ok)
-    def test_token_via_query_param(self, _post, mock_get, client):
+    def test_query_param_token_rejected(self, mock_post, _get, client):
+        # SEC-09: a JWT supplied only via ?token= leaks via logs/Referer and is
+        # no longer accepted on normal proxy routes (header-only).
         resp = client.get("/api/v1/threats?token=valid-token&foo=bar")
-        assert resp.status_code == 200
-        sent = mock_get.call_args.kwargs["params"]
-        assert sent.get("foo") == "bar"
-        assert "token" not in sent
+        assert resp.status_code == 401
+        mock_post.assert_not_called()
 
 
 # ===================================================================
@@ -463,7 +463,10 @@ class TestThreatEndpoints:
     )
     @patch("requests.post", side_effect=_auth_verify_ok)
     def test_get_threats_strips_token_query_param(self, _post, mock_get, client):
-        resp = client.get("/api/v1/threats?token=valid-token&foo=bar")
+        # Auth via header; a stray ?token= must still be stripped downstream.
+        resp = client.get(
+            "/api/v1/threats?token=valid-token&foo=bar", headers=AUTH_HEADER
+        )
 
         assert resp.status_code == 200
         sent = mock_get.call_args.kwargs["params"]
@@ -486,7 +489,9 @@ class TestAlertEndpoints:
     @patch("requests.get", return_value=_mock_response(200, {"alerts": []}))
     @patch("requests.post", side_effect=_auth_verify_ok)
     def test_get_alerts_strips_token_query_param(self, _post, mock_get, client):
-        resp = client.get("/api/v1/alerts?token=valid-token&status=open")
+        resp = client.get(
+            "/api/v1/alerts?token=valid-token&status=open", headers=AUTH_HEADER
+        )
 
         assert resp.status_code == 200
         sent = mock_get.call_args.kwargs["params"]
