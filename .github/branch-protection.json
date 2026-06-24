@@ -11,6 +11,7 @@
     "e2e-smoke-ui",
     "sbom",
     "detections-validate",
-    "audit-schema-guard"
+    "audit-schema-guard",
+    "lockfile-verify"
   ]
 }
