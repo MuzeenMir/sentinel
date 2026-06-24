@@ -15,9 +15,9 @@ COPY integrations/ integrations/
 COPY _lib/ _lib/
 COPY ebpf-lib/ ebpf_lib/
 
-COPY hids-agent/requirements.txt .
+COPY hids-agent/requirements.lock .
 RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt gevent
+    && pip install --no-cache-dir --require-hashes -r requirements.lock
 
 COPY hids-agent/ hids-agent/
 

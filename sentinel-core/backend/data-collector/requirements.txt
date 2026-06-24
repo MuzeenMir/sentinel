@@ -5,3 +5,5 @@ redis>=5.0.1
 requests>=2.31.0
 psycopg2-binary>=2.9.9
 prometheus-client>=0.17.1
+gunicorn>=22.0.0  # WSGI server (was Docker-appended; pinned so the lockfile covers it)
+gevent>=24.2.1  # gunicorn async worker (was Docker-appended; pinned so the lockfile covers it)

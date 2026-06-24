@@ -26,3 +26,4 @@ requests>=2.31.0
 python-dotenv>=1.0.0
 pyyaml==6.0.1
 prometheus-client>=0.17.1
+gevent>=24.2.1  # gunicorn async worker (was Docker-appended; pinned so the lockfile covers it)
