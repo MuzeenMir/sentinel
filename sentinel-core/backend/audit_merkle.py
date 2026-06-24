@@ -25,6 +25,11 @@ _NODE_PREFIX = b"\x01"
 _EVENT_DOMAIN = b"sentinel.audit.event.v1\x00"
 _DAILY_ROOT_DOMAIN = b"sentinel.audit.dailyroot.v1\x00"
 
+# Genesis sentinel for the per-tenant event chain: prev_event_hash of a tenant's
+# first chained row. Distinct from NULL (legacy/unchained) so deletion of a
+# tenant's first row is detectable. MUST match the plpgsql trigger byte-for-byte.
+_CHAIN_GENESIS_DOMAIN = b"sentinel.audit.chain.genesis.v1\x00"
+
 
 def _leaf_hash(data: bytes) -> bytes:
     return hashlib.sha256(_LEAF_PREFIX + data).digest()
@@ -157,3 +162,9 @@ def chained_daily_root(merkle_day: bytes, prev_root: Optional[bytes]) -> bytes:
     """
     prev = prev_root if prev_root else b""
     return hashlib.sha256(_DAILY_ROOT_DOMAIN + merkle_day + prev).digest()
+
+
+def chain_genesis(tenant_id: Any) -> str:
+    """Per-tenant genesis sentinel (hex sha256). NULL tenant -> the 'system' scope."""
+    key = "system" if tenant_id is None else str(tenant_id)
+    return hashlib.sha256(_CHAIN_GENESIS_DOMAIN + key.encode()).hexdigest()
