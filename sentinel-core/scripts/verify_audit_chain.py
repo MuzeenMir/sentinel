@@ -233,6 +233,7 @@ def build_report(
     tampers: List[Dict[str, Any]],
     sig_fails: List[Dict[str, Any]],
     divergences: List[Dict[str, Any]],
+    chain_breaks: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
     """Machine-readable verdict consumed by the read-only auditor UI.
 
@@ -248,7 +249,7 @@ def build_report(
     """
     trusted_pairs = {(p["date"], p.get("root")) for p in trusted}
     return {
-        "ok": not (tampers or sig_fails or divergences),
+        "ok": not (tampers or sig_fails or divergences or chain_breaks),
         "anchored": len(trusted) > 0,
         "row_count": len(rows),
         "daily_root_count": len(computed),
@@ -256,6 +257,7 @@ def build_report(
         "first_tamper": tampers[0] if tampers else None,
         "first_signature_failure": sig_fails[0] if sig_fails else None,
         "first_divergence": divergences[0] if divergences else None,
+        "first_chain_break": chain_breaks[0] if chain_breaks else None,
         "daily": [
             {
                 "date": entry["date"],
@@ -369,7 +371,7 @@ def fetch_rows(database_url: str) -> List[Dict[str, Any]]:  # pragma: no cover
         cur.execute(
             """
             SELECT id, tenant_id, category, action, resource_id, user_id,
-                   timestamp, details, event_hash
+                   timestamp, details, event_hash, prev_event_hash
             FROM audit_log
             ORDER BY id
             """
@@ -439,6 +441,7 @@ def main(argv: Optional[List[str]] = None) -> int:  # pragma: no cover
 
     rows = fetch_rows(args.database_url)
     tampers = find_row_tampers(rows)
+    chain_breaks = find_chain_breaks(rows)
     computed = chain_roots(compute_daily_roots(rows))
     published = load_published_roots(args.published_dir)
 
@@ -493,6 +496,7 @@ def main(argv: Optional[List[str]] = None) -> int:  # pragma: no cover
             tampers=tampers,
             sig_fails=sig_fails,
             divergences=divergences,
+            chain_breaks=chain_breaks,
         )
         report["generated_at"] = datetime.now(timezone.utc).isoformat()
         with open(args.report_json, "w") as fh:
@@ -519,8 +523,16 @@ def main(argv: Optional[List[str]] = None) -> int:  # pragma: no cover
             f"({len(divergences)} total)",
             file=sys.stderr,
         )
+    if chain_breaks:
+        first = chain_breaks[0]
+        print(
+            f"CHAIN BREAK: tenant={first['tenant_id']} row id={first['id']} "
+            f"{first['reason']} expected={first['expected']} found={first['found']} "
+            f"({len(chain_breaks)} total)",
+            file=sys.stderr,
+        )
 
-    if tampers or sig_fails or divergences:
+    if tampers or sig_fails or divergences or chain_breaks:
         return 1
 
     print(

@@ -259,6 +259,7 @@ def test_build_report_clean_ledger_is_ok():
         tampers=[],
         sig_fails=[],
         divergences=[],
+        chain_breaks=[],
     )
     assert report["ok"] is True
     assert report["anchored"] is True
@@ -284,6 +285,7 @@ def test_build_report_surfaces_first_failures_and_is_not_ok():
         tampers=[{"id": 2, "stored": "ab", "recomputed": "cd"}],
         sig_fails=[{"date": "2026-05-31", "reason": "signature_invalid"}],
         divergences=[{"date": "2026-05-31", "reason": "missing_published_root"}],
+        chain_breaks=[],
     )
     assert report["ok"] is False
     assert report["first_tamper"]["id"] == 2
@@ -307,6 +309,7 @@ def test_build_report_unanchored_run_is_ok_but_not_anchored():
         tampers=[],
         sig_fails=[],
         divergences=[],
+        chain_breaks=[],
     )
     assert report["ok"] is True
     assert report["anchored"] is False
@@ -328,6 +331,7 @@ def test_build_report_day_trust_binds_to_root_value_not_date():
         tampers=[],
         sig_fails=[],
         divergences=divergences,
+        chain_breaks=[],
     )
     assert report["ok"] is False
     assert report["daily"][0]["trusted"] is False
@@ -401,3 +405,47 @@ def test_legacy_null_prev_skipped_until_chain_starts():
         _chain_row(4, 5, "new2", "new1"),
     ]
     assert find_chain_breaks(rows) == []
+
+
+def _load():
+    import importlib
+
+    return importlib.import_module("verify_audit_chain")
+
+
+def test_build_report_fails_on_chain_break():
+    v = _load()
+    report = v.build_report(
+        rows=[{"id": 1}],
+        computed=[],
+        trusted=[],
+        tampers=[],
+        sig_fails=[],
+        divergences=[],
+        chain_breaks=[
+            {
+                "tenant_id": 5,
+                "id": 3,
+                "reason": "broken_link",
+                "expected": "aa",
+                "found": "zz",
+            }
+        ],
+    )
+    assert report["ok"] is False
+    assert report["first_chain_break"]["id"] == 3
+
+
+def test_build_report_ok_when_all_clean():
+    v = _load()
+    report = v.build_report(
+        rows=[{"id": 1}],
+        computed=[],
+        trusted=[],
+        tampers=[],
+        sig_fails=[],
+        divergences=[],
+        chain_breaks=[],
+    )
+    assert report["ok"] is True
+    assert report["first_chain_break"] is None
