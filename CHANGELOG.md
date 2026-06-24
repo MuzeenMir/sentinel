@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.7.3](https://github.com/MuzeenMir/sentinel/compare/v1.7.2...v1.7.3) (2026-06-24)
+
+
+### Bug Fixes
+
+* header-only JWTs + fail-closed secrets + conftest cleanup (Wave D) ([#84](https://github.com/MuzeenMir/sentinel/issues/84)) ([e886688](https://github.com/MuzeenMir/sentinel/commit/e886688b95d02b588f3455bea2bfcabbfbecb6f7))
+
+
+### Documentation
+
+* correct SSO secret encryption-at-rest claim (SEC-05) ([#87](https://github.com/MuzeenMir/sentinel/issues/87)) ([b0f4928](https://github.com/MuzeenMir/sentinel/commit/b0f4928ebaf29117d9379045e4a07da57b5a38a0))
+
 ## [1.7.2](https://github.com/MuzeenMir/sentinel/compare/v1.7.1...v1.7.2) (2026-06-21)
 
 
