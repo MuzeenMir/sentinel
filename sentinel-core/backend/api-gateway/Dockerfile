@@ -13,9 +13,9 @@ COPY auth_middleware.py observability.py metrics.py resilience.py tenant_middlew
 COPY integrations/ integrations/
 COPY _lib/ _lib/
 
-COPY api-gateway/requirements.txt .
+COPY api-gateway/requirements.lock .
 RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt
+    && pip install --no-cache-dir --require-hashes -r requirements.lock
 
 COPY api-gateway/ api-gateway/
 

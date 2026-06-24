@@ -8,3 +8,4 @@ python-dotenv>=1.0.0
 gunicorn>=22.0.0
 pyroute2>=0.7.0
 prometheus-client>=0.17.1
+gevent>=24.2.1  # gunicorn async worker (was Docker-appended; pinned so the lockfile covers it)

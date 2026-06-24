@@ -1,0 +1,41 @@
+name: lockfile-verify
+
+on:
+  # No path filter (audit CI-07 / Wave B4): intended to be a REQUIRED check, so
+  # it must report a status on EVERY PR. A path-filtered required check never
+  # reports on PRs that don't touch the filtered paths and would block them
+  # forever. The check is lightweight (pure-stdlib, no install) and validates
+  # the committed per-service hashed lockfiles regardless of what changed.
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+concurrency:
+  group: lockfile-verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lockfile-verify:
+    name: lockfile-verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Verify per-service hashed lockfiles
+        run: python sentinel-core/scripts/verify_lockfiles.py
+      - name: Install test deps
+        run: pip install pytest==9.0.3
+      - name: Lockfile verifier unit tests
+        working-directory: sentinel-core/backend
+        run: python -m pytest tests/test_verify_lockfiles.py -q

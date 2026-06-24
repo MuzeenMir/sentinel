@@ -37,9 +37,9 @@ COPY _lib/ _lib/
 COPY ebpf-lib/ ebpf_lib/
 COPY --from=builder /app/ebpf_lib/compiled/xdp/xdp_flow.o ebpf_lib/compiled/xdp/xdp_flow.o
 
-COPY xdp-collector/requirements.txt .
+COPY xdp-collector/requirements.lock .
 RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt gevent
+    && pip install --no-cache-dir --require-hashes -r requirements.lock
 
 COPY xdp-collector/ xdp-collector/
 

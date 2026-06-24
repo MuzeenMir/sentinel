@@ -13,10 +13,12 @@ COPY auth_middleware.py observability.py metrics.py resilience.py tenant_middlew
 COPY integrations/ integrations/
 COPY _lib/ _lib/
 
-COPY ai-engine/requirements.txt .
+COPY ai-engine/requirements.lock .
+# torch installed separately from the PyTorch CPU index (excluded from the lock
+# via --no-emit-package torch); everything else is hash-pinned from requirements.lock.
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel \
     && pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu \
-    && pip install --no-cache-dir -r requirements.txt
+    && pip install --no-cache-dir --require-hashes -r requirements.lock
 
 COPY ai-engine/ ai-engine/
 

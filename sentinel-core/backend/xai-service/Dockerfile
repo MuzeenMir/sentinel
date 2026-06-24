@@ -13,9 +13,9 @@ COPY auth_middleware.py observability.py metrics.py resilience.py tenant_middlew
 COPY integrations/ integrations/
 COPY _lib/ _lib/
 
-COPY xai-service/requirements.txt .
+COPY xai-service/requirements.lock .
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel \
-    && pip install --no-cache-dir -r requirements.txt gevent
+    && pip install --no-cache-dir --require-hashes -r requirements.lock
 
 COPY xai-service/ xai-service/
 
