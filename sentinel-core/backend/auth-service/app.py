@@ -36,6 +36,8 @@ from audit_logger import audit_log, AuditCategory, AuditLogError
 from secret_crypto import decrypt
 from _lib.net import bind_host
 from _lib.tenancy import install_set_local_listener
+from pydantic import ValidationError
+from schemas import UserUpdateSchema
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -776,14 +778,31 @@ def get_users():
 @app.route("/api/v1/auth/users/<int:user_id>", methods=["PUT"])
 @require_role(UserRole.ADMIN)
 def update_user(user_id):
-    try:
-        user = User.query.get_or_404(user_id)
-        data = request.get_json()
+    user = User.query.get_or_404(user_id)
 
-        if "role" in data:
-            user.role = getattr(UserRole, data["role"].upper())
-        if "status" in data:
-            user.status = getattr(UserStatus, data["status"].upper())
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "Request body must be a JSON object"}), 400
+    try:
+        payload = UserUpdateSchema.model_validate(data)
+    except ValidationError as exc:
+        return jsonify(
+            {
+                "error": "Invalid request body",
+                "details": [
+                    {"field": ".".join(str(p) for p in e["loc"]), "msg": e["msg"]}
+                    for e in exc.errors()
+                ],
+            }
+        ), 400
+
+    try:
+        # role/status are validated against the UserRole/UserStatus allow-list
+        # in UserUpdateSchema (SEC-06); enum values are the lowercase names.
+        if payload.role is not None:
+            user.role = UserRole(payload.role)
+        if payload.status is not None:
+            user.status = UserStatus(payload.status)
 
         db.session.flush()
         try:

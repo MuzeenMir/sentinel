@@ -609,6 +609,20 @@ class TestSCIM:
         )
         assert resp.status_code == 400
 
+    def test_create_user_malformed_emails_returns_400(self, client):
+        # SEC-06: emails as bare strings used to crash with AttributeError
+        # (500) at emails[0].get("value"); schema validation now rejects → 400.
+        resp = client.post(
+            "/api/v1/auth/scim/v2/Users",
+            headers=self.SCIM_HEADERS,
+            json={
+                "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
+                "userName": "bademail",
+                "emails": ["plain@string.com"],
+            },
+        )
+        assert resp.status_code == 400
+
 
 # ===================================================================
 # Tenant CRUD

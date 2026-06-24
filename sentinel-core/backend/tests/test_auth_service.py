@@ -300,6 +300,31 @@ class TestUserManagement:
         assert resp.status_code == 200
         assert resp.json["user"]["role"] == "operator"
 
+    def test_update_user_rejects_invalid_role(self, client):
+        # SEC-06: an unknown role used to hit getattr() → AttributeError (500);
+        # the allow-list schema now returns a clean 400.
+        _register(client, role="viewer")
+        token = self._admin_token(client)
+        with app.app_context():
+            user_id = User.query.filter_by(username="testuser").first().id
+        resp = client.put(
+            f"/api/v1/auth/users/{user_id}",
+            headers=_auth_header(token),
+            json={"role": "superadmin"},
+        )
+        assert resp.status_code == 400
+
+    def test_update_user_rejects_non_object_body(self, client):
+        token = self._admin_token(client)
+        with app.app_context():
+            user_id = User.query.filter_by(username="admin1").first().id
+        resp = client.put(
+            f"/api/v1/auth/users/{user_id}",
+            headers=_auth_header(token),
+            json=["not", "an", "object"],
+        )
+        assert resp.status_code == 400
+
 
 class TestPasswordValidation:
     def test_too_short(self):
