@@ -28,6 +28,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 from audit_merkle import (  # noqa: E402
     canonical_event_digest,
     canonical_timestamp,
+    chain_genesis,
     chained_daily_root,
     merkle_root,
 )
@@ -64,6 +65,63 @@ def find_row_tampers(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 }
             )
     return tampers
+
+
+def find_chain_breaks(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Per-tenant prev_event_hash chain walk (ordered by id).
+
+    Rows with prev_event_hash IS NULL are pre-chain (legacy) and skipped until
+    the tenant's chain starts. The first chained row must carry the tenant's
+    genesis sentinel; each later row's prev_event_hash must equal the previous
+    chained row's event_hash. Returns the breaks (empty == intact).
+    """
+    by_tenant: "OrderedDict[Any, List[Dict[str, Any]]]" = OrderedDict()
+    for row in sorted(rows, key=lambda r: r["id"]):
+        by_tenant.setdefault(row.get("tenant_id"), []).append(row)
+
+    breaks: List[Dict[str, Any]] = []
+    for tenant_id, trows in by_tenant.items():
+        prev_hash: Optional[str] = None
+        started = False
+        for row in trows:
+            pe = row.get("prev_event_hash")
+            if not started:
+                if pe is None:
+                    continue  # legacy/unchained row before the chain begins
+                started = True
+                expected = chain_genesis(tenant_id)
+                if pe != expected:
+                    breaks.append(
+                        {
+                            "tenant_id": tenant_id,
+                            "id": row.get("id"),
+                            "reason": "genesis_mismatch",
+                            "expected": expected,
+                            "found": pe,
+                        }
+                    )
+            elif pe is None:
+                breaks.append(
+                    {
+                        "tenant_id": tenant_id,
+                        "id": row.get("id"),
+                        "reason": "unchained_row_after_chain_start",
+                        "expected": prev_hash,
+                        "found": None,
+                    }
+                )
+            elif pe != prev_hash:
+                breaks.append(
+                    {
+                        "tenant_id": tenant_id,
+                        "id": row.get("id"),
+                        "reason": "broken_link",
+                        "expected": prev_hash,
+                        "found": pe,
+                    }
+                )
+            prev_hash = row.get("event_hash")
+    return breaks
 
 
 def compute_daily_roots(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

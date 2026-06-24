@@ -331,3 +331,73 @@ def test_build_report_day_trust_binds_to_root_value_not_date():
     )
     assert report["ok"] is False
     assert report["daily"][0]["trusted"] is False
+
+
+# --------------------------------------------------------------------------- #
+# Per-tenant audit chain walker (D4) — detects breaks in the prev_event_hash
+# chain within each tenant's isolated audit log segment.
+# --------------------------------------------------------------------------- #
+
+
+def _chain_row(id, tenant, eh, peh):
+    """Minimal row dict for chain testing (no timestamp/digest needed)."""
+    return {"id": id, "tenant_id": tenant, "event_hash": eh, "prev_event_hash": peh}
+
+
+def test_well_formed_chain_has_no_breaks():
+    from verify_audit_chain import find_chain_breaks
+    from audit_merkle import chain_genesis
+
+    g = chain_genesis(5)
+    rows = [
+        _chain_row(1, 5, "aa", g),
+        _chain_row(2, 5, "bb", "aa"),
+        _chain_row(3, 5, "cc", "bb"),
+    ]
+    assert find_chain_breaks(rows) == []
+
+
+def test_genesis_mismatch_flagged():
+    from verify_audit_chain import find_chain_breaks
+
+    rows = [_chain_row(1, 5, "aa", "deadbeef")]
+    breaks = find_chain_breaks(rows)
+    assert breaks and breaks[0]["reason"] == "genesis_mismatch"
+
+
+def test_deleted_row_breaks_link():
+    from verify_audit_chain import find_chain_breaks
+    from audit_merkle import chain_genesis
+
+    g = chain_genesis(5)
+    # row id=2 (event_hash "bb") deleted; id=3 still points at "bb"
+    rows = [_chain_row(1, 5, "aa", g), _chain_row(3, 5, "cc", "bb")]
+    breaks = find_chain_breaks(rows)
+    assert breaks and breaks[0]["reason"] == "broken_link"
+    assert breaks[0]["expected"] == "aa" and breaks[0]["found"] == "bb"
+
+
+def test_per_tenant_independence():
+    from verify_audit_chain import find_chain_breaks
+    from audit_merkle import chain_genesis
+
+    rows = [
+        _chain_row(1, 5, "a5", chain_genesis(5)),
+        _chain_row(2, 9, "a9", chain_genesis(9)),
+        _chain_row(3, 5, "b5", "a5"),
+        _chain_row(4, 9, "b9", "a9"),
+    ]
+    assert find_chain_breaks(rows) == []
+
+
+def test_legacy_null_prev_skipped_until_chain_starts():
+    from verify_audit_chain import find_chain_breaks
+    from audit_merkle import chain_genesis
+
+    rows = [
+        _chain_row(1, 5, "old1", None),  # legacy, pre-trigger
+        _chain_row(2, 5, "old2", None),  # legacy
+        _chain_row(3, 5, "new1", chain_genesis(5)),  # chain starts here
+        _chain_row(4, 5, "new2", "new1"),
+    ]
+    assert find_chain_breaks(rows) == []
