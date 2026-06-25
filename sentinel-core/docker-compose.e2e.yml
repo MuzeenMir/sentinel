@@ -1,0 +1,23 @@
+# CI-only overlay: publish the per-service ports that the full end-to-end
+# pipeline test (backend/tests/test_e2e_pipeline.py) drives directly on the
+# host. The base compose publishes only the api-gateway (8080); the e2e suite
+# additionally hits auth/data-collector/alert/policy/drl on their conventional
+# ports. Bound to 127.0.0.1 and scoped to the scheduled e2e-full job via
+# COMPOSE_FILE — NOT for production or developer compose. Mirrors
+# docker-compose.ci.yml (which publishes Postgres for host-run integration tests).
+services:
+  auth-service:
+    ports:
+      - "127.0.0.1:5000:5000"
+  data-collector:
+    ports:
+      - "127.0.0.1:5001:5001"
+  alert-service:
+    ports:
+      - "127.0.0.1:5002:5002"
+  policy-orchestrator:
+    ports:
+      - "127.0.0.1:5004:5004"
+  drl-engine:
+    ports:
+      - "127.0.0.1:5005:5005"

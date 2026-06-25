@@ -1,0 +1,160 @@
+name: e2e-full
+
+# SUB-04: the only true end-to-end pipeline test (backend/tests/test_e2e_pipeline.py)
+# is excluded from the per-PR `unit` job (--ignore) because it needs the full
+# running stack. This workflow runs it against a real compose stack on a weekly
+# schedule + manual dispatch — it is NOT a PR gate and is never a required check.
+#
+# The stack bring-up mirrors e2e-smoke-api; docker-compose.e2e.yml additionally
+# publishes the per-service ports the e2e suite drives directly. The crown-jewel
+# ingest->policy chain xfails (not fails) when Kafka/Flink are not delivering, so
+# this job stays green on a healthy stack and only goes red on a real service
+# regression (health checks, auth, DRL decision, policy auto-apply).
+
+on:
+  schedule:
+    - cron: '23 4 * * 1'   # 04:23 UTC every Monday
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+concurrency:
+  group: e2e-full-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  e2e-full-pipeline:
+    name: e2e-full-pipeline
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: sentinel-core
+    env:
+      JWT_SECRET_KEY: ci-e2e-not-a-real-secret-do-not-reuse
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: Admin@123!E2EFull
+      ADMIN_EMAIL: admin@example.com
+      POSTGRES_PASSWORD: e2e_pg_password
+      SENTINEL_APP_DB_PASSWORD: e2e_sentinel_app_password
+      DEFAULT_TENANT_ID: '1'
+      DRL_SHADOW_MODE: 'true'
+      INTERNAL_SERVICE_TOKEN: ci-e2e-internal-service-token
+      GRAFANA_PASSWORD: ci-e2e-grafana-password
+      COMPOSE_FILE: docker-compose.yml:docker-compose.e2e.yml
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Write CI .env
+        run: |
+          cat > .env <<EOF
+          POSTGRES_USER=sentinel
+          POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+          POSTGRES_DB=sentinel_db
+          POSTGRES_HOST=sentinel-postgres
+          POSTGRES_PORT=5432
+          DATABASE_URL=postgresql://sentinel:${POSTGRES_PASSWORD}@sentinel-postgres:5432/sentinel_db
+          SENTINEL_APP_DB_PASSWORD=${SENTINEL_APP_DB_PASSWORD}
+          DEFAULT_TENANT_ID=${DEFAULT_TENANT_ID}
+          JWT_SECRET_KEY=${JWT_SECRET_KEY}
+          ADMIN_USERNAME=${ADMIN_USERNAME}
+          ADMIN_PASSWORD=${ADMIN_PASSWORD}
+          ADMIN_EMAIL=${ADMIN_EMAIL}
+          DRL_SHADOW_MODE=${DRL_SHADOW_MODE}
+          INTERNAL_SERVICE_TOKEN=${INTERNAL_SERVICE_TOKEN}
+          GRAFANA_PASSWORD=${GRAFANA_PASSWORD}
+          EOF
+      - name: Build full stack images
+        run: |
+          docker compose build \
+            postgres redis db-migrate auth-service api-gateway \
+            data-collector ai-engine drl-engine policy-orchestrator alert-service
+      - name: Postgres + Redis up
+        run: docker compose up -d postgres redis
+      - name: Wait for Postgres
+        run: |
+          for i in $(seq 1 30); do
+            if docker compose exec -T postgres pg_isready -U sentinel -d sentinel_db >/dev/null 2>&1; then
+              echo "postgres ready after ${i} attempts"; break
+            fi
+            sleep 2
+          done
+          sleep 5
+      - name: Run migrations
+        run: |
+          docker compose up \
+            --exit-code-from db-migrate \
+            --abort-on-container-exit \
+            db-migrate
+      - name: Dump logs on migration failure
+        if: failure()
+        run: |
+          docker compose logs db-migrate || true
+          docker compose logs postgres || true
+      - name: Bring up remaining services
+        run: |
+          docker compose up -d \
+            auth-service api-gateway \
+            data-collector ai-engine drl-engine policy-orchestrator alert-service
+      - name: Wait for runtime services healthy (<=120s)
+        run: |
+          set -euo pipefail
+          for container in sentinel-data-collector sentinel-ai-engine sentinel-policy-orchestrator; do
+            for i in $(seq 1 60); do
+              status=$(docker inspect -f '{{.State.Health.Status}}' "$container" 2>/dev/null || true)
+              if [ "$status" = "healthy" ]; then
+                echo "$container healthy after ${i} attempts"
+                break
+              fi
+              if [ "$i" = "60" ]; then
+                echo "::error::$container never became healthy (last status: ${status:-missing})"
+                docker compose logs "$container" || true
+                exit 1
+              fi
+              sleep 2
+            done
+          done
+      - name: Wait for api-gateway healthy (<=120s)
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:8080/health >/dev/null; then
+              echo "gateway healthy after ${i} attempts"; exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::api-gateway never became healthy"
+          docker compose logs api-gateway auth-service postgres
+          exit 1
+      - name: Install e2e test deps
+        working-directory: sentinel-core/backend
+        run: |
+          pip install -r requirements-test.txt
+          pip install requests
+      - name: Run e2e pipeline suite
+        working-directory: sentinel-core/backend
+        env:
+          SENTINEL_API_URL: http://localhost:8080
+          AUTH_SERVICE_URL: http://localhost:5000
+          ALERT_SERVICE_URL: http://localhost:5002
+          POLICY_SERVICE_URL: http://localhost:5004
+          DRL_ENGINE_URL: http://localhost:5005
+          DATA_COLLECTOR_URL: http://localhost:5001
+          ADMIN_USERNAME: ${{ env.ADMIN_USERNAME }}
+          ADMIN_PASSWORD: ${{ env.ADMIN_PASSWORD }}
+        run: python -m pytest tests/test_e2e_pipeline.py -v --tb=short
+      - name: Dump service logs on failure
+        if: failure()
+        run: |
+          docker compose logs --tail=200 \
+            drl-engine ai-engine policy-orchestrator alert-service \
+            data-collector api-gateway auth-service || true
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
