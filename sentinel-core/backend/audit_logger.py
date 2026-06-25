@@ -173,10 +173,10 @@ def audit_log(
         "record_id": record_id,
     }
 
-    # Stored event_hash is the column-derivable canonical digest (wedge #3): the
-    # nightly Merkle-root job and verify_audit_chain.py recompute it from the
-    # persisted columns. prev_event_hash stays NULL — tamper-evidence comes from
-    # the daily signed Merkle roots over event_hash, not a per-event linked list.
+    # event_hash is the column-derivable canonical digest (wedge #3); the nightly
+    # Merkle-root job and verify_audit_chain.py recompute it from the persisted
+    # columns. prev_event_hash is populated by the audit_log_set_chain BEFORE
+    # INSERT trigger (D4) — a per-tenant hash chain enforced at the DB, not here.
     event_hash = canonical_event_digest(
         tenant_id=tenant_id,
         category=category_value,
@@ -201,13 +201,13 @@ def audit_log(
                 INSERT INTO audit_log (
                     tenant_id, user_id, action, category,
                     resource_type, resource_id,
-                    details, timestamp, event_hash, prev_event_hash
+                    details, timestamp, event_hash
                 )
                 VALUES (
                     %(tenant_id)s, %(user_id)s, %(action)s, %(category)s,
                     %(resource_type)s, %(resource_id)s,
                     %(details)s::jsonb,
-                    %(timestamp)s, %(event_hash)s, NULL
+                    %(timestamp)s, %(event_hash)s
                 )
                 """,
                 {

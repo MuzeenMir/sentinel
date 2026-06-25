@@ -304,6 +304,25 @@ class TestAuditLogPG:
 
         assert cursor.params[-1]["user_id"] is None
 
+    def test_audit_log_does_not_send_prev_event_hash(self, monkeypatch):
+        # The DB trigger (audit_log_set_chain, D4) owns prev_event_hash now;
+        # the app must not include it in the INSERT column list or values.
+        cursor = FakeCursor()
+        conn = FakeConnection(cursor)
+        monkeypatch.setattr("audit_logger._connect_pg", lambda: conn)
+
+        with patch("audit_logger._in_request_context", return_value=False):
+            audit_log(
+                AuditCategory.AUTH,
+                "login_success",
+                actor="user:1",
+                tenant_id=7,
+            )
+
+        insert_sql = next(s for s in cursor.statements if "INSERT INTO audit_log" in s)
+        assert "prev_event_hash" not in insert_sql
+        assert "event_hash" in insert_sql  # app still computes/sends event_hash
+
 
 # ===================================================================
 # audit_log() — failure mode
