@@ -65,6 +65,7 @@ jobs:
       DRL_SHADOW_MODE: 'true'
       INTERNAL_SERVICE_TOKEN: ci-integration-internal-service-token
       GRAFANA_PASSWORD: ci-integration-grafana-password
+      COMPOSE_FILE: docker-compose.yml:docker-compose.ci.yml
     steps:
       - uses: actions/checkout@v4
       - name: Write CI .env
@@ -125,6 +126,7 @@ jobs:
           INTEGRATION_BASE_URL: http://localhost:8080
           ADMIN_USERNAME: ${{ env.ADMIN_USERNAME }}
           ADMIN_PASSWORD: ${{ env.ADMIN_PASSWORD }}
+          AUDIT_TEST_DATABASE_URL: postgresql://sentinel_app:${{ env.SENTINEL_APP_DB_PASSWORD }}@127.0.0.1:5432/sentinel_db
         run: |
           # Integration tests are marked with -m integration; skip when absent.
           if python -m pytest tests/ -m integration --collect-only -q 2>/dev/null | grep -q '::'; then
