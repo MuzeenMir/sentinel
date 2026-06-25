@@ -35,9 +35,11 @@ def upgrade() -> None:
             -- Serialize inserts per tenant so concurrent writers cannot fork the
             -- chain; xact-scoped, auto-released at COMMIT. Distinct tenants do
             -- not contend. NULL tenant collapses to the reserved key -1.
+            -- Per-tenant serialization key as a full 64-bit hash. Avoids the
+            -- int4 ceiling of the two-arg advisory lock (tenant_id is bigint)
+            -- and gives the NULL/'system' scope its own distinct key.
             PERFORM pg_advisory_xact_lock(
-                hashtext('sentinel.audit.chain'),
-                COALESCE(NEW.tenant_id, -1)::int
+                hashtextextended('sentinel.audit.chain:' || COALESCE(NEW.tenant_id::text, 'system'), 0)
             );
 
             SELECT event_hash INTO last_hash
