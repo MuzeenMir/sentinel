@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.8.1](https://github.com/MuzeenMir/sentinel/compare/v1.8.0...v1.8.1) (2026-06-26)
+
+
+### Documentation
+
+* **adr:** ADR-022 — downgrade review-gate independence claim (Codex/Kai retired) ([#94](https://github.com/MuzeenMir/sentinel/issues/94)) ([685fc6a](https://github.com/MuzeenMir/sentinel/commit/685fc6ac4163e4ed1bd9603dfc692c8be007f6ab))
+* record audit Wave A–D closure + Phase-1 next-steps roadmap ([#95](https://github.com/MuzeenMir/sentinel/issues/95)) ([098cc05](https://github.com/MuzeenMir/sentinel/commit/098cc05372de41d8e9a32c5a65eff71074365260))
+
 ## [1.8.0](https://github.com/MuzeenMir/sentinel/compare/v1.7.3...v1.8.0) (2026-06-26)
 
 
