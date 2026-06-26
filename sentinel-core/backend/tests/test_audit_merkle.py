@@ -195,3 +195,34 @@ def test_canonical_event_digest_invariant_across_timestamp_representations():
         **{**_ROW, "timestamp": datetime(2026, 5, 30, 12, 0, 0)}
     )
     assert base == plus == dt == naive
+
+
+# ---------------------------------------------------------------------------
+# chain_genesis — per-tenant event chain genesis sentinel
+# ---------------------------------------------------------------------------
+
+
+def test_chain_genesis_known_vectors():
+    import audit_merkle as m
+
+    assert (
+        m.chain_genesis(5)
+        == "bc67ea603556bc15ea85931d9becf1a2793dbb14f373a3cf8b4854f79f3ea485"
+    )
+    assert (
+        m.chain_genesis(1)
+        == "6d21d9706b01a463a4b074717be1aa21b09145c68e791f4bef4e5396a537f312"
+    )
+    # NULL tenant maps to the "system" scope
+    assert (
+        m.chain_genesis(None)
+        == "be962fa3778b17b132b78d692a13909bf258a63eec630b120a82cd8ebe2d5a43"
+    )
+
+
+def test_chain_genesis_is_tenant_specific_and_deterministic():
+    import audit_merkle as m
+
+    assert m.chain_genesis(5) == m.chain_genesis(5)
+    assert m.chain_genesis(5) != m.chain_genesis(6)
+    assert m.chain_genesis("5") == m.chain_genesis(5)  # str/int agnostic
