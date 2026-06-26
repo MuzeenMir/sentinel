@@ -180,7 +180,7 @@ tracked forward item. Forward work is captured in
 | SUB-06 | D1 | Dead `/home/mir/...` conftest logger removed | Closed | #84 |
 | SEC-09 | D2 | `?token=` query-param JWT acceptance dropped (header-only) | Closed | #84 |
 | SEC-10 | D3 | Vault/AWS secret-backend fallback now loud / fail-closed by config | Closed | #84 |
-| SEC-08 | D4 | Per-event audit hash chain added | Closed | #90 |
+| SEC-08 | D4 | Per-event audit hash chain added (code sound; **review-trail** noted below) | Closed | #90 |
 | ops (Merkle dormancy) | D5 | CI fails loudly when audit-ledger anchor is dormant + activation runbook | Closed | #93 |
 
 ### Deliberately left open (tracked, not oversights)
@@ -197,3 +197,14 @@ tracked forward item. Forward work is captured in
 - **SEC-05 encryption.** `saml_configs`/`oidc_configs` columns remain plaintext because the tables
   are unused; routing `sp_private_key`/`client_secret` through `secret_crypto.encrypt()` lands when
   DB-backed SSO config actually ships.
+
+### Process note — D4 (SEC-08) review-trail
+
+The D4 *code* is sound (independently re-reviewed — see
+[`D4-marcus-retro-review-2026-06-26.md`](./D4-marcus-retro-review-2026-06-26.md)), but #90 was
+**admin-merged past a red `audit-schema-guard`** with no `Audit-Reviewed-by`/`Audit-Approved-by`
+trailers. The retro review is recorded honestly as **same-model** (Claude reviewing Claude-authored
+code): PASS on the merits, independence not satisfied. The cross-model-independence premise itself is
+no longer available (Codex/"Kai" retired) and was formally downgraded in
+[ADR-022](../adr/ADR-022-review-gate-cross-model-independence.md). So D4's *code* is Closed; its
+audit-*trail* is documented rather than retroactively greened — #90 stands as merged-via-admin-override.
