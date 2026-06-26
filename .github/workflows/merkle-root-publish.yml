@@ -50,17 +50,28 @@ jobs:
         id: cfg
         env:
           AUDIT_DATABASE_URL: ${{ secrets.AUDIT_DATABASE_URL }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           # The audit ledger DB connstring is an operational secret. Until it is
-          # set, this nightly cannot reach a ledger to anchor — that is a real
-          # gap in wedge #3 tamper-evidence, surfaced as a visible notice rather
-          # than a daily red X (a missing secret is not a build failure).
-          if [ -z "$AUDIT_DATABASE_URL" ]; then
-            echo "::notice title=Audit ledger not anchored::AUDIT_DATABASE_URL secret is unset — no reachable audit DB, so no signed Merkle root is published tonight. Wedge #3 tamper-evidence is NOT active until this secret is configured."
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-          else
+          # set, this job cannot reach a ledger to anchor — a real gap in wedge
+          # #3 tamper-evidence. Activation steps: docs/audit-ledger-activation.md.
+          if [ -n "$AUDIT_DATABASE_URL" ]; then
             echo "configured=true" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+          echo "configured=false" >> "$GITHUB_OUTPUT"
+          MSG="AUDIT_DATABASE_URL secret is unset — no reachable audit DB, so no signed Merkle root is published. Wedge #3 tamper-evidence is NOT active until this secret is configured (see sentinel-core/docs/audit-ledger-activation.md)."
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            # A human explicitly triggered this run to (re)publish or verify
+            # activation. A silent green would falsely imply the ledger was
+            # anchored, so fail loudly rather than no-op into success.
+            echo "::error title=Audit ledger not anchored::${MSG}"
+            exit 1
+          fi
+          # Scheduled nightly: a missing operational secret is not a build
+          # failure (no daily red X), but surface it as a warning — more visible
+          # than a notice so prolonged dormancy does not go unnoticed.
+          echo "::warning title=Audit ledger not anchored::${MSG}"
 
       - name: Build daily Merkle root
         if: steps.cfg.outputs.configured == 'true'
