@@ -18,5 +18,6 @@ Process: [ADR-000 — ADR process](ADR-000-adr-process.md).
 | [ADR-011](ADR-011-independent-review-gate.md) | Independent review gate (reframe of "two-person rule") | Accepted | 2026-05-31 |
 | [ADR-013](ADR-013-detection-opa.md) | OPA/Rego for detection rule evaluation | Proposed | 2026-06-01 |
 | [ADR-016](ADR-016-api-gateway-fastapi-runtime.md) | API gateway FastAPI runtime | Accepted | 2026-06-03 |
+| [ADR-022](ADR-022-review-gate-cross-model-independence.md) | Review gate: cross-model independence currently unavailable (amends ADR-011) | Proposed | 2026-06-26 |
 
 In-flight ADRs (001–010) are referenced by `docs/revamp/SDD-002.md`. Each must land as a standalone ADR file in this directory during Phase 0 per `docs/revamp/SDP-002.md`.

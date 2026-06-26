@@ -30,6 +30,10 @@ In practice the rule was unenforceable and was bypassed: audit-schema PRs (#46, 
 - **Residual gap:** `enforce_admins=false` (required for the GPG admin-squash merge workflow) means an admin can still bypass the `audit-schema-guard`. Making the gate absolute requires commit-signing so `enforce_admins=true` becomes viable — tracked separately, not in this ADR.
 - **Supersession:** this ADR is the operative definition. The "two-person rule" wording in `CLAUDE.md`, `CODEOWNERS`, `.github/pull_request_template.md`, and the revamp specs (`SRS-002`, `SDD-002`, `CLAUDE-DESIGN-WORKFLOW`) is reframed to "independent review gate" in the same PR. ADR-000 §5 is amended by this ADR (ADR-000 itself remains immutable per its own rule). Historical review records (e.g. `phase-0-critical-fixes.md`) are left as point-in-time records.
 
+### Addendum — 2026-06-26 (amended by ADR-022)
+
+The "**runs on a different model than the executor**" property in Decision §2 and the "Different-model review delivers real mistake-catching value now" line above are **no longer reliably available**: Codex and the "Kai" executor have been retired, leaving only one model family (Claude). **ADR-022** downgrades the claim accordingly — the gate is now *best-effort different-model, otherwise same-model with explicit disclosure in the `Audit-Reviewed-by` trailer*, and is **not** cross-model-independent. The `audit-schema-guard` mechanism (both trailers required) is unchanged. Per ADR-000 §7 this addendum does not edit the original Decision/Context; see ADR-022 for the operative rule.
+
 ## Alternatives considered
 
 - **Make a bot the "second person."** Rejected — an AI agent is automation, not an accountable human; claiming it as separation of duties is the exact false control this ADR removes.
