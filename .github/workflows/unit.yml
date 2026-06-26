@@ -48,6 +48,14 @@ jobs:
             -r auth-service/requirements.txt \
             -r api-gateway/requirements.txt \
             -r drl-engine/requirements.txt
+      - name: Generate fixture ML models (so pipeline integration tests run)
+        # SUB-05: test_integration_pipeline.py skips its model-loading /
+        # prediction tests when ai-engine/trained_models/ is empty (the repo
+        # ships real models out-of-band). Populate it with tiny synthetic
+        # fixtures so those tests actually execute in CI. Artefacts are
+        # disposable and never committed.
+        working-directory: sentinel-core
+        run: python -m training.generate_fixture_models
       - name: pytest (unit only, e2e excluded)
         working-directory: .
         env:
