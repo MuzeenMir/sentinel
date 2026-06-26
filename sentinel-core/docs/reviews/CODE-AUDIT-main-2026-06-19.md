@@ -180,7 +180,7 @@ tracked forward item. Forward work is captured in
 | SUB-06 | D1 | Dead `/home/mir/...` conftest logger removed | Closed | #84 |
 | SEC-09 | D2 | `?token=` query-param JWT acceptance dropped (header-only) | Closed | #84 |
 | SEC-10 | D3 | Vault/AWS secret-backend fallback now loud / fail-closed by config | Closed | #84 |
-| SEC-08 | D4 | Per-event audit hash chain added | Closed | #90 |
+| SEC-08 | D4 | Per-event audit hash chain added (code sound; **review-trail** closed separately — see process note below) | Closed | #90 |
 | ops (Merkle dormancy) | D5 | CI fails loudly when audit-ledger anchor is dormant + activation runbook | Closed | #93 |
 
 ### Deliberately left open (tracked, not oversights)
@@ -197,3 +197,13 @@ tracked forward item. Forward work is captured in
 - **SEC-05 encryption.** `saml_configs`/`oidc_configs` columns remain plaintext because the tables
   are unused; routing `sp_private_key`/`client_secret` through `secret_crypto.encrypt()` lands when
   DB-backed SSO config actually ships.
+
+### Process note — D4 (SEC-08) review-trail
+
+The D4 *code* is sound, but #90 was **admin-merged past a red `audit-schema-guard`** with no
+`Audit-Reviewed-by`/`Audit-Approved-by` trailers. Closing that audit-*trail* gap is tracked
+separately in **PR #94**: a retro independent review of D4 (recorded honestly as **same-model** —
+Claude reviewing Claude-authored code) plus **ADR-022**, which downgrades the gate's
+"different model than the executor" claim now that the cross-model reviewer (Codex/Kai) is retired.
+Merge #94 before/with this PR so those references resolve, and have the maintainer add
+`Audit-Approved-by: Mir` there.
