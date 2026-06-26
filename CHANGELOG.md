@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.0](https://github.com/MuzeenMir/sentinel/compare/v1.7.3...v1.8.0) (2026-06-26)
+
+
+### Features
+
+* **audit:** per-event audit hash chain (D4, SEC-08) ([#90](https://github.com/MuzeenMir/sentinel/issues/90)) ([503624b](https://github.com/MuzeenMir/sentinel/commit/503624b3d9a482ac6a09fd9519491cd07d617948))
+
 ## [1.7.3](https://github.com/MuzeenMir/sentinel/compare/v1.7.2...v1.7.3) (2026-06-24)
 
 
