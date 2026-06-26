@@ -147,3 +147,53 @@ Grouped into waves; each maps to the `.team/tickets/` process. No Criticals → 
 
 ### Suggested sequencing
 A1 → A2 → B2 (all S, immediate trust + honesty wins) → A3/A4 → A5/A6 → Wave B remainder → C → D.
+
+---
+
+## Remediation closure (2026-06-26)
+
+The remediation backlog above is preserved as the original audit record. This section records
+**what actually shipped** against it. As of 2026-06-26 the repository is at **v1.8.0** and the
+Wave A–D backlog is materially complete: every finding is either **Closed** in code, resolved
+**By-design** (the audit offered an explicit alternative, which was taken), or **Deferred** as a
+tracked forward item. Forward work is captured in
+[`next-steps-2026-06-26.md`](./next-steps-2026-06-26.md).
+
+| Finding(s) | Wave | Resolution | Status | Closing PR |
+|------------|------|-----------|--------|------------|
+| CI-01 | A1 | `audit-schema-guard` added to `branch-protection.json` required checks | Closed | #77 |
+| CI-04 | A2 | Blanket `tests?/`/`fixtures/` gitleaks allowlists removed; placeholder regexes retained | Closed | #77 |
+| SUB-03 | A3 | eBPF/HIDS degraded mode surfaced (`/health` `ebpf_degraded`; `/enforce` `dry_run`; port returns 202 "recorded") instead of faking `ok` | Closed | #77 |
+| SEC-01, SEC-02, SEC-03 | A4 | Prod overlay `cap_drop:[ALL]`+`no-new-privileges`+`read_only`; all images digest-pinned; `hardening-service` least-priv + ro `/etc` | Closed | #77 |
+| CI-02 | A5 | Red-team detector de-stubbed (intent-shaped regexes + held-out paraphrase corpus `injection_heldout.jsonl`) | Closed (code) | #77 |
+| CI-03 | A5 | Eval relabeled plumbing-only in workflow + `evals/run.py` docstrings; stub no longer presented as a quality gate | By-design | #77 |
+| SUB-01, SUB-02 | A6 | `detection_engine` + `plugins` marked EXPERIMENTAL/OFFLINE in module docstrings; `tests/test_plugins.py` added | By-design (alt taken) | #77 |
+| CI-05, CI-06, CI-08 | B1 | `integration-compose`, `e2e-smoke-api`, `e2e-smoke-ui`, `sbom`, `detections-validate` made required | Closed | #82 |
+| DOC-01..06, ARC-02, ARC-03 | B2/C5 | `CLAUDE.md` + `readme.md` synced to shipped reality | Closed | #78 |
+| SEC-04 | B3 | Admin RBAC added to `/api/v1/policies/auto-apply` | Closed | #79 |
+| CI-07 | B4 | Hashed lockfiles + `--require-hashes` installs; `lockfile-verify` required | Closed | #88, #89 |
+| SEC-06 | C1 | SCIM/SSO/update bodies validated; allow-list `UserRole` parsing | Closed | #86 |
+| SEC-05 | C2 | Encryption-at-rest claim wording corrected (columns stay plaintext until DB-backed SSO lands) | By-design (now) / Deferred (encryption) | #87 |
+| SEC-07 | C3 | `validate_compose_security.py` asserts `cap_drop`/`no-new-privileges`/digest-pinning | Closed | #83 |
+| SUB-04, SUB-05 | C4 | Scheduled CI runs `test_e2e_pipeline.py`; integration test gets a committed fixture model | Closed | #91 |
+| ARC-01 | C5 | 11→4+1 consolidation documented as not-yet-built (not marketed as done) | By-design | #78 |
+| SUB-06 | D1 | Dead `/home/mir/...` conftest logger removed | Closed | #84 |
+| SEC-09 | D2 | `?token=` query-param JWT acceptance dropped (header-only) | Closed | #84 |
+| SEC-10 | D3 | Vault/AWS secret-backend fallback now loud / fail-closed by config | Closed | #84 |
+| SEC-08 | D4 | Per-event audit hash chain added | Closed | #90 |
+| ops (Merkle dormancy) | D5 | CI fails loudly when audit-ledger anchor is dormant + activation runbook | Closed | #93 |
+
+### Deliberately left open (tracked, not oversights)
+
+- **A5.3 — red-team gate not a *required* check.** The detector is now meaningful (held-out corpus),
+  but `llm-gateway-redteam.yml` is **path-filtered** to `sentinel-core/backend/llm-gateway/**`. A
+  required path-filtered check would leave every non-LLM PR stuck on "Expected — waiting for status"
+  (the failure mode `audit-schema-guard` avoids by running on all PRs and exiting 0 when no guarded
+  path changes). Making it required requires restructuring the trigger first — tracked in the
+  next-steps roadmap. The **eval** gate (CI-03) is intentionally plumbing-only per its own header and
+  should stay non-required.
+- **A6.3 — `detection_engine`/`plugins` not wired to runtime.** The audit allowed "wire it **OR**
+  mark both offline/experimental"; the experimental-marker path was taken. Wiring is a forward item.
+- **SEC-05 encryption.** `saml_configs`/`oidc_configs` columns remain plaintext because the tables
+  are unused; routing `sp_private_key`/`client_secret` through `secret_crypto.encrypt()` lands when
+  DB-backed SSO config actually ships.
