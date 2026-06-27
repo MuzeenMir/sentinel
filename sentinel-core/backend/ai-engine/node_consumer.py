@@ -16,7 +16,7 @@ _INSERT_SQL = """
         (event_type, severity, score, pid, uid, comm, exe, hostname,
          source_event_id, summary, detail, status)
     VALUES
-        (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, 'new')
+        (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s)
 """
 
 
@@ -58,6 +58,7 @@ class NodeConsumer:
                     str(source_id),
                     verdict["summary"],
                     json.dumps(event),
+                    "new",
                 ),
             )
         conn.commit()
@@ -70,14 +71,19 @@ class NodeConsumer:
         written = 0
         for _stream, entries in resp or []:
             for msg_id, fields in entries:
-                raw = fields.get("event") or fields.get(b"event")
-                if isinstance(raw, bytes):
-                    raw = raw.decode()
-                event = json.loads(raw)
-                verdict = self.scorer.score(event)
-                if verdict["is_threat"]:
-                    self._insert_alert(conn, msg_id, event, verdict)
-                    written += 1
+                try:
+                    raw = fields.get("event") or fields.get(b"event")
+                    if isinstance(raw, bytes):
+                        raw = raw.decode()
+                    event = json.loads(raw)
+                    verdict = self.scorer.score(event)
+                    if verdict["is_threat"]:
+                        self._insert_alert(conn, msg_id, event, verdict)
+                        written += 1
+                except Exception as exc:
+                    logger.warning(
+                        "Skipping malformed message %s: %r", msg_id, exc
+                    )
                 self.redis.xack(self.stream, self.group, msg_id)
         return written
 
