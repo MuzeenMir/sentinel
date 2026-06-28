@@ -46,7 +46,7 @@ class NodeCollector:
         return count
 
     def tail(self, path: str = "/var/log/audit/audit.log", poll: float = 0.5) -> None:
-        with open(path, "r") as fh:
+        with open(path, "r", encoding="utf-8") as fh:
             fh.seek(0, os.SEEK_END)
             buf: list[str] = []
             while True:

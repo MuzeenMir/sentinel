@@ -64,17 +64,22 @@ def test_malicious_execve_becomes_node_alert(redis_client, pg_conn):
     written = consumer.process_once(pg_conn, block_ms=1000, count=10)
     assert written == 1
 
-    with pg_conn.cursor() as cur:
-        cur.execute(
-            "SELECT severity, comm, summary FROM node_alerts "
-            "WHERE source_event_id IS NOT NULL AND comm = 'nc' "
-            "ORDER BY id DESC LIMIT 1"
-        )
-        row = cur.fetchone()
-    assert row is not None
-    assert row[0] in ("high", "critical")
-    assert row[1] == "nc"
-
-    # cleanup
-    redis_client.delete(stream)
-    pg_conn.rollback()
+    try:
+        with pg_conn.cursor() as cur:
+            cur.execute(
+                "SELECT severity, comm, summary FROM node_alerts "
+                "WHERE detail->>'raw' LIKE %s ORDER BY id DESC LIMIT 1",
+                (f"%{marker}%",),
+            )
+            row = cur.fetchone()
+        assert row is not None
+        assert row[0] in ("high", "critical")
+        assert row[1] == "nc"
+    finally:
+        with pg_conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM node_alerts WHERE detail->>'raw' LIKE %s",
+                (f"%{marker}%",),
+            )
+        pg_conn.commit()
+        redis_client.delete(stream)
