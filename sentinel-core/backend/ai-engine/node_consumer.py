@@ -75,15 +75,19 @@ class NodeConsumer:
                     raw = fields.get("event") or fields.get(b"event")
                     if isinstance(raw, bytes):
                         raw = raw.decode()
+                    if raw is None:
+                        raise ValueError("missing 'event' field")
                     event = json.loads(raw)
                     verdict = self.scorer.score(event)
-                    if verdict["is_threat"]:
-                        self._insert_alert(conn, msg_id, event, verdict)
-                        written += 1
                 except Exception as exc:
                     logger.warning(
                         "Skipping malformed message %s: %r", msg_id, exc
                     )
+                    self.redis.xack(self.stream, self.group, msg_id)
+                    continue
+                if verdict["is_threat"]:
+                    self._insert_alert(conn, msg_id, event, verdict)  # propagates on DB failure -> NOT acked
+                    written += 1
                 self.redis.xack(self.stream, self.group, msg_id)
         return written
 

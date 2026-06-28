@@ -91,6 +91,26 @@ def test_poison_pill_acked_and_skipped():
     assert pending["pending"] == 0
 
 
+def test_db_failure_leaves_message_pending_and_raises():
+    """DB failure on INSERT must propagate (not swallowed) and NOT ack the message."""
+    r, c = _consumer()
+    r.xadd("node:events", {"event": json.dumps(
+        {"event_type": "execve", "comm": "nc", "exe": "/usr/bin/nc",
+         "args": ["nc", "-e", "/bin/sh"], "pid": 7, "uid": 0,
+         "hostname": "h", "timestamp": "2026-06-27T00:00:00+00:00", "raw": "x"})})
+    conn = FakeConn()
+
+    def boom():
+        raise Exception("PG down")
+
+    conn.commit = boom
+    import pytest
+    with pytest.raises(Exception, match="PG down"):
+        c.process_once(conn, block_ms=1)
+    pending = r.xpending("node:events", "node-detector")
+    assert pending["pending"] == 1  # threat message must NOT be acked
+
+
 def test_bytes_field_decode_writes_alert():
     """Bytes-mode redis (no decode_responses) must decode the event field correctly."""
     r = fakeredis.FakeStrictRedis()  # bytes responses, NOT decode_responses=True
