@@ -93,11 +93,7 @@ export const policyApi = {
 };
 
 export type ComplianceFrameworkId =
-  | "GDPR"
-  | "HIPAA"
-  | "PCI-DSS"
-  | "NIST"
-  | "SOC2";
+  "GDPR" | "HIPAA" | "PCI-DSS" | "NIST" | "SOC2";
 
 export const complianceApi = {
   getFrameworks: () => api.get("/api/v1/frameworks"),
