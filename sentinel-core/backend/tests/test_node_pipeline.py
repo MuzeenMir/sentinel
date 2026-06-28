@@ -3,7 +3,6 @@
 Requires a live Redis and PostgreSQL (the local docker-compose stack). Skips
 cleanly when they are unreachable, like test_e2e_pipeline.py.
 """
-import json
 import os
 import sys
 import uuid

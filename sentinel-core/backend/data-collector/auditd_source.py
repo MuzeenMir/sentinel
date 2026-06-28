@@ -74,7 +74,7 @@ def parse_event(lines: list[str]) -> dict | None:
             execve_line = line
     if syscall_kv_info.get("syscall", ("", False))[0] not in _EXECVE_SYSCALLS:
         return None
-    msg = next((l for l in lines if "msg=audit(" in l), "")
+    msg = next((ln for ln in lines if "msg=audit(" in ln), "")
     comm_val, comm_quoted = syscall_kv_info.get("comm", ("", True))
     exe_val, exe_quoted = syscall_kv_info.get("exe", ("", True))
     pid_val, _ = syscall_kv_info.get("pid", ("0", False))
