@@ -47,18 +47,22 @@ app.config["NETFLOW_PORT"] = int(os.environ.get("NETFLOW_PORT", "2055"))
 app.config["SFLOW_PORT"] = int(os.environ.get("SFLOW_PORT", "6343"))
 app.config["AI_ENGINE_URL"] = os.environ.get("AI_ENGINE_URL", "http://ai-engine:5003")
 
-# Initialize Kafka producer with error handling
-try:
-    producer = KafkaProducer(
-        bootstrap_servers=app.config["KAFKA_BOOTSTRAP_SERVERS"],
-        value_serializer=lambda x: json.dumps(x, default=str).encode("utf-8"),
-        compression_type="gzip",
-        acks="all",
-        retries=3,
-    )
-except Exception as e:
-    logging.warning(f"Kafka producer init failed: {e}. Running in standalone mode.")
-    producer = None
+# Bus selection: the offline node uses Redis streams; Kafka is legacy/distributed.
+BUS = os.environ.get("SENTINEL_BUS", "redis").lower()
+producer = None
+if BUS == "kafka":
+    try:
+        producer = KafkaProducer(
+            bootstrap_servers=app.config["KAFKA_BOOTSTRAP_SERVERS"],
+            value_serializer=lambda x: json.dumps(x, default=str).encode("utf-8"),
+            compression_type="gzip",
+            acks="all",
+            retries=3,
+        )
+    except Exception as e:
+        logging.warning(f"Kafka producer init failed: {e}. Running in standalone mode.")
+else:
+    logging.info("SENTINEL_BUS=%s — Kafka disabled (node path uses Redis streams)", BUS)
 
 # Initialize Redis
 redis_client = redis.from_url(app.config["REDIS_URL"])
