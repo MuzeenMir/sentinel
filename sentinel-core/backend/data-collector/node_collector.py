@@ -1,4 +1,5 @@
 """Tail auditd and publish normalized host events onto a Redis stream."""
+
 from __future__ import annotations
 
 import json

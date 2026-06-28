@@ -1,4 +1,5 @@
 """Shared PostgreSQL connection helper for node-path services."""
+
 from __future__ import annotations
 
 import os

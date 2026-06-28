@@ -3,6 +3,7 @@
 Requires a live Redis and PostgreSQL (the local docker-compose stack). Skips
 cleanly when they are unreachable, like test_e2e_pipeline.py.
 """
+
 import os
 import sys
 import uuid
@@ -51,14 +52,15 @@ def test_malicious_execve_becomes_node_alert(redis_client, pg_conn):
 
     collector = NodeCollector(redis_client, stream=stream)
     audit_lines = [
-        f'type=SYSCALL msg=audit(1700000000.1:1): syscall=59 pid=4242 uid=0 '
+        f"type=SYSCALL msg=audit(1700000000.1:1): syscall=59 pid=4242 uid=0 "
         f'comm="nc" exe="/usr/bin/nc" key="exec-{marker}"',
         'type=EXECVE msg=audit(1700000000.1:1): argc=3 a0="nc" a1="-e" a2="/bin/sh"',
     ]
     assert collector.feed_lines(audit_lines) == 1
 
-    consumer = NodeConsumer(redis_client, RuleScorer(), stream=stream,
-                            group=group, consumer="test")
+    consumer = NodeConsumer(
+        redis_client, RuleScorer(), stream=stream, group=group, consumer="test"
+    )
     consumer.ensure_group()
     written = consumer.process_once(pg_conn, block_ms=1000, count=10)
     assert written == 1

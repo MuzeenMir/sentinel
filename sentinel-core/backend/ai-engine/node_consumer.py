@@ -1,4 +1,5 @@
 """Consume host events from the Redis stream, score them, persist alerts."""
+
 from __future__ import annotations
 
 import json
@@ -65,8 +66,11 @@ class NodeConsumer:
 
     def process_once(self, conn, block_ms: int = 5000, count: int = 10) -> int:
         resp = self.redis.xreadgroup(
-            self.group, self.consumer, {self.stream: ">"},
-            count=count, block=block_ms,
+            self.group,
+            self.consumer,
+            {self.stream: ">"},
+            count=count,
+            block=block_ms,
         )
         written = 0
         for _stream, entries in resp or []:
@@ -80,13 +84,13 @@ class NodeConsumer:
                     event = json.loads(raw)
                     verdict = self.scorer.score(event)
                 except Exception as exc:
-                    logger.warning(
-                        "Skipping malformed message %s: %r", msg_id, exc
-                    )
+                    logger.warning("Skipping malformed message %s: %r", msg_id, exc)
                     self.redis.xack(self.stream, self.group, msg_id)
                     continue
                 if verdict["is_threat"]:
-                    self._insert_alert(conn, msg_id, event, verdict)  # propagates on DB failure -> NOT acked
+                    self._insert_alert(
+                        conn, msg_id, event, verdict
+                    )  # propagates on DB failure -> NOT acked
                     written += 1
                 self.redis.xack(self.stream, self.group, msg_id)
         return written

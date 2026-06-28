@@ -1,4 +1,5 @@
 """Pure auditd-record parsing for the offline node path. No I/O."""
+
 from __future__ import annotations
 
 import re

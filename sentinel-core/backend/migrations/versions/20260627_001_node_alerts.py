@@ -4,6 +4,7 @@ Revision ID: 20260627_001_node_alerts
 Revises: 20260624_001_audit_chain
 Create Date: 2026-06-27
 """
+
 from __future__ import annotations
 
 from typing import Union

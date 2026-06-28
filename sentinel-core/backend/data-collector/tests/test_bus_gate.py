@@ -14,6 +14,7 @@ if _dc_root not in sys.path:
 def test_kafka_disabled_on_node_bus(monkeypatch):
     monkeypatch.setenv("SENTINEL_BUS", "redis")
     import collector
+
     importlib.reload(collector)
     assert collector.BUS == "redis"
     assert collector.producer is None
@@ -27,6 +28,7 @@ def test_kafka_enabled_in_legacy_mode(monkeypatch):
     mock_producer = object()
     with patch("kafka.KafkaProducer", return_value=mock_producer) as mock_kp:
         import collector
+
         assert collector.BUS == "kafka"
         assert collector.producer is mock_producer
         mock_kp.assert_called_once()
@@ -35,6 +37,7 @@ def test_kafka_enabled_in_legacy_mode(monkeypatch):
 def test_kafka_disabled_when_bus_unset(monkeypatch):
     monkeypatch.delenv("SENTINEL_BUS", raising=False)
     import collector
+
     importlib.reload(collector)
     assert collector.BUS == "redis"
     assert collector.producer is None

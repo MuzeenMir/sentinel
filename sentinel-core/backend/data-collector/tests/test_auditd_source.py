@@ -1,11 +1,13 @@
 from auditd_source import parse_event, _parse_kv, _parse_msg_ts
 
 SYSCALL = (
-    'type=SYSCALL msg=audit(1700000000.123:4567): arch=c000003e syscall=59 '
-    'success=yes exit=0 ppid=1000 pid=1234 auid=0 uid=0 gid=0 '
+    "type=SYSCALL msg=audit(1700000000.123:4567): arch=c000003e syscall=59 "
+    "success=yes exit=0 ppid=1000 pid=1234 auid=0 uid=0 gid=0 "
     'comm="bash" exe="/usr/bin/bash" key="exec"'
 )
-EXECVE = 'type=EXECVE msg=audit(1700000000.123:4567): argc=3 a0="/bin/bash" a1="-c" a2="id"'
+EXECVE = (
+    'type=EXECVE msg=audit(1700000000.123:4567): argc=3 a0="/bin/bash" a1="-c" a2="id"'
+)
 
 
 def test_parse_kv_handles_quoted_values():
@@ -60,7 +62,9 @@ def test_hex_encoded_comm_is_decoded():
 
 
 def test_malformed_pid_uid_does_not_crash():
-    syscall = 'type=SYSCALL msg=audit(1.1:1): syscall=59 pid=abc uid=xyz comm="x" exe="/x"'
+    syscall = (
+        'type=SYSCALL msg=audit(1.1:1): syscall=59 pid=abc uid=xyz comm="x" exe="/x"'
+    )
     ev = parse_event([syscall])
     assert ev["pid"] == 0 and ev["uid"] == 0
 
