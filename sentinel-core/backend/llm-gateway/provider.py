@@ -22,6 +22,13 @@ from typing import Any, Optional
 # INFERENCE_PROVIDER values that route to the self-hosted adapter.
 _LOCAL_NAMES = {"local", "llama_cpp", "llamacpp", "self_hosted", "on_prem"}
 
+# The offline node's locked working default (see the production-pivot spec:
+# Qwen2.5-14B-Instruct on a local GPU via Ollama). Overridable per deployment
+# with LOCAL_LLM_MODEL (e.g. "qwen2.5:7b" for low-VRAM hosts). This is the
+# model name sent to the OpenAI-compatible endpoint; it must match the tag the
+# local server actually serves.
+NODE_DEFAULT_LOCAL_MODEL = "qwen2.5:14b-instruct"
+
 
 class ProviderRouter:
     """Selects and builds the inference client for the configured provider."""
@@ -59,6 +66,12 @@ class ProviderRouter:
             # a non-Anthropic endpoint.
             if "api_key" not in kwargs:
                 kwargs["api_key"] = source.get("LOCAL_LLM_API_KEY")
+            # Node model selection: default to the spec-locked Qwen, overridable
+            # per host with LOCAL_LLM_MODEL.
+            if "default_model" not in kwargs:
+                kwargs["default_model"] = (
+                    source.get("LOCAL_LLM_MODEL") or NODE_DEFAULT_LOCAL_MODEL
+                )
             return LocalLLMClient(**kwargs)
 
         from anthropic_client import AnthropicClient

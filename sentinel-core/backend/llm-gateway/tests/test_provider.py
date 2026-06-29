@@ -177,3 +177,22 @@ def test_local_provider_uses_its_own_key(monkeypatch):
     monkeypatch.setenv("LOCAL_LLM_API_KEY", "local-endpoint-key")
     client = ProviderRouter.from_env().build()
     assert client.api_key == "local-endpoint-key"
+
+
+# --- model selection: the node defaults to the spec-locked Qwen --------------
+
+
+def test_local_provider_defaults_to_qwen_node_model(monkeypatch):
+    monkeypatch.setenv("INFERENCE_PROVIDER", "local")
+    monkeypatch.setenv("LOCAL_LLM_BASE_URL", "http://ollama:11434")
+    monkeypatch.delenv("LOCAL_LLM_MODEL", raising=False)
+    client = ProviderRouter.from_env().build()
+    assert client.default_model == "qwen2.5:14b-instruct"
+
+
+def test_local_model_overridable_via_env(monkeypatch):
+    monkeypatch.setenv("INFERENCE_PROVIDER", "local")
+    monkeypatch.setenv("LOCAL_LLM_BASE_URL", "http://ollama:11434")
+    monkeypatch.setenv("LOCAL_LLM_MODEL", "qwen2.5:7b")  # low-VRAM fallback
+    client = ProviderRouter.from_env().build()
+    assert client.default_model == "qwen2.5:7b"
