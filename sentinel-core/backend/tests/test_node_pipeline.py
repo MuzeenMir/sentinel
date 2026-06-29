@@ -37,6 +37,7 @@ def pg_conn():
         conn = psycopg2.connect(DATABASE_URL)
     except Exception:
         pytest.skip(f"PostgreSQL not reachable at {DATABASE_URL}")
+        return  # unreachable (skip raises); proves conn is bound at yield below
     yield conn
     conn.close()
 
