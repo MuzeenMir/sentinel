@@ -49,7 +49,7 @@ def _registry(session, **cfg):
     return ToolRegistry(config=config, session=session, service_token="tok-123")
 
 
-def test_definitions_expose_four_tools_with_schemas():
+def test_definitions_expose_five_tools_with_schemas():
     reg = _registry(FakeSession())
     defs = reg.definitions()
     names = {d["name"] for d in defs}
@@ -57,6 +57,7 @@ def test_definitions_expose_four_tools_with_schemas():
         "get_threat_score",
         "get_audit_events",
         "get_enforcement_state",
+        "get_node_alerts",
         "propose_reversible_action",
     }
     for d in defs:
@@ -170,3 +171,139 @@ def test_valid_entity_id_with_safe_punctuation_allowed():
     out = reg.execute("get_threat_score", {"entity_id": "host-1.local_2"})
     assert out["ok"] is True
     assert session.calls and "host-1.local_2" in session.calls[0][1]
+
+
+# --- get_node_alerts: the analyst reads the local detector's output -----------
+# This tool reads the migration-owned node_alerts table directly (single-host,
+# offline). The DB is injected, so tests need neither psycopg2 nor a live PG.
+
+import uuid as _uuid  # noqa: E402
+from datetime import datetime, timezone  # noqa: E402
+from decimal import Decimal  # noqa: E402
+
+_NODE_COLS = [
+    ("id",),
+    ("alert_id",),
+    ("event_type",),
+    ("severity",),
+    ("score",),
+    ("pid",),
+    ("uid",),
+    ("comm",),
+    ("exe",),
+    ("hostname",),
+    ("source_event_id",),
+    ("summary",),
+    ("status",),
+    ("created_at",),
+]
+
+
+class _FakeNodeCursor:
+    def __init__(self, rows, sink):
+        self._rows = rows
+        self._sink = sink
+        self.description = _NODE_COLS
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def execute(self, sql, params=None):
+        self._sink.append((sql, params))
+
+    def fetchall(self):
+        return self._rows
+
+
+class _FakeNodeConn:
+    def __init__(self, rows, sink):
+        self._rows = rows
+        self._sink = sink
+        self.closed = False
+
+    def cursor(self):
+        return _FakeNodeCursor(self._rows, self._sink)
+
+    def close(self):
+        self.closed = True
+
+
+def _node_db(rows, sink, raise_exc=None):
+    def factory():
+        if raise_exc is not None:
+            raise raise_exc
+        return _FakeNodeConn(rows, sink)
+
+    return factory
+
+
+def _node_registry(rows=None, sink=None, raise_exc=None):
+    sink = sink if sink is not None else []
+    return ToolRegistry(
+        config={"ai_engine_url": "x", "api_gateway_url": "x", "policy_url": "x"},
+        session=FakeSession(),
+        service_token="t",
+        db_connect=_node_db(rows or [], sink, raise_exc),
+    )
+
+
+def _row(id_, severity, score, comm):
+    return (
+        id_,
+        _uuid.uuid4(),
+        "execve",
+        severity,
+        Decimal(str(score)),
+        4242,
+        0,
+        comm,
+        f"/usr/bin/{comm}",
+        "host-1",
+        "1.0:1",
+        f"offensive tool '{comm}'",
+        "new",
+        datetime(2026, 6, 27, 12, 0, tzinfo=timezone.utc),
+    )
+
+
+def test_get_node_alerts_returns_alerts_and_record_ids():
+    rows = [_row(2, "critical", 0.95, "nc"), _row(1, "high", 0.7, "socat")]
+    reg = _node_registry(rows=rows)
+    out = reg.execute("get_node_alerts", {})
+    assert out["ok"] is True
+    alerts = out["result"]["alerts"]
+    assert len(alerts) == 2
+    assert out["record_ids"] == ["node_alert:2", "node_alert:1"]
+    # non-JSON-native types are coerced for the model to read
+    assert alerts[0]["severity"] == "critical"
+    assert isinstance(alerts[0]["score"], float) and alerts[0]["score"] == 0.95
+    assert isinstance(alerts[0]["created_at"], str)
+    assert isinstance(alerts[0]["alert_id"], str)
+
+
+def test_get_node_alerts_severity_filter_parameterized_and_limit_capped():
+    sink = []
+    reg = _node_registry(rows=[_row(1, "critical", 0.95, "nc")], sink=sink)
+    out = reg.execute("get_node_alerts", {"severity": "critical", "limit": 9999})
+    assert out["ok"] is True
+    sql, params = sink[0]
+    assert "severity = %s" in sql.lower()
+    assert "critical" in params
+    assert params[-1] == 100  # limit capped
+
+
+def test_get_node_alerts_rejects_unknown_severity():
+    reg = _node_registry(rows=[])
+    out = reg.execute("get_node_alerts", {"severity": "pwned"})
+    assert out["ok"] is False
+    assert "severity" in out["error"]
+
+
+def test_get_node_alerts_fail_soft_on_db_error():
+    reg = _node_registry(raise_exc=RuntimeError("DATABASE_URL not set"))
+    out = reg.execute("get_node_alerts", {})
+    assert out["ok"] is False
+    assert out["record_ids"] == []

@@ -16,7 +16,7 @@ from __future__ import annotations
 import os
 import re
 import uuid
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from proposals import ProposalSigner
 
@@ -28,6 +28,27 @@ HTTP_TIMEOUT = 5.0
 # inject path traversal (``../``), a new path segment (``/``), a scheme/host
 # (``:``, ``@``), or query/whitespace — anti-SSRF / path-injection.
 _ENTITY_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
+
+# node_alerts is the migration-owned sink the host detector writes to. The
+# analyst reads it directly (single-host, offline — no inter-service HTTP hop).
+_NODE_ALERT_COLS = (
+    "id",
+    "alert_id",
+    "event_type",
+    "severity",
+    "score",
+    "pid",
+    "uid",
+    "comm",
+    "exe",
+    "hostname",
+    "source_event_id",
+    "summary",
+    "status",
+    "created_at",
+)
+_SEVERITY_ALLOW = {"critical", "high", "medium", "low", "info"}
+_NODE_ALERTS_MAX = 100
 
 
 class UnknownToolError(ValueError):
@@ -96,6 +117,25 @@ def _definitions() -> list[dict]:
             },
         },
         {
+            "name": "get_node_alerts",
+            "description": (
+                "Fetch recent host-detector alerts from the local node_alerts "
+                "table (severity, command, exe, score, summary) to triage. "
+                "Optionally filter by severity. Returns grounded record ids."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "limit": {"type": "integer", "default": 10},
+                    "severity": {
+                        "type": "string",
+                        "enum": ["critical", "high", "medium", "low", "info"],
+                    },
+                },
+                "required": [],
+            },
+        },
+        {
             "name": "propose_reversible_action",
             "description": (
                 "Draft a reversible enforcement action for a HUMAN to review and "
@@ -124,8 +164,13 @@ class ToolRegistry:
         config: Optional[dict] = None,
         session: Any = None,
         service_token: Optional[str] = None,
+        db_connect: Optional[Callable[[], Any]] = None,
     ):
         self.config = config or config_from_env()
+        # Injectable connection factory for the node_alerts read tool. Defaults to
+        # the shared _lib.db.connect (lazy import keeps psycopg2 off the import
+        # path for tests/HTTP-only callers).
+        self._db_connect = db_connect
         if session is None:
             import requests  # lazy: not needed when a session is injected
 
@@ -150,11 +195,19 @@ class ToolRegistry:
         resp.raise_for_status()
         return resp.json()
 
+    def _db(self):
+        if self._db_connect is not None:
+            return self._db_connect()
+        from _lib.db import connect  # lazy: only when a DB-backed tool runs
+
+        return connect()
+
     def execute(self, name: str, tool_input: dict) -> dict:
         handler = {
             "get_threat_score": self._threat_score,
             "get_audit_events": self._audit_events,
             "get_enforcement_state": self._enforcement_state,
+            "get_node_alerts": self._node_alerts,
             "propose_reversible_action": self._propose,
         }.get(name)
         if handler is None:
@@ -203,6 +256,49 @@ class ToolRegistry:
             "result": data,
             "record_ids": [f"enforce:{entity}"],
         }
+
+    def _node_alerts(self, args: dict) -> dict:
+        limit = max(1, min(int(args.get("limit", 10) or 10), _NODE_ALERTS_MAX))
+        severity = args.get("severity")
+        where = ""
+        params: list[Any] = []
+        if severity is not None:
+            if severity not in _SEVERITY_ALLOW:
+                raise InvalidEntityIdError(f"invalid severity: {severity!r}")
+            where = "WHERE severity = %s"
+            params.append(severity)
+        params.append(limit)
+        sql = (
+            f"SELECT {', '.join(_NODE_ALERT_COLS)} FROM node_alerts "
+            f"{where} ORDER BY id DESC LIMIT %s"
+        )
+        conn = self._db()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(sql, tuple(params))
+                rows = cur.fetchall()
+        finally:
+            conn.close()
+        alerts = [self._row_to_alert(r) for r in rows]
+        return {
+            "tool": "get_node_alerts",
+            "ok": True,
+            "result": {"alerts": alerts},
+            "record_ids": [f"node_alert:{a['id']}" for a in alerts],
+        }
+
+    @staticmethod
+    def _row_to_alert(row: Any) -> dict:
+        out: dict[str, Any] = dict(zip(_NODE_ALERT_COLS, row))
+        # Coerce non-JSON-native PG types (Decimal/UUID/datetime) to plain values
+        # so the model reads them and the grounding enforcer can cite them.
+        if out.get("score") is not None:
+            out["score"] = float(out["score"])
+        for key in ("alert_id", "created_at"):
+            val = out.get(key)
+            if val is not None and not isinstance(val, (str, int, float, bool)):
+                out[key] = val.isoformat() if hasattr(val, "isoformat") else str(val)
+        return out
 
     # --- propose tool (no network, never executed) ------------------------
 

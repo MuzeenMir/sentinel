@@ -47,11 +47,14 @@ PIPELINE_TIMEOUT = int(os.environ.get("PIPELINE_TIMEOUT", "60"))
 @pytest.fixture(scope="module")
 def auth_token() -> str:
     """Obtain a JWT access token from the auth service."""
-    resp = requests.post(
-        f"{AUTH_URL}/api/v1/auth/login",
-        json={"username": ADMIN_USER, "password": ADMIN_PASS},
-        timeout=10,
-    )
+    try:
+        resp = requests.post(
+            f"{AUTH_URL}/api/v1/auth/login",
+            json={"username": ADMIN_USER, "password": ADMIN_PASS},
+            timeout=10,
+        )
+    except requests.exceptions.RequestException as exc:
+        pytest.skip(f"Auth service not reachable at {AUTH_URL}: {exc}")
     if resp.status_code != 200:
         pytest.skip(f"Auth service login failed ({resp.status_code}): {resp.text}")
     data = resp.json()
@@ -71,7 +74,7 @@ def _wait_for_service(url: str, name: str, timeout: int = 30):
             r = requests.get(f"{url}/health", timeout=3)
             if r.status_code == 200:
                 return
-        except requests.exceptions.ConnectionError:
+        except requests.exceptions.RequestException:
             pass
         time.sleep(1)
     pytest.skip(f"{name} not reachable at {url}")
@@ -384,8 +387,7 @@ class TestFullPipeline:
             time.sleep(3)
 
         if not new_policy_found:
-            pytest.xfail(
-                "Full pipeline did not create a new policy within timeout. "
-                "This may indicate Flink or Kafka are not running. "
-                "Individual service tests above should still pass."
+            pytest.skip(
+                "Legacy distributed pipeline (Kafka/Flink/DRL) is retired on the "
+                "node path. Node-path coverage lives in test_node_pipeline.py."
             )

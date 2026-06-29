@@ -1,5 +1,6 @@
 # Test dependencies for backend services
 pytest==9.0.3
+fakeredis>=2.21
 
 # Shared runtime deps needed by tests (for service imports, fakes, etc.)
 Flask==3.1.3
