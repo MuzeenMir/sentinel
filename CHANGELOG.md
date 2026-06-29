@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.9.0](https://github.com/MuzeenMir/sentinel/compare/v1.8.1...v1.9.0) (2026-06-29)
+
+
+### Features
+
+* Month-1 offline-node detection spine (auditd -&gt; Redis -&gt; ai-engine -&gt; node_alerts) ([d60d1ff](https://github.com/MuzeenMir/sentinel/commit/d60d1ff289706441d39b4b7ff9cf0b6323791002))
+
+
+### Documentation
+
+* **audit:** note D4 review-trail gap in the remediation closure ([#97](https://github.com/MuzeenMir/sentinel/issues/97)) ([8d92461](https://github.com/MuzeenMir/sentinel/commit/8d92461ed90a9d613cd89f988f3228ae259a33f5))
+
 ## [1.8.1](https://github.com/MuzeenMir/sentinel/compare/v1.8.0...v1.8.1) (2026-06-26)
 
 
