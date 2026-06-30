@@ -26,7 +26,9 @@ from audit_logger import audit_log, AuditCategory  # noqa: E402
 from observability import configure_logging  # noqa: E402
 from metrics import init_metrics, POLICIES_APPLIED  # noqa: E402
 from _lib.net import bind_host  # noqa: E402
+from _lib.proposal_sig import NonceGuard, ProposalError  # noqa: E402
 from enforcement_actions import EnforcementActionStore  # noqa: E402
+from proposal_approval import verify_approved_proposal  # noqa: E402
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -49,6 +51,11 @@ app.config["USE_V2_REVERSIBLE_ENFORCEMENT"] = (
 )
 app.config["ENFORCEMENT_DEFAULT_TTL_SECONDS"] = int(
     os.environ.get("ENFORCEMENT_DEFAULT_TTL_SECONDS", "900")
+)
+# A self-protecting node has a single firewall adapter; copilot proposals are
+# enforced through it. Configurable so the same path serves other deploy shapes.
+app.config["ENFORCEMENT_DEFAULT_VENDOR"] = os.environ.get(
+    "ENFORCEMENT_DEFAULT_VENDOR", "iptables"
 )
 
 # Initialize Redis
@@ -101,6 +108,37 @@ def _record_reversible_enforcement(policy, vendor_name, rules, apply_result, dat
         },
     )
     return record
+
+
+# How a copilot's advisory action_type maps to a concrete firewall action.
+# On a single self-protecting host, "quarantine" == cut the entity off the box,
+# which the firewall expresses as a full DENY.
+_PROPOSAL_ACTION_MAP = {
+    "block": "DENY",
+    "quarantine": "DENY",
+    "rate_limit": "RATE_LIMIT",
+}
+
+
+def _rules_from_proposal(proposal):
+    """Translate a verified proposal into canonical firewall rules.
+
+    A proposal is entity-centric (``entity_id`` + ``action_type``); the firewall
+    adapter acts on network identifiers, so ``entity_id`` must be an IP/CIDR.
+    Raises ``ValueError`` if the action_type is unsupported or the entity is not
+    an enforceable network identifier (the caller turns that into a 4xx and
+    enforces nothing).
+    """
+    action = _PROPOSAL_ACTION_MAP.get(proposal.get("action_type"))
+    if action is None:
+        raise ValueError(f"unsupported action_type: {proposal.get('action_type')!r}")
+    return rule_generator.generate(
+        {
+            "name": f"copilot-{proposal.get('proposal_id', 'proposal')}",
+            "action": action,
+            "source": {"ip": proposal.get("entity_id")},
+        }
+    )
 
 
 @app.route("/health", methods=["GET"])
@@ -520,6 +558,145 @@ def confirm_enforcement_action(action_id):
     except Exception as e:
         logger.error(f"Confirm enforcement action error: {e}")
         return jsonify({"error": "Failed to confirm enforcement action"}), 500
+
+
+@app.route("/enforcement", methods=["POST"])
+@require_role("admin")
+def enforce_proposal():
+    """Enforce a copilot proposal after verified HUMAN approval.
+
+    This is the ONLY path from an advisory, signed proposal to a live firewall
+    action, and where the project's #1 hard constraint lives in code: no LLM
+    output reaches an adapter; an authenticated human admin approves; the
+    proposal is cryptographically verified (authentic, unexpired, single-use);
+    and the resulting action is TTL-bound and auto-reverted by the reaper.
+
+    The approver is the AUTHENTICATED admin identity, never a body field -- the
+    copilot has no admin session, so it cannot self-approve. Every verification
+    failure (forgery, replay, expiry, missing human) fails closed: no rule is
+    applied and no record is created. This route is intentionally always
+    reversible (it records regardless of USE_V2_REVERSIBLE_ENFORCEMENT) because a
+    proposal that advertises a TTL must actually be revertible.
+
+    Request body: ``{"proposal": {<signed proposal from the copilot>}}``
+    """
+    try:
+        data = request.get_json(silent=True) or {}
+        proposal = data.get("proposal")
+        if not isinstance(proposal, dict):
+            return jsonify({"error": "proposal object required"}), 400
+
+        approver = (getattr(g, "current_user", {}) or {}).get("username")
+        if not approver:
+            return jsonify({"error": "authenticated approver required"}), 403
+
+        # Verify authenticity + freshness + single-use AND a human approver.
+        # Raises before any enforcement; ApprovalError subclasses ProposalError.
+        try:
+            approval = verify_approved_proposal(
+                proposal,
+                approver=approver,
+                nonce_guard=NonceGuard(redis_client),
+            )
+        except ProposalError as exc:
+            logger.warning("Refusing enforcement: %s", exc)
+            return jsonify({"error": str(exc), "enforced": False}), 403
+
+        # Verified + human-approved -> translate to firewall rules. A proposal
+        # that can't be expressed as a network rule fails closed (not silently
+        # mis-enforced).
+        try:
+            rules = _rules_from_proposal(proposal)
+        except ValueError as exc:
+            logger.warning("Approved proposal is not enforceable: %s", exc)
+            return jsonify({"error": str(exc), "enforced": False}), 422
+
+        vendor_name = app.config["ENFORCEMENT_DEFAULT_VENDOR"]
+        vendor = vendor_factory.get_vendor(vendor_name)
+        if vendor is None:
+            return jsonify({"error": f"Unknown vendor: {vendor_name}"}), 500
+
+        apply_result = vendor.apply_rules(rules)
+        if not apply_result.get("success"):
+            # The adapter didn't apply anything, so there is nothing to make
+            # reversible -- fail closed without a dangling record.
+            logger.error(
+                "Enforcement adapter %s failed for %s: %s",
+                vendor_name,
+                proposal.get("proposal_id"),
+                apply_result,
+            )
+            return jsonify(
+                {"error": "enforcement adapter failed", "details": apply_result}
+            ), 502
+
+        # Record the reversible contract so the reaper rolls it back at TTL.
+        expires_at = datetime.now(timezone.utc) + timedelta(
+            seconds=_enforcement_ttl_seconds(proposal)
+        )
+        try:
+            record = enforcement_store.create_active_record(
+                policy_id=proposal["proposal_id"],
+                vendor_name=vendor_name,
+                rules=rules,
+                apply_result=apply_result,
+                expires_at=expires_at,
+                tenant_id=get_tenant_id(),
+            )
+        except Exception as exc:
+            # The rule is applied but its reversible record didn't persist, so
+            # the reaper would never roll it back. Compensate immediately --
+            # remove the just-applied rule rather than leave an un-revertible
+            # enforcement change. Best-effort; a failed rollback is logged loudly.
+            logger.error(
+                "Failed to record enforcement for %s; rolling back applied rule: %s",
+                proposal.get("proposal_id"),
+                exc,
+            )
+            try:
+                vendor.remove_rules(rules)
+            except Exception:
+                logger.exception(
+                    "Compensating rollback FAILED for %s -- manual review required",
+                    proposal.get("proposal_id"),
+                )
+            return jsonify({"error": "Failed to record enforcement"}), 500
+
+        audit_log(
+            AuditCategory.POLICY,
+            "enforcement_applied",
+            tenant_id=get_tenant_id(),
+            detail={
+                "action_id": record["action_id"],
+                "proposal_id": proposal["proposal_id"],
+                "approver": approval["approver"],
+                "entity_id": proposal.get("entity_id"),
+                "action_type": proposal.get("action_type"),
+                "vendor": vendor_name,
+                "expires_at": expires_at.isoformat(),
+                "rollback_state": "active",
+                "source": "copilot_proposal",
+            },
+        )
+
+        return jsonify(
+            {
+                "message": "Proposal enforced (reversible, TTL-bound)",
+                "enforcement_action": {
+                    "action_id": record["action_id"],
+                    "proposal_id": proposal["proposal_id"],
+                    "approver": approval["approver"],
+                    "entity_id": proposal.get("entity_id"),
+                    "action_type": proposal.get("action_type"),
+                    "expires_at": expires_at.isoformat(),
+                    "rollback_state": "active",
+                },
+            }
+        ), 201
+
+    except Exception as exc:
+        logger.error("Enforce proposal error: %s", exc)
+        return jsonify({"error": "Failed to enforce proposal"}), 500
 
 
 @app.route("/api/v1/rules/translate", methods=["POST"])
