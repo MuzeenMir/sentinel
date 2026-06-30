@@ -131,6 +131,61 @@ class EnforcementActionStore:
             cur.close()
             conn.close()
 
+    def get_active_for_entity(
+        self,
+        entity: str,
+        *,
+        tenant_id: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return active enforcement actions whose rules target ``entity``.
+
+        "Active" = not reverted and either confirmed-permanent or not yet expired.
+        Entities are matched on the rule ``source_ip`` (the firewall acts on
+        network identifiers). Read-only; used by the copilot's enforcement-state
+        read-back, so it never mutates rows.
+
+        Tenant scoping is enforced **explicitly in SQL** (``tenant_id IS NOT
+        DISTINCT FROM`` the caller's tenant), not solely via RLS: a single host
+        connects as the table owner, which bypasses row-level security, so an
+        entity (a *global* IP) would otherwise expose other tenants' enforcement
+        actions. ``None`` means the single-tenant NULL tenant and matches only
+        NULL-tenant rows -- never "all tenants" -- so a missing tenant fails
+        closed against cross-tenant disclosure rather than leaking.
+        """
+        conn = self._connect()
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        try:
+            if tenant_id is not None:
+                cur.execute(
+                    "SELECT set_config('app.tenant_id', %(tenant_id)s, true)",
+                    {"tenant_id": str(tenant_id)},
+                )
+            cur.execute(
+                """
+                SELECT action_id, tenant_id, policy_id, vendor_name, rules,
+                       expires_at, rollback_state, confirmed_permanent
+                FROM enforcement_actions
+                WHERE rollback_state IN ('active', 'confirmed')
+                  AND tenant_id IS NOT DISTINCT FROM %(tenant_id)s
+                  AND (
+                      confirmed_permanent
+                      OR expires_at IS NULL
+                      OR expires_at > NOW()
+                  )
+                  AND EXISTS (
+                      SELECT 1
+                      FROM jsonb_array_elements(rules) AS r
+                      WHERE r->>'source_ip' = %(entity)s
+                  )
+                ORDER BY created_at DESC
+                """,
+                {"entity": entity, "tenant_id": tenant_id},
+            )
+            return [dict(row) for row in cur.fetchall()]
+        finally:
+            cur.close()
+            conn.close()
+
     def claim_expired_actions(self, *, limit: int = 100) -> list[dict[str, Any]]:
         conn = self._connect()
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)

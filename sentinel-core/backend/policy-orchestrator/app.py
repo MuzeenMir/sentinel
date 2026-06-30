@@ -6,6 +6,7 @@ Supports multiple firewall vendors and provides policy validation,
 conflict detection, and rollback capabilities.
 """
 
+import hmac
 import os
 import sys
 import logging
@@ -62,6 +63,23 @@ app.config["ENFORCEMENT_DEFAULT_VENDOR"] = os.environ.get(
 redis_client = redis.from_url(app.config["REDIS_URL"], decode_responses=True)
 
 logger = logging.getLogger(__name__)
+
+# The copilot (llm-gateway) reads enforcement state with the internal service
+# token, the same header ai-engine / api-gateway accept -- not a JWT.
+SERVICE_TOKEN_HEADER = "X-Internal-Service-Token"
+
+
+def _verify_service_token() -> bool:
+    """True when the caller presents the valid internal service token.
+
+    Fail closed when unconfigured (T-013): an empty expected token never matches,
+    so a missing secret denies rather than admits every caller.
+    """
+    expected = os.environ.get("INTERNAL_SERVICE_TOKEN", "")
+    if not expected:
+        return False
+    return hmac.compare_digest(request.headers.get(SERVICE_TOKEN_HEADER, ""), expected)
+
 
 # Initialize components
 policy_engine = PolicyEngine(redis_client)
@@ -139,6 +157,49 @@ def _rules_from_proposal(proposal):
             "source": {"ip": proposal.get("entity_id")},
         }
     )
+
+
+def _enforcement_state_view(entity, rows):
+    """Summarise active enforcement rows for an entity into a copilot read-back.
+
+    A single host has no distinct quarantine zone, so block/quarantine both apply
+    a DENY (-> "blocked"); RATE_LIMIT -> "rate_limited". A full block dominates a
+    rate-limit when both are present.
+    """
+    now = datetime.now(timezone.utc)
+    actions = []
+    state = "none"
+    for row in rows:
+        rule_actions = {
+            str(r.get("action", "")).upper() for r in (row.get("rules") or [])
+        }
+        action_state = "rate_limited" if rule_actions == {"RATE_LIMIT"} else "blocked"
+        if action_state == "blocked" or state == "none":
+            state = action_state
+        expires_at = row.get("expires_at")
+        ttl_remaining = (
+            max(0, int((expires_at - now).total_seconds()))
+            if expires_at is not None
+            else None
+        )
+        actions.append(
+            {
+                "action_id": row.get("action_id"),
+                "policy_id": row.get("policy_id"),
+                "vendor": row.get("vendor_name"),
+                "rollback_state": row.get("rollback_state"),
+                "confirmed_permanent": row.get("confirmed_permanent"),
+                "expires_at": expires_at.isoformat() if expires_at else None,
+                "ttl_seconds_remaining": ttl_remaining,
+                "state": action_state,
+            }
+        )
+    return {
+        "entity": entity,
+        "state": state,
+        "active": bool(actions),
+        "actions": actions,
+    }
 
 
 @app.route("/health", methods=["GET"])
@@ -697,6 +758,28 @@ def enforce_proposal():
     except Exception as exc:
         logger.error("Enforce proposal error: %s", exc)
         return jsonify({"error": "Failed to enforce proposal"}), 500
+
+
+@app.route("/enforcement/<entity>", methods=["GET"])
+def get_enforcement_state(entity):
+    """Read the current enforcement state for an entity (copilot read-back).
+
+    Authenticated with the internal service token -- the copilot calls this, not
+    a JWT user. Read-only: returns whether the entity is currently blocked /
+    rate-limited / none, plus any active reversible action and its remaining TTL,
+    so the analyst can ground its answers and avoid re-proposing what's already
+    enforced. Pairs with ``POST /enforcement`` (the write path).
+    """
+    if not _verify_service_token():
+        return jsonify({"error": "internal service token required"}), 401
+    try:
+        rows = enforcement_store.get_active_for_entity(
+            entity, tenant_id=get_tenant_id()
+        )
+        return jsonify(_enforcement_state_view(entity, rows)), 200
+    except Exception as exc:
+        logger.error("Get enforcement state error for %s: %s", entity, exc)
+        return jsonify({"error": "Failed to read enforcement state"}), 500
 
 
 @app.route("/api/v1/rules/translate", methods=["POST"])

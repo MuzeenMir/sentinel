@@ -14,6 +14,7 @@ fails CLOSED with nothing enforced.
 """
 
 import types
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -68,6 +69,8 @@ class _FakeVendorFactory:
 class _FakeStore:
     def __init__(self):
         self.created: list[dict] = []
+        self.entity_rows: list[dict] = []
+        self.queried: list = []
 
     def create_active_record(self, **kwargs):
         self.created.append(kwargs)
@@ -78,6 +81,10 @@ class _FakeStore:
             "vendor_name": kwargs["vendor_name"],
             "rollback_state": "active",
         }
+
+    def get_active_for_entity(self, entity, *, tenant_id=None):
+        self.queried.append((entity, tenant_id))
+        return list(self.entity_rows)
 
 
 @pytest.fixture
@@ -92,6 +99,14 @@ def admin_user(monkeypatch):
 @pytest.fixture
 def signing_env(monkeypatch):
     monkeypatch.setenv("COPILOT_PROPOSAL_SIGNING_KEY", KEY.decode())
+
+
+@pytest.fixture
+def service_token(monkeypatch):
+    # The copilot reads enforcement state with the internal service token, not a
+    # JWT -- the read route authenticates the same way ai-engine / api-gateway do.
+    monkeypatch.setenv("INTERNAL_SERVICE_TOKEN", "svc-secret")
+    return "svc-secret"
 
 
 @pytest.fixture
@@ -137,6 +152,25 @@ def _signed_proposal(now=None, **over):
 def _post(client, proposal, token="t"):
     headers = {"Authorization": f"Bearer {token}"} if token else {}
     return client.post("/enforcement", json={"proposal": proposal}, headers=headers)
+
+
+def _get_state(client, entity, token="svc-secret"):
+    headers = {"X-Internal-Service-Token": token} if token else {}
+    return client.get(f"/enforcement/{entity}", headers=headers)
+
+
+def _active_row(entity, action="DENY", **over):
+    row = {
+        "action_id": "enf_x",
+        "policy_id": "proposal:1",
+        "vendor_name": "iptables",
+        "rules": [{"action": action, "source_ip": entity}],
+        "expires_at": datetime.now(timezone.utc) + timedelta(seconds=600),
+        "rollback_state": "active",
+        "confirmed_permanent": False,
+    }
+    row.update(over)
+    return row
 
 
 def _audit_detail(fakes, event):
@@ -286,3 +320,79 @@ def test_missing_proposal_body_is_rejected(client, admin_user, fakes):
 
     assert resp.status_code == 400
     assert fakes.store.created == []
+
+
+# --- GET /enforcement/<entity> : the copilot's read-back of live enforcement ---
+
+
+def test_get_enforcement_state_reports_active_block(client, service_token, fakes):
+    fakes.store.entity_rows = [_active_row("203.0.113.5")]
+
+    resp = _get_state(client, "203.0.113.5")
+
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["entity"] == "203.0.113.5"
+    assert body["state"] == "blocked"
+    assert body["active"] is True
+    assert body["actions"][0]["action_id"] == "enf_x"
+    assert body["actions"][0]["ttl_seconds_remaining"] > 0
+    # the store was queried for exactly this entity
+    assert fakes.store.queried[0][0] == "203.0.113.5"
+
+
+def test_get_enforcement_state_is_none_when_no_active_actions(
+    client, service_token, fakes
+):
+    fakes.store.entity_rows = []
+
+    resp = _get_state(client, "203.0.113.5")
+
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["state"] == "none"
+    assert body["active"] is False
+    assert body["actions"] == []
+
+
+def test_get_enforcement_state_reports_rate_limited(client, service_token, fakes):
+    fakes.store.entity_rows = [_active_row("203.0.113.9", action="RATE_LIMIT")]
+
+    resp = _get_state(client, "203.0.113.9")
+
+    assert resp.status_code == 200
+    assert resp.get_json()["state"] == "rate_limited"
+
+
+def test_get_enforcement_state_requires_service_token(client, service_token, fakes):
+    fakes.store.entity_rows = [_active_row("203.0.113.5")]
+
+    resp = _get_state(client, "203.0.113.5", token=None)
+
+    assert resp.status_code == 401
+    # no enforcement state is leaked to an unauthenticated caller
+    assert fakes.store.queried == []
+
+
+def test_get_enforcement_state_rejects_a_bad_service_token(
+    client, service_token, fakes
+):
+    resp = _get_state(client, "203.0.113.5", token="wrong-token")
+
+    assert resp.status_code == 401
+    assert fakes.store.queried == []
+
+
+def test_get_enforcement_state_scopes_the_read_to_the_request_tenant(
+    client, service_token, fakes, monkeypatch
+):
+    # The route must forward the request's tenant to the store so the read is
+    # scoped to it -- an entity (a global IP) must never expose another tenant's
+    # enforcement actions. (SQL enforces the actual isolation; here we prove the
+    # tenant context is propagated rather than dropped.)
+    monkeypatch.setattr(app_module, "get_tenant_id", lambda: 7)
+    fakes.store.entity_rows = []
+
+    _get_state(client, "203.0.113.5")
+
+    assert fakes.store.queried == [("203.0.113.5", 7)]
