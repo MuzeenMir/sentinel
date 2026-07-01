@@ -26,16 +26,15 @@ KEY = b"test-enforce-secret"
 
 
 class _FakeRedis:
-    """Minimal stand-in for the Redis client NonceGuard needs (incr + expire)."""
+    """Minimal stand-in for the Redis client NonceGuard needs (atomic SET NX EX)."""
 
     def __init__(self):
-        self.store: dict[str, int] = {}
+        self.store: dict[str, str] = {}
 
-    def incr(self, key):
-        self.store[key] = self.store.get(key, 0) + 1
-        return self.store[key]
-
-    def expire(self, key, ttl):
+    def set(self, key, value, ex=None, nx=False):
+        if nx and key in self.store:
+            return None
+        self.store[key] = value
         return True
 
 
@@ -320,6 +319,39 @@ def test_missing_proposal_body_is_rejected(client, admin_user, fakes):
 
     assert resp.status_code == 400
     assert fakes.store.created == []
+
+
+def test_audit_precedes_enforcement_side_effects(
+    client, admin_user, signing_env, fakes, monkeypatch
+):
+    # T-031 audit-then-act: if the audit write fails, no firewall rule is applied
+    # and no reversible record is created (audit must precede the side effects).
+    def _boom(*a, **k):
+        raise RuntimeError("audit backend down")
+
+    monkeypatch.setattr(app_module, "audit_log", _boom)
+
+    resp = _post(client, _signed_proposal())
+
+    assert resp.status_code == 500
+    assert fakes.vendor.applied == []
+    assert fakes.store.created == []
+
+
+def test_enforcement_record_is_scoped_to_the_admin_tenant(
+    client, signing_env, fakes, monkeypatch
+):
+    # @require_tenant means the reversible record is tagged with the admin's JWT
+    # tenant, not the single-tenant default.
+    monkeypatch.setattr(
+        auth_middleware,
+        "_verify_token",
+        lambda t: {"username": "mir", "role": "admin", "tenant_id": 5},
+    )
+
+    _post(client, _signed_proposal())
+
+    assert fakes.store.created[0]["tenant_id"] == 5
 
 
 # --- GET /enforcement/<entity> : the copilot's read-back of live enforcement ---

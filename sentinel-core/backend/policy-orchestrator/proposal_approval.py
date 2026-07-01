@@ -31,8 +31,8 @@ def verify_approved_proposal(
     proposal: dict,
     *,
     approver: Any,
+    nonce_guard: Any,
     key: Optional[bytes] = None,
-    nonce_guard: Any = None,
     now: Optional[float] = None,
 ) -> dict:
     """Return an approval record, or raise ``ProposalError``/``ApprovalError``.
@@ -47,9 +47,15 @@ def verify_approved_proposal(
     # 2. Authenticity + freshness. Raises on tamper / expiry / wrong key /
     #    missing signature — BEFORE any nonce is spent.
     ProposalSigner(key).verify(proposal, now=now)
-    # 3. Single-use. Reached only once the signature is proven, so a forged
+    # 3. Single-use, and MANDATORY. Replay protection is a fail-closed guarantee,
+    #    not an opt-in, so the guard is required rather than defaulted -- a caller
+    #    cannot skip it. Reached only once the signature is proven, so a forged
     #    proposal can never burn a victim's nonce.
-    if nonce_guard is not None and not nonce_guard.consume(proposal.get("nonce", "")):
+    if nonce_guard is None:
+        raise ApprovalError(
+            "nonce_guard is required; replay protection cannot be skipped"
+        )
+    if not nonce_guard.consume(proposal.get("nonce", "")):
         raise ApprovalError("proposal already used (replay)")
     return {
         "approved": True,

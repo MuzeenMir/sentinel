@@ -22,10 +22,17 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 import os
 import time
 import uuid
 from typing import Optional
+
+logger = logging.getLogger(__name__)
+
+# Warn at most once if we fall back to the shared internal service token as the
+# signing key (see signing_key()).
+_warned_key_fallback = False
 
 # Fields bound by the signature. ``rationale`` and other display-only fields are
 # intentionally excluded so UI text tweaks don't invalidate a signature, but
@@ -45,10 +52,28 @@ class ProposalError(ValueError):
 
 
 def signing_key() -> bytes:
-    key = os.environ.get("COPILOT_PROPOSAL_SIGNING_KEY") or os.environ.get(
-        "INTERNAL_SERVICE_TOKEN", ""
-    )
-    return key.encode()
+    """Return the HMAC key for proposal signing/verification.
+
+    Prefers a dedicated ``COPILOT_PROPOSAL_SIGNING_KEY``. Falling back to the
+    broadly-shared ``INTERNAL_SERVICE_TOKEN`` means any holder of that token
+    (ai-engine, api-gateway, the enforcement read route) could forge a proposal
+    signature, so the fallback is warned about (once) rather than silent. Deploy
+    a distinct ``COPILOT_PROPOSAL_SIGNING_KEY`` in multi-service environments.
+    """
+    global _warned_key_fallback
+    explicit = os.environ.get("COPILOT_PROPOSAL_SIGNING_KEY")
+    if explicit:
+        return explicit.encode()
+    fallback = os.environ.get("INTERNAL_SERVICE_TOKEN", "")
+    if fallback and not _warned_key_fallback:
+        _warned_key_fallback = True
+        logger.warning(
+            "COPILOT_PROPOSAL_SIGNING_KEY is not set; falling back to the shared "
+            "INTERNAL_SERVICE_TOKEN as the proposal-signing key. Any holder of "
+            "that token could forge a proposal signature -- provision a distinct "
+            "COPILOT_PROPOSAL_SIGNING_KEY."
+        )
+    return fallback.encode()
 
 
 def _canonical(proposal: dict) -> bytes:
@@ -101,7 +126,7 @@ class NonceGuard:
 
     def consume(self, nonce: str) -> bool:
         key = f"copilot:nonce:{nonce}"
-        count = self.redis.incr(key)
-        if count == 1:
-            self.redis.expire(key, self.ttl)
-        return count == 1
+        # Atomic set-if-absent with TTL: returns True only on first use. A single
+        # SET NX EX avoids the prior incr-then-expire race, which could leave a
+        # nonce key with no expiry if the process died between the two calls.
+        return bool(self.redis.set(key, "1", nx=True, ex=self.ttl))

@@ -39,7 +39,9 @@ def _signed(now: float = 1000, **over):
 
 
 def test_valid_signed_and_approved_proposal_passes():
-    out = verify_approved_proposal(_signed(), approver="mir", key=KEY, now=1000)
+    out = verify_approved_proposal(
+        _signed(), approver="mir", key=KEY, nonce_guard=_FakeNonce(), now=1000
+    )
     assert out["approved"] is True
     assert out["approver"] == "mir"
     assert out["proposal_id"] == "proposal:1"
@@ -48,7 +50,9 @@ def test_valid_signed_and_approved_proposal_passes():
 def test_missing_human_approver_is_rejected():
     # The copilot/LLM cannot self-approve enforcement.
     with pytest.raises(ApprovalError):
-        verify_approved_proposal(_signed(), approver="", key=KEY, now=1000)
+        verify_approved_proposal(
+            _signed(), approver="", key=KEY, nonce_guard=_FakeNonce(), now=1000
+        )
 
 
 def test_forged_proposal_is_rejected_and_nonce_not_consumed():
@@ -76,4 +80,20 @@ def test_replay_is_rejected():
 
 def test_expired_proposal_is_rejected():
     with pytest.raises(ProposalError):
-        verify_approved_proposal(_signed(now=1000), approver="mir", key=KEY, now=1901)
+        verify_approved_proposal(
+            _signed(now=1000),
+            approver="mir",
+            key=KEY,
+            nonce_guard=_FakeNonce(),
+            now=1901,
+        )
+
+
+def test_nonce_guard_is_required():
+    # The single-use replay gate is mandatory: a caller cannot skip it by
+    # omitting or nulling the nonce_guard. The module docstring promises this is
+    # fail-closed, so None must raise rather than silently return success.
+    with pytest.raises(ApprovalError):
+        verify_approved_proposal(
+            _signed(), approver="mir", key=KEY, nonce_guard=None, now=1000
+        )

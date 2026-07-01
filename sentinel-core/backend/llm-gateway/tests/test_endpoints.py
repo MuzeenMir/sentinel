@@ -251,7 +251,7 @@ def test_propose_rejects_entity_id_path_injection(app_module, monkeypatch):
     assert rv.status_code == 400
 
 
-def test_confirm_accepts_valid_then_rejects_replay(app_module, monkeypatch):
+def test_confirm_is_verify_only_and_does_not_consume_the_nonce(app_module, monkeypatch):
     monkeypatch.setenv("COPILOT_PROPOSAL_SIGNING_KEY", "k")
     monkeypatch.setattr(app_module, "audit_sink", lambda **k: None)
     c = app_module.app.test_client()
@@ -266,8 +266,13 @@ def test_confirm_accepts_valid_then_rejects_replay(app_module, monkeypatch):
     assert ok.status_code == 200
     assert ok.get_json()["confirmed"] is True
 
-    replay = c.post("/copilot/confirm", json={"proposal": proposal})
-    assert replay.status_code == 409  # single-use nonce already consumed
+    # confirm is advisory validation only and must NOT consume the single-use
+    # nonce -- the enforcement boundary (policy-orchestrator POST /enforcement)
+    # owns single-use. Consuming here too would double-spend it and make every
+    # real confirm->enforce call fail as a replay. So a repeat still validates.
+    again = c.post("/copilot/confirm", json={"proposal": proposal})
+    assert again.status_code == 200
+    assert again.get_json()["confirmed"] is True
 
 
 def test_confirm_rejects_tampered_proposal(app_module, monkeypatch):

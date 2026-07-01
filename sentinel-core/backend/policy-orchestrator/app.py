@@ -623,6 +623,7 @@ def confirm_enforcement_action(action_id):
 
 @app.route("/enforcement", methods=["POST"])
 @require_role("admin")
+@require_tenant
 def enforce_proposal():
     """Enforce a copilot proposal after verified HUMAN approval.
 
@@ -676,6 +677,21 @@ def enforce_proposal():
         vendor = vendor_factory.get_vendor(vendor_name)
         if vendor is None:
             return jsonify({"error": f"Unknown vendor: {vendor_name}"}), 500
+
+        # T-031 audit-then-act: record the authorized enforcement BEFORE any
+        # firewall side effect. If this audit write fails, nothing is applied and
+        # no record is created (mirrors the create_policy() ordering).
+        audit_log(
+            AuditCategory.POLICY,
+            "enforcement_authorized",
+            tenant_id=get_tenant_id(),
+            detail={
+                "proposal_id": proposal["proposal_id"],
+                "approver": approval["approver"],
+                "entity_id": proposal.get("entity_id"),
+                "action_type": proposal.get("action_type"),
+            },
+        )
 
         apply_result = vendor.apply_rules(rules)
         if not apply_result.get("success"):
