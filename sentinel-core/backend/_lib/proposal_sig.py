@@ -88,6 +88,8 @@ def _canonical(proposal: dict) -> bytes:
 
 def sign(proposal: dict, key: Optional[bytes] = None) -> str:
     key = signing_key() if key is None else key
+    if not key:
+        raise ProposalError("no signing key configured")
     return hmac.new(key, _canonical(proposal), hashlib.sha256).hexdigest()
 
 

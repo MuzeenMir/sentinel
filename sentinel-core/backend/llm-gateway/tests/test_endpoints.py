@@ -225,6 +225,7 @@ def test_ask_unknown_session_404(app_module, monkeypatch):
 
 
 def test_propose_returns_unexecuted_reversible_draft(app_module, monkeypatch):
+    monkeypatch.setenv("COPILOT_PROPOSAL_SIGNING_KEY", "k")
     monkeypatch.setattr(app_module, "audit_sink", lambda **k: None)
     rv = app_module.app.test_client().post(
         "/copilot/propose",

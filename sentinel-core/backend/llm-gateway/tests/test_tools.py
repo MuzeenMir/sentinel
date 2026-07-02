@@ -101,7 +101,8 @@ def test_get_enforcement_state_calls_policy_orchestrator():
     assert out["result"]["state"] == "blocked"
 
 
-def test_propose_action_makes_no_http_call_and_is_not_executed():
+def test_propose_action_makes_no_http_call_and_is_not_executed(monkeypatch):
+    monkeypatch.setenv("COPILOT_PROPOSAL_SIGNING_KEY", "k")
     session = FakeSession()  # .post raises if called
     reg = _registry(session)
 
