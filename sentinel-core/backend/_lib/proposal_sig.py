@@ -10,7 +10,7 @@ human-confirmed proposal, not from raw LLM output.
 Each draft carries:
 
 * an HMAC-SHA256 ``signature`` over its canonical security-relevant fields,
-* a single-use ``nonce`` (consumed at confirm time via Redis), and
+* a single-use ``nonce`` (consumed once, at enforcement time, via Redis), and
 * an ``issued_at`` timestamp checked against ``ttl_seconds``.
 
 Verification re-checks all three. None of this executes anything — it only
@@ -19,6 +19,7 @@ proves a draft is authentic, unexpired, and not already used.
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import hmac
 import json
@@ -30,9 +31,17 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-# Warn at most once if we fall back to the shared internal service token as the
-# signing key (see signing_key()).
-_warned_key_fallback = False
+
+@functools.lru_cache(maxsize=1)
+def _warn_signing_key_fallback() -> None:
+    """Log the shared-token signing-key fallback once per process."""
+    logger.warning(
+        "COPILOT_PROPOSAL_SIGNING_KEY is not set; falling back to the shared "
+        "INTERNAL_SERVICE_TOKEN as the proposal-signing key. Any holder of that "
+        "token could forge a proposal signature -- provision a distinct "
+        "COPILOT_PROPOSAL_SIGNING_KEY."
+    )
+
 
 # Fields bound by the signature. ``rationale`` and other display-only fields are
 # intentionally excluded so UI text tweaks don't invalidate a signature, but
@@ -60,19 +69,12 @@ def signing_key() -> bytes:
     signature, so the fallback is warned about (once) rather than silent. Deploy
     a distinct ``COPILOT_PROPOSAL_SIGNING_KEY`` in multi-service environments.
     """
-    global _warned_key_fallback
     explicit = os.environ.get("COPILOT_PROPOSAL_SIGNING_KEY")
     if explicit:
         return explicit.encode()
     fallback = os.environ.get("INTERNAL_SERVICE_TOKEN", "")
-    if fallback and not _warned_key_fallback:
-        _warned_key_fallback = True
-        logger.warning(
-            "COPILOT_PROPOSAL_SIGNING_KEY is not set; falling back to the shared "
-            "INTERNAL_SERVICE_TOKEN as the proposal-signing key. Any holder of "
-            "that token could forge a proposal signature -- provision a distinct "
-            "COPILOT_PROPOSAL_SIGNING_KEY."
-        )
+    if fallback:
+        _warn_signing_key_fallback()
     return fallback.encode()
 
 

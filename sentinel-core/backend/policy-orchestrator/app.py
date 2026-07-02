@@ -81,6 +81,15 @@ def _verify_service_token() -> bool:
     return hmac.compare_digest(request.headers.get(SERVICE_TOKEN_HEADER, ""), expected)
 
 
+def _safe_log(value):
+    """Neutralize CR/LF in a value before logging it (anti log-forging).
+
+    Proposal fields (entity_id, proposal_id) are attacker/LLM-influenced, so
+    strip newlines to stop a crafted value from forging extra log lines.
+    """
+    return str(value).replace("\r", " ").replace("\n", " ")
+
+
 # Initialize components
 policy_engine = PolicyEngine(redis_client)
 rule_generator = RuleGenerator()
@@ -661,8 +670,12 @@ def enforce_proposal():
                 nonce_guard=NonceGuard(redis_client),
             )
         except ProposalError as exc:
-            logger.warning("Refusing enforcement: %s", exc)
-            return jsonify({"error": str(exc), "enforced": False}), 403
+            logger.warning("Refusing enforcement: %s", _safe_log(exc))
+            # Generic client message: don't leak which check failed (avoids an
+            # oracle) or raw exception text. Details are in the server log above.
+            return jsonify(
+                {"error": "proposal verification failed", "enforced": False}
+            ), 403
 
         # Verified + human-approved -> translate to firewall rules. A proposal
         # that can't be expressed as a network rule fails closed (not silently
@@ -670,8 +683,10 @@ def enforce_proposal():
         try:
             rules = _rules_from_proposal(proposal)
         except ValueError as exc:
-            logger.warning("Approved proposal is not enforceable: %s", exc)
-            return jsonify({"error": str(exc), "enforced": False}), 422
+            logger.warning("Approved proposal is not enforceable: %s", _safe_log(exc))
+            return jsonify(
+                {"error": "proposal is not enforceable", "enforced": False}
+            ), 422
 
         vendor_name = app.config["ENFORCEMENT_DEFAULT_VENDOR"]
         vendor = vendor_factory.get_vendor(vendor_name)
@@ -700,7 +715,7 @@ def enforce_proposal():
             logger.error(
                 "Enforcement adapter %s failed for %s: %s",
                 vendor_name,
-                proposal.get("proposal_id"),
+                _safe_log(proposal.get("proposal_id")),
                 apply_result,
             )
             return jsonify(
@@ -727,7 +742,7 @@ def enforce_proposal():
             # enforcement change. Best-effort; a failed rollback is logged loudly.
             logger.error(
                 "Failed to record enforcement for %s; rolling back applied rule: %s",
-                proposal.get("proposal_id"),
+                _safe_log(proposal.get("proposal_id")),
                 exc,
             )
             try:
@@ -735,7 +750,7 @@ def enforce_proposal():
             except Exception:
                 logger.exception(
                     "Compensating rollback FAILED for %s -- manual review required",
-                    proposal.get("proposal_id"),
+                    _safe_log(proposal.get("proposal_id")),
                 )
             return jsonify({"error": "Failed to record enforcement"}), 500
 
@@ -794,7 +809,7 @@ def get_enforcement_state(entity):
         )
         return jsonify(_enforcement_state_view(entity, rows)), 200
     except Exception as exc:
-        logger.error("Get enforcement state error for %s: %s", entity, exc)
+        logger.error("Get enforcement state error for %s: %s", _safe_log(entity), exc)
         return jsonify({"error": "Failed to read enforcement state"}), 500
 
 
