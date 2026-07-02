@@ -127,9 +127,15 @@ jobs:
           echo "image_plain=${IMAGE}" >> "$GITHUB_OUTPUT"
           echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
       - name: Install Syft
+        # Pin the installer to the immutable release tag (not the mutable main
+        # branch) and download-then-run instead of piping curl into a shell, so a
+        # hijacked URL/server cannot stream arbitrary code into CI. install.sh
+        # still checksum-verifies the syft binary it downloads.
         run: |
-          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
-            | sh -s -- -b /usr/local/bin v1.14.0
+          curl -sSfL \
+            https://raw.githubusercontent.com/anchore/syft/v1.14.0/install.sh \
+            -o "${RUNNER_TEMP}/syft-install.sh"
+          sh "${RUNNER_TEMP}/syft-install.sh" -b /usr/local/bin v1.14.0
       - name: Syft SBOM (SPDX JSON)
         # Invoke syft directly. The anchore/sbom-action@v0 does not reliably
         # pick up the docker/login-action credentials for ghcr.io pulls of
