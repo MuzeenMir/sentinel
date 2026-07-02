@@ -1084,3 +1084,22 @@ Plus the spec's own Month-1 exit: a real `execve` on the host (run `nc -e /bin/s
 - Month-2: `LocalProvider` (Ollama/Qwen) behind the provider seam; train/validate the ML detector and swap it in via `HostEventScorer`; triage → proposed reversible action → human-approval → policy-orchestrator → firewall adapter.
 - Month-3: one-command installer, self-heal/resource caps (G6), Merkle/audit anchoring activation, honest README, 14-day pilot.
 - Governance refinement, multi-tenant SaaS, abstract 13→4 consolidation — stop-listed.
+
+---
+
+## Execution status — verified 2026-06-29
+
+Month-1 spine is **code-complete and live-verified** (T1–T7 committed on `plan/month1-node-spine`, plus review-hardening commits: fail-closed alert insert, malformed-message isolation, hex auditd-field decode).
+
+Verification against the local stack (pg db `sentinel_db`, redis):
+- ✅ Node-spine unit suites green — **26 passed** (14 data-collector, 10 ai-engine, 2 migrations).
+- ✅ Migrations apply to head — `… → 20260624_001_audit_chain → 20260627_001_node_alerts`.
+  - ⚠️ The baked `db-migrate` container image is **stale** (head `20260530_002`); it does not contain the audit-chain or node_alerts migrations. Apply the **working-tree** migrations with host alembic (`script_location = .`, so run from `backend/migrations`).
+- ✅ Node-path e2e **PASSES (not skips)**: a real `nc -e /bin/sh` execve → Redis stream → ai-engine scorer → `node_alerts` row (critical, score 0.9).
+- ✅ Legacy distributed e2e skips cleanly (13 skipped, no xfail).
+
+**T7 dedupe is DEFERRED (not done) — the plan's assumption was wrong.** The hyphen dirs are *not* inert duplicates safe to `git rm`. There are 27 references: `hids-agent/Dockerfile` + `hardening-service/Dockerfile` do `COPY ebpf-lib/ ebpf_lib/`; `tests/test_xdp_build_artifact.py` asserts that exact COPY line; `conftest.py` aliases hyphen→underscore packages; `tests/test_firewall_base.py` adds `firewall-adapters` to `sys.path`. Hyphen = canonical source, underscore = the importable Docker-copied name. Blind removal breaks Docker builds + 2 tests. eBPF/firewall are **off the node critical path** (auditd is the telemetry source, not eBPF), so dedupe is parked for a proper repoint-then-remove change rather than forced here.
+
+## Month-2 progress (started 2026-06-29)
+- ✅ `get_node_alerts` grounding tool (`llm-gateway/tools.py`, committed `f1c83fa`) — the analyst can now read real detector output offline; the Month-1 and Month-2 halves finally touch. Live-verified end to end (detector writes `node_alerts` → tool reads it back, JSON-serializable, with `node_alert:<id>` citation ids). Read-only, severity allowlisted, limit-capped, fail-soft, injectable DB.
+- Provider seam already shipped (earlier C1 work): `provider.py` (`ProviderRouter`, `INFERENCE_PROVIDER` → anthropic|local) + `local_client.py` (`LocalLLMClient` → OpenAI-compatible `/v1/chat/completions`, Ollama-ready), wired at `app.py:85`. **Open items:** default model is `gemma-2` but the spec locked **Qwen2.5-14B** — reconcile + wire a `LOCAL_LLM_MODEL` env; real offline-triage validation needs the GPU deploy box (none on this dev host).
