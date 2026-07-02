@@ -32,7 +32,7 @@ from copilot import Copilot  # noqa: E402
 from cost import resolve_token_budget  # noqa: E402
 from persistence import SessionStore  # noqa: E402
 from prompts import render  # noqa: E402
-from proposals import NonceGuard, ProposalError, ProposalSigner  # noqa: E402
+from proposals import ProposalError, ProposalSigner  # noqa: E402
 from residency import resolve_residency  # noqa: E402
 from safety import RateLimiter, check_request  # noqa: E402
 from tools import (  # noqa: E402
@@ -110,10 +110,6 @@ def _rate_limiter() -> RateLimiter:
     return RateLimiter(
         redis_client, limit=int(os.environ.get("COPILOT_RATE_LIMIT", "20"))
     )
-
-
-def _nonce_guard() -> NonceGuard:
-    return NonceGuard(redis_client)
 
 
 def _gateway_authenticated() -> bool:
@@ -319,11 +315,14 @@ def copilot_propose():
 
 @app.post("/copilot/confirm")
 def copilot_confirm():
-    """Validate a human-confirmed proposal: signature, TTL, and single use.
+    """Validate a human-confirmed proposal: signature and TTL.
 
-    This endpoint NEVER executes enforcement. On success the frontend forwards
-    the validated proposal to the existing policy-orchestrator endpoint
-    (``forward_to``). The copilot is advisory-only by construction.
+    This endpoint NEVER executes enforcement and does NOT consume the proposal's
+    single-use nonce. Single-use is owned by the enforcement boundary
+    (policy-orchestrator ``POST /enforcement``) -- the only place a proposal is
+    actually applied. Consuming the nonce here too would double-spend it, so the
+    subsequent forward to ``/enforcement`` would always fail as a replay. On
+    success the frontend forwards the validated proposal to ``forward_to``.
     """
     data = request.get_json(force=True, silent=True) or {}
     proposal = data.get("proposal") or data
@@ -331,8 +330,6 @@ def copilot_confirm():
         ProposalSigner().verify(proposal)
     except ProposalError:
         return jsonify({"error": "invalid proposal"}), 400
-    if not _nonce_guard().consume(proposal["nonce"]):
-        return jsonify({"error": "proposal already confirmed"}), 409
 
     auditor = CopilotAuditor(actor=_actor(), tenant_id=_tenant(), sink=audit_sink)
     auditor.log_proposal({**proposal, "confirmed": True})
