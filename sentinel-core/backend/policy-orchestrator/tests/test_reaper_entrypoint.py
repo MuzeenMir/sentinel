@@ -12,7 +12,10 @@ import os
 import subprocess
 import sys
 
+import yaml
+
 _PODIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+_COMPOSE = os.path.abspath(os.path.join(_PODIR, "..", "..", "docker-compose.yml"))
 
 
 def test_reaper_imports_standalone_like_the_container():
@@ -26,3 +29,21 @@ def test_reaper_imports_standalone_like_the_container():
         timeout=60,
     )
     assert proc.returncode == 0, proc.stderr
+
+
+def test_reaper_compose_role_can_bypass_rls():
+    """claim_expired_actions() is a deliberate cross-tenant scan (the reaper
+    must revert EVERY tenant's expired actions) and never sets app.tenant_id,
+    so the reaper must connect as the RLS-bypassing table owner. Wired to the
+    RLS-enforced ``sentinel_app`` role it sees zero rows and silently reverts
+    nothing — expired firewall rules would stay applied forever.
+    """
+    with open(_COMPOSE) as fh:
+        compose = yaml.safe_load(fh)
+    env_list = compose["services"]["enforcement-reaper"]["environment"]
+    db_url = next(e.split("=", 1)[1] for e in env_list if e.startswith("DATABASE_URL="))
+    assert "sentinel_app" not in db_url, (
+        "enforcement-reaper must not connect as the RLS-enforced sentinel_app "
+        f"role: {db_url}"
+    )
+    assert db_url.startswith("postgresql://sentinel:"), db_url
