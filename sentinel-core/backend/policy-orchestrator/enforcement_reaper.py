@@ -4,12 +4,17 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 import time
 from typing import Any, Callable
 
-from audit_logger import AuditCategory, audit_log as default_audit_log
-from enforcement_actions import EnforcementActionStore
-from vendors.vendor_factory import VendorFactory
+# Shared modules (audit_logger, _lib) live one level up — both in the repo and
+# in the container image (WORKDIR /app/policy-orchestrator, shared at /app).
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+from audit_logger import AuditCategory, audit_log as default_audit_log  # noqa: E402
+from enforcement_actions import EnforcementActionStore  # noqa: E402
+from vendors.vendor_factory import VendorFactory  # noqa: E402
 
 
 logger = logging.getLogger(__name__)
