@@ -68,6 +68,18 @@ def test_verify_rejects_empty_key():
         ProposalSigner(b"").verify(signed, now=1000)
 
 
+def test_sign_rejects_empty_key():
+    # An empty key must fail at signing time too, not just at verify —
+    # otherwise a misconfigured issuer mints signatures nobody can verify.
+    with pytest.raises(ProposalError):
+        sign(_draft() | {"nonce": "n", "issued_at": 1000}, b"")
+
+
+def test_issue_rejects_empty_key():
+    with pytest.raises(ProposalError):
+        ProposalSigner(b"").issue(_draft(), now=1000)
+
+
 def test_nonce_guard_is_single_use(fake_redis):
     guard = NonceGuard(fake_redis)
     assert guard.consume("n1") is True
