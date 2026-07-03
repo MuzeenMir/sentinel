@@ -187,6 +187,7 @@ class MockOllama:
 
 
 def test_offline_triage_of_node_alert(monkeypatch):
+    monkeypatch.setenv("COPILOT_PROPOSAL_SIGNING_KEY", "k")
     monkeypatch.setenv("INFERENCE_PROVIDER", "local")
     monkeypatch.setenv("LOCAL_LLM_BASE_URL", "http://mock-ollama:11434")
     monkeypatch.delenv("LOCAL_LLM_MODEL", raising=False)

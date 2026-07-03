@@ -322,6 +322,11 @@ services:
       - DEFAULT_TENANT_ID=${DEFAULT_TENANT_ID:-1}
       - USE_V2_REVERSIBLE_ENFORCEMENT=${USE_V2_REVERSIBLE_ENFORCEMENT:-true}
       - ENFORCEMENT_DEFAULT_TTL_SECONDS=${ENFORCEMENT_DEFAULT_TTL_SECONDS:-900}
+      # Service-token auth for GET /enforcement/<entity> (fail-closed when unset).
+      - INTERNAL_SERVICE_TOKEN=${INTERNAL_SERVICE_TOKEN:?set INTERNAL_SERVICE_TOKEN}
+      # HMAC key verifying signed copilot proposals; must match llm-gateway.
+      # Empty = fall back to INTERNAL_SERVICE_TOKEN (warned at runtime).
+      - COPILOT_PROPOSAL_SIGNING_KEY=${COPILOT_PROPOSAL_SIGNING_KEY:-}
       # Compose bridge peers need the HTTP listener on the container interface.
       - SENTINEL_BIND_HOST=0.0.0.0
     depends_on:
