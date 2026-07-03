@@ -13,6 +13,7 @@ COPY llm-gateway/requirements.lock .
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir --require-hashes -r requirements.lock
 
+COPY observability.py metrics.py ./
 COPY _lib/ _lib/
 COPY llm-gateway/ llm-gateway/
 
