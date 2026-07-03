@@ -179,3 +179,46 @@ def test_bytes_field_decode_writes_alert():
     assert written == 1
     pending = r.xpending("node:events", "node-detector")
     assert pending["pending"] == 0
+
+
+def _strand_message(r, payload):
+    """Simulate a consumer that read a message and crashed before acking:
+    the message sits in the group's PEL under the dead consumer's name."""
+    r.xadd("node:events", {"event": json.dumps(payload)})
+    r.xreadgroup("node-detector", "crashed-1", {"node:events": ">"}, count=10, block=1)
+
+
+def test_reclaim_recovers_events_stranded_by_a_crashed_consumer():
+    r, c = _consumer()
+    _strand_message(r, _THREAT_PAYLOAD)
+
+    # A fresh read sees nothing new — without reclaim the event is lost.
+    conn = FakeConn()
+    assert c.process_once(conn, block_ms=1, count=10) == 0
+    assert conn.commits == 0
+
+    written = c.reclaim_once(conn, min_idle_ms=0, count=10)
+
+    assert written == 1
+    assert conn.commits == 1  # the stranded threat became a stored alert
+    assert r.xpending("node:events", "node-detector")["pending"] == 0
+
+
+def test_reclaim_acks_a_stranded_malformed_message():
+    r, c = _consumer()
+    r.xadd("node:events", {"event": "not-json"})
+    r.xreadgroup("node-detector", "crashed-1", {"node:events": ">"}, count=10, block=1)
+
+    conn = FakeConn()
+    written = c.reclaim_once(conn, min_idle_ms=0, count=10)
+
+    assert written == 0
+    # Malformed junk must be acked away, not re-claimed forever.
+    assert r.xpending("node:events", "node-detector")["pending"] == 0
+
+
+def test_reclaim_is_a_noop_with_nothing_pending():
+    r, c = _consumer()
+    conn = FakeConn()
+    assert c.reclaim_once(conn, min_idle_ms=0, count=10) == 0
+    assert conn.commits == 0
