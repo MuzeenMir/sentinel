@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 from copilot import Copilot
+from prompts import render
 from provider import ProviderRouter
 from tools import ToolRegistry
 
@@ -132,6 +133,7 @@ class MockOllama:
 
     def __init__(self):
         self.urls: list[str] = []
+        self.bodies: list[dict] = []
         self.calls = 0
         # Turn 1: read the detector's alerts. Turn 2: propose a reversible block.
         # Turn 3: final grounded triage answer citing the alert.
@@ -178,6 +180,7 @@ class MockOllama:
 
     def post(self, url, json=None, timeout=None, headers=None):
         self.urls.append(url)
+        self.bodies.append(json or {})
         payload = self._script[min(self.calls, len(self._script) - 1)]
         self.calls += 1
         return self._Resp(payload)
@@ -207,8 +210,7 @@ def test_offline_triage_of_node_alert(monkeypatch):
 
     copilot = Copilot(client, registry)
     result = copilot.run(
-        system="You are an offline host-security analyst. Triage detector alerts; "
-        "cite [node_alert:id]; propose only reversible actions for human approval.",
+        system=render("system"),
         user_message="Triage the latest critical host alert.",
     )
 
@@ -231,3 +233,12 @@ def test_offline_triage_of_node_alert(monkeypatch):
     # Cable pulled: inference hit ONLY the local endpoint; no cloud, no siblings.
     assert mock.urls and all(u == CHAT_PATH for u in mock.urls)
     assert mock.calls == 3
+
+    # The SHIPPED system prompt steered the triage — the local model received
+    # the node-triage contract (read get_node_alerts, cite [node_alert:<id>]),
+    # not an ad-hoc test string that could drift from production.
+    first_system = next(
+        m["content"] for m in mock.bodies[0]["messages"] if m.get("role") == "system"
+    )
+    assert "get_node_alerts" in first_system
+    assert "node_alert:" in first_system

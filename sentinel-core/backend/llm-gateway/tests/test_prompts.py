@@ -16,6 +16,19 @@ def test_system_prompt_states_grounding_and_advisory_contract():
     assert "must not" in lowered and "execute" in lowered
 
 
+def test_system_prompt_steers_node_triage():
+    # Month-2: on a single offline host the primary detector output is
+    # node_alerts — the shipped prompt must steer the analyst to read it via
+    # get_node_alerts, cite [node_alert:<id>], and triage by severity/score.
+    text = render("system")
+    lowered = text.lower()
+    assert "get_node_alerts" in text
+    assert "node_alert:" in text
+    assert "severity" in lowered
+    # Reversible-block recommendation stays tied to human confirmation.
+    assert "ttl" in lowered
+
+
 def test_incident_summary_fills_variables():
     text = render(
         "incident_summary",
