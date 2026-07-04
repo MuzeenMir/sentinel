@@ -348,7 +348,10 @@ services:
     container_name: sentinel-enforcement-reaper
     command: ["python", "enforcement_reaper.py"]
     environment:
-      - DATABASE_URL=postgresql://sentinel_app:${SENTINEL_APP_DB_PASSWORD:?set SENTINEL_APP_DB_PASSWORD}@sentinel-postgres:5432/${POSTGRES_DB:-sentinel}
+      # The reaper's expired-action claim is a deliberate cross-tenant scan
+      # (no app.tenant_id), so it must connect as the RLS-bypassing table
+      # owner — as sentinel_app RLS hides every row and nothing is reverted.
+      - DATABASE_URL=postgresql://sentinel:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@sentinel-postgres:5432/${POSTGRES_DB:-sentinel}
       - DEFAULT_TENANT_ID=${DEFAULT_TENANT_ID:-1}
       - ENFORCEMENT_REAPER_INTERVAL_SECONDS=${ENFORCEMENT_REAPER_INTERVAL_SECONDS:-30}
       - ENFORCEMENT_REAPER_BATCH_SIZE=${ENFORCEMENT_REAPER_BATCH_SIZE:-100}
