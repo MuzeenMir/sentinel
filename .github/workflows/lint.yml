@@ -75,7 +75,10 @@ jobs:
       - name: ESLint
         run: npm run lint
       - name: Prettier check
-        run: npx prettier --check 'src/**/*.{ts,tsx,js,jsx,css,json,md}'
+        # --no-install: use the exact devDependency version from package-lock,
+        # never a floating latest fetched at CI time (a 3.9.x drift reformatted
+        # pre-existing files and broke this gate before).
+        run: npx --no-install prettier --check 'src/**/*.{ts,tsx,js,jsx,css,json,md}'
 
   lint-commitlint:
     name: lint-commitlint
