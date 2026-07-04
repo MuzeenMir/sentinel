@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.9.0](https://github.com/MuzeenMir/sentinel/compare/v1.8.1...v1.9.0) (2026-07-03)
+
+
+### Features
+
+* **ai-engine:** reclaim stranded node events from the consumer group PEL ([#105](https://github.com/MuzeenMir/sentinel/issues/105)) ([4f5ea48](https://github.com/MuzeenMir/sentinel/commit/4f5ea484547f86ba2719f3f01a26a12ba050b0e7))
+* **llm-gateway:** steer the analyst system prompt toward host/node triage ([#104](https://github.com/MuzeenMir/sentinel/issues/104)) ([2dbc878](https://github.com/MuzeenMir/sentinel/commit/2dbc878dbeae80f7db2afc7cedbcfce46e0a51c4))
+* Month-1 offline-node detection spine (auditd -&gt; Redis -&gt; ai-engine -&gt; node_alerts) ([d60d1ff](https://github.com/MuzeenMir/sentinel/commit/d60d1ff289706441d39b4b7ff9cf0b6323791002))
+* **policy-orchestrator:** reversible enforcement bridge + enforcement API ([#100](https://github.com/MuzeenMir/sentinel/issues/100)) ([a263f16](https://github.com/MuzeenMir/sentinel/commit/a263f16aeee1ab8e2f764234a87828d8d9f70632))
+
+
+### Documentation
+
+* **audit:** note D4 review-trail gap in the remediation closure ([#97](https://github.com/MuzeenMir/sentinel/issues/97)) ([8d92461](https://github.com/MuzeenMir/sentinel/commit/8d92461ed90a9d613cd89f988f3228ae259a33f5))
+
 ## [1.8.1](https://github.com/MuzeenMir/sentinel/compare/v1.8.0...v1.8.1) (2026-06-26)
 
 
