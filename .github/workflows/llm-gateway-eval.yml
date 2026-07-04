@@ -38,7 +38,9 @@ jobs:
           # Pin ruff to the repo standard (the required `lint` gate uses 0.5.6).
           # Unpinned ruff floated to a newer release whose formatter disagrees
           # with 0.5.6 — a non-deterministic check, not a real defect.
-          pip install pytest ruff==0.5.6
+          # pyyaml: test-only (test_compose_wiring.py parses docker-compose.yml);
+          # not a service runtime dependency.
+          pip install pytest pyyaml ruff==0.5.6
       - name: Ruff lint + format check
         run: |
           ruff check .
