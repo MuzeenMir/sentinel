@@ -58,7 +58,19 @@ audit_sink = None
 
 
 def inference_enabled() -> bool:
-    """True when an Anthropic API key is configured for real inference."""
+    """True when the configured provider has the credentials/endpoint it needs.
+
+    Anthropic (default) requires ANTHROPIC_API_KEY; the local provider
+    (INFERENCE_PROVIDER=local) requires a self-hosted endpoint URL instead —
+    the hosted key is never consulted for local inference.
+    """
+    if ProviderRouter.from_env().name == "local":
+        base_url = (
+            os.environ.get("LOCAL_LLM_BASE_URL")
+            or os.environ.get("INFERENCE_BASE_URL")
+            or ""
+        )
+        return bool(base_url.strip())
     return bool(os.environ.get("ANTHROPIC_API_KEY", "").strip())
 
 
