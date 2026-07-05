@@ -71,6 +71,7 @@ INTERNAL_SERVICES = {
     "kibana",
     "policy-orchestrator",
     "enforcement-reaper",
+    "llm-gateway",
     "drl-engine",
     "xai-service",
     "compliance-engine",

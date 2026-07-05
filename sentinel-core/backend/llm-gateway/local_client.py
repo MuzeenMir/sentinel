@@ -78,6 +78,61 @@ class LocalLLMClient:
             )
         return out
 
+    @staticmethod
+    def _to_openai_messages(system: str, messages: list[dict]) -> list[dict]:
+        """Translate the copilot's Anthropic-style history to the OpenAI wire.
+
+        The copilot appends assistant ``tool_use`` blocks and user-turn
+        ``tool_result`` blocks; OpenAI-compatible servers expect assistant
+        ``tool_calls`` entries and dedicated ``role: tool`` turns instead and
+        reject the block lists outright.
+        """
+        out: list[dict] = [{"role": "system", "content": system}]
+        for msg in messages:
+            content = msg.get("content")
+            if isinstance(content, str):
+                out.append({"role": msg["role"], "content": content})
+                continue
+            text_parts: list[str] = []
+            tool_calls: list[dict] = []
+            tool_results: list[dict] = []
+            for block in content or []:
+                btype = block.get("type")
+                if btype == "text":
+                    text_parts.append(block.get("text", ""))
+                elif btype == "tool_use":
+                    tool_calls.append(
+                        {
+                            "id": block.get("id"),
+                            "type": "function",
+                            "function": {
+                                "name": block.get("name"),
+                                "arguments": json.dumps(block.get("input", {})),
+                            },
+                        }
+                    )
+                elif btype == "tool_result":
+                    tool_results.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": block.get("tool_use_id"),
+                            "content": block.get("content", ""),
+                        }
+                    )
+            if msg.get("role") == "assistant":
+                entry: dict[str, Any] = {
+                    "role": "assistant",
+                    "content": "\n".join(text_parts) or None,
+                }
+                if tool_calls:
+                    entry["tool_calls"] = tool_calls
+                out.append(entry)
+            else:
+                out.extend(tool_results)
+                if text_parts:
+                    out.append({"role": msg["role"], "content": "\n".join(text_parts)})
+        return out
+
     def complete(
         self,
         system: str,
@@ -89,7 +144,7 @@ class LocalLLMClient:
         body: dict[str, Any] = {
             "model": model or self.default_model,
             "max_tokens": max_tokens or self.max_tokens,
-            "messages": [{"role": "system", "content": system}, *messages],
+            "messages": self._to_openai_messages(system, messages),
         }
         if tools:
             body["tools"] = self._to_openai_tools(tools)

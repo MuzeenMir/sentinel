@@ -61,6 +61,9 @@ jobs:
           - service: hids-agent
             context: sentinel-core/backend
             dockerfile: sentinel-core/backend/hids-agent/Dockerfile
+          - service: llm-gateway
+            context: sentinel-core/backend
+            dockerfile: sentinel-core/backend/llm-gateway/Dockerfile
           - service: policy-orchestrator
             context: sentinel-core/backend
             dockerfile: sentinel-core/backend/policy-orchestrator/Dockerfile

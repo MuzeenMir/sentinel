@@ -5,6 +5,8 @@ redis>=5.0.1
 gunicorn>=22.0.0
 python-dotenv>=1.0.0
 prometheus-client>=0.17.1
+# get_node_alerts reads the local detector feed directly via _lib.db.
+psycopg2-binary>=2.9.9
 
 # LLM inference (lazy-imported in anthropic_client; only needed at runtime).
 anthropic>=0.40.0

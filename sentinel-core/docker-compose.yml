@@ -362,6 +362,50 @@ services:
       - sentinel-network
     restart: unless-stopped
 
+  # LLM Gateway — grounded analyst copilot (advisory-only)
+  llm-gateway:
+    build:
+      context: ./backend
+      dockerfile: llm-gateway/Dockerfile
+    container_name: sentinel-llm-gateway
+    environment:
+      - REDIS_URL=redis://redis:6379
+      # Reads the local detector feed (node_alerts) directly as the runtime
+      # app role — SELECT granted by migration 20260703_001.
+      - DATABASE_URL=postgresql://sentinel_app:${SENTINEL_APP_DB_PASSWORD:?set SENTINEL_APP_DB_PASSWORD}@sentinel-postgres:5432/${POSTGRES_DB:-sentinel}
+      - INTERNAL_SERVICE_TOKEN=${INTERNAL_SERVICE_TOKEN:?set INTERNAL_SERVICE_TOKEN}
+      # HMAC key signing reversible proposals; must match policy-orchestrator.
+      - COPILOT_PROPOSAL_SIGNING_KEY=${COPILOT_PROPOSAL_SIGNING_KEY:-}
+      # Inference provider is a pure config swap (offline-node thesis):
+      # anthropic (cloud, needs ANTHROPIC_API_KEY) or local (Ollama/OpenAI-
+      # compatible endpoint, zero egress). Both keys are OPTIONAL — with
+      # neither configured the service still serves /health and reports
+      # inference disabled.
+      - INFERENCE_PROVIDER=${INFERENCE_PROVIDER:-anthropic}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - LOCAL_LLM_BASE_URL=${LOCAL_LLM_BASE_URL:-http://host.docker.internal:11434}
+      - LOCAL_LLM_MODEL=${LOCAL_LLM_MODEL:-qwen2.5:14b-instruct}
+      # Optional per-call inference budget (seconds); CPU-only hosts need
+      # more than the adapter's 60s default. Empty = adapter default.
+      - LOCAL_LLM_TIMEOUT=${LOCAL_LLM_TIMEOUT:-}
+      # Copilot audit writes are RLS-gated on app.tenant_id; requests without
+      # X-Tenant-Id fall back to the node's single "default" tenant (id 1).
+      - DEFAULT_TENANT_ID=${DEFAULT_TENANT_ID:-1}
+    extra_hosts:
+      # Makes host.docker.internal resolve on Linux/WSL2 engines so the
+      # container can reach a host-side Ollama serving the local model.
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      redis:
+        condition: service_started
+      db-migrate:
+        condition: service_completed_successfully
+      policy-orchestrator:
+        condition: service_started
+    networks:
+      - sentinel-network
+    restart: unless-stopped
+
   # DRL Engine
   drl-engine:
     build:
