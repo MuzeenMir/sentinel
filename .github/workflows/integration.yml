@@ -119,7 +119,7 @@ jobs:
         working-directory: sentinel-core/backend
         run: |
           pip install -r requirements-test.txt
-          pip install requests
+          pip install requests psycopg2-binary
       - name: Run integration slice
         working-directory: sentinel-core/backend
         env:
@@ -127,6 +127,12 @@ jobs:
           ADMIN_USERNAME: ${{ env.ADMIN_USERNAME }}
           ADMIN_PASSWORD: ${{ env.ADMIN_PASSWORD }}
           AUDIT_TEST_DATABASE_URL: postgresql://sentinel_app:${{ env.SENTINEL_APP_DB_PASSWORD }}@127.0.0.1:5432/sentinel_db
+          # Node-path e2e (test_node_pipeline.py): the detector writes
+          # node_alerts as the table owner; Redis is the CI-published port.
+          # REQUIRE turns unreachable-store skips into failures in CI.
+          NODE_E2E_DATABASE_URL: postgresql://sentinel:${{ env.POSTGRES_PASSWORD }}@127.0.0.1:5432/sentinel_db
+          NODE_E2E_REDIS_URL: redis://127.0.0.1:6379
+          NODE_E2E_REQUIRE: '1'
         run: |
           # Integration tests are marked with -m integration; skip when absent.
           if python -m pytest tests/ -m integration --collect-only -q 2>/dev/null | grep -q '::'; then
