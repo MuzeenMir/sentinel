@@ -64,6 +64,8 @@ INTERNAL_SERVICES = {
     "kafka",
     "auth-service",
     "data-collector",
+    "node-collector",
+    "node-consumer",
     "xdp-collector",
     "alert-service",
     "ai-engine",

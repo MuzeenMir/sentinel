@@ -47,6 +47,11 @@ class NodeCollector:
         return count
 
     def tail(self, path: str = "/var/log/audit/audit.log", poll: float = 0.5) -> None:
+        """Follow ``path``, returning when it rotates so the caller reopens it.
+
+        auditd renames the live log away on rotation; holding the old fd
+        would read nothing forever, silently blinding the node.
+        """
         with open(path, "r", encoding="utf-8") as fh:
             fh.seek(0, os.SEEK_END)
             buf: list[str] = []
@@ -56,6 +61,49 @@ class NodeCollector:
                     if buf:
                         self.feed_lines(buf)
                         buf = []
+                    if _rotated(fh, path):
+                        return
                     time.sleep(poll)
                     continue
                 buf.append(line.rstrip("\n"))
+
+
+def _rotated(fh, path: str) -> bool:
+    try:
+        st = os.stat(path)
+    except FileNotFoundError:
+        return True
+    fst = os.fstat(fh.fileno())
+    # new inode = renamed away and recreated; shrunk = truncated in place
+    return st.st_ino != fst.st_ino or st.st_size < fh.tell()
+
+
+def main() -> None:  # pragma: no cover - supervisor loop; pieces unit-tested
+    import logging
+
+    import redis
+
+    logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
+    logger = logging.getLogger("node_collector")
+
+    redis_client = redis.from_url(
+        os.environ.get("REDIS_URL", "redis://localhost:6379"),
+        decode_responses=True,
+    )
+    path = os.environ.get("AUDIT_LOG_PATH", "/var/log/audit/audit.log")
+    poll = float(os.environ.get("NODE_TAIL_POLL_SECONDS", "0.5"))
+    retry = float(os.environ.get("NODE_TAIL_RETRY_SECONDS", "5"))
+
+    collector = NodeCollector(redis_client)
+    logger.info("tailing %s onto stream %s", path, collector.stream)
+    while True:
+        try:
+            collector.tail(path, poll=poll)
+            logger.info("audit log rotated; reopening %s", path)
+        except FileNotFoundError:
+            logger.warning("%s not found; retrying in %.0fs", path, retry)
+            time.sleep(retry)
+
+
+if __name__ == "__main__":
+    main()
