@@ -13,6 +13,7 @@ env contract it needs to be functional AND offline-capable:
   pure .env change (the offline-node thesis).
 """
 
+import json
 import os
 
 import yaml
@@ -56,3 +57,41 @@ def test_llm_gateway_can_reach_a_host_side_ollama():
     # is what makes host.docker.internal resolvable on Linux/WSL2 engines.
     svc = _service()
     assert "host-gateway" in " ".join(svc.get("extra_hosts", []))
+
+
+def test_llm_gateway_has_default_tenant_for_audit_rls():
+    # The copilot audit trail writes audit_log as sentinel_app, which is
+    # RLS-gated on app.tenant_id. Requests arriving without X-Tenant-Id must
+    # fall back to the node's single "default" tenant (id 1) or every copilot
+    # call dies at the audit hook with an RLS violation.
+    env = _env(_service())
+    assert env.get("DEFAULT_TENANT_ID") == "${DEFAULT_TENANT_ID:-1}"
+
+
+def test_llm_gateway_image_ships_shared_audit_modules():
+    # audit.py lazily imports the backend-root audit_logger (which pulls in
+    # audit_merkle); if the image doesn't ship them, every copilot call 500s
+    # at the audit hook instead of completing.
+    dockerfile = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "Dockerfile")
+    )
+    with open(dockerfile) as fh:
+        copy_lines = " ".join(
+            line for line in fh.read().splitlines() if line.startswith("COPY")
+        )
+    assert "audit_logger.py" in copy_lines
+    assert "audit_merkle.py" in copy_lines
+
+
+def test_llm_gateway_worker_timeout_covers_local_inference():
+    # gunicorn's default 30s worker timeout kills CPU-bound local inference
+    # mid-request (model load alone can take ~20s); the CMD must carry an
+    # explicit budget that covers a full grounded copilot exchange.
+    dockerfile = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "Dockerfile")
+    )
+    with open(dockerfile) as fh:
+        cmd = next(line for line in fh.read().splitlines() if line.startswith("CMD"))
+    args = json.loads(cmd[len("CMD ") :])
+    assert "--timeout" in args
+    assert int(args[args.index("--timeout") + 1]) >= 180

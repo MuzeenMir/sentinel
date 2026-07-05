@@ -8,6 +8,7 @@ swap inference with a config change, not a code change (inference sovereignty).
 
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
 
@@ -86,6 +87,16 @@ def test_router_selects_local(monkeypatch):
     assert ProviderRouter.from_env().name == "local"
 
 
+def test_local_provider_timeout_is_env_tunable(monkeypatch):
+    # CPU-only nodes need a longer per-call budget than the 60s default —
+    # the whole point of the offline node is running without a GPU if needed.
+    monkeypatch.setenv("INFERENCE_PROVIDER", "local")
+    monkeypatch.setenv("LOCAL_LLM_BASE_URL", "http://llamacpp:8080")
+    monkeypatch.setenv("LOCAL_LLM_TIMEOUT", "180")
+    client = ProviderRouter.from_env().build()
+    assert client.timeout == 180.0
+
+
 # --- local adapter maps OpenAI-compatible llama.cpp responses ---------------
 
 
@@ -100,6 +111,58 @@ def test_local_client_maps_text_completion():
     assert resp.usage["output_tokens"] == 5
     # posts to the OpenAI-compatible chat-completions path on the configured host
     assert http.calls[0][0] == "http://llamacpp:8080/v1/chat/completions"
+
+
+def test_local_client_translates_anthropic_history_to_openai_wire():
+    # copilot.py builds Anthropic-style history (assistant tool_use blocks,
+    # tool_result blocks in a user turn). The adapter must translate that to
+    # the OpenAI wire shape or the tool round-trip is a 400 at the local
+    # endpoint (observed against Ollama's /v1/chat/completions).
+    http = _FakeHTTP(_openai_payload(content="done"))
+    client = LocalLLMClient(base_url="http://llamacpp:8080", session=http)
+    client.complete(
+        system="sys",
+        messages=[
+            {"role": "user", "content": "summarize host-01"},
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "text", "text": "checking"},
+                    {
+                        "type": "tool_use",
+                        "id": "call_1",
+                        "name": "get_threat_score",
+                        "input": {"entity_id": "host-01"},
+                    },
+                ],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "call_1",
+                        "content": '{"score": 0.9}',
+                    }
+                ],
+            },
+        ],
+    )
+    sent = http.calls[0][1]["messages"]
+    assert sent[0] == {"role": "system", "content": "sys"}
+    assert sent[1] == {"role": "user", "content": "summarize host-01"}
+    assistant = sent[2]
+    assert assistant["role"] == "assistant"
+    assert assistant["content"] == "checking"
+    (tc,) = assistant["tool_calls"]
+    assert tc["id"] == "call_1"
+    assert tc["type"] == "function"
+    assert tc["function"]["name"] == "get_threat_score"
+    assert json.loads(tc["function"]["arguments"]) == {"entity_id": "host-01"}
+    tool_msg = sent[3]
+    assert tool_msg["role"] == "tool"
+    assert tool_msg["tool_call_id"] == "call_1"
+    assert tool_msg["content"] == '{"score": 0.9}'
 
 
 def test_local_client_maps_tool_calls():

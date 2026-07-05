@@ -203,7 +203,7 @@ def copilot_summarize():
     if not entity_id:
         return jsonify({"error": "entity_id is required"}), 400
     if not inference_enabled():
-        return jsonify({"error": "inference disabled (no ANTHROPIC_API_KEY)"}), 503
+        return jsonify({"error": "inference disabled (no provider configured)"}), 503
 
     actor = _actor()
     if not _rate_limiter().allow(actor):
@@ -252,7 +252,7 @@ def copilot_ask():
     if not session_id or not question:
         return jsonify({"error": "session_id and question are required"}), 400
     if not inference_enabled():
-        return jsonify({"error": "inference disabled (no ANTHROPIC_API_KEY)"}), 503
+        return jsonify({"error": "inference disabled (no provider configured)"}), 503
 
     allowed, reason = check_request(question)
     if not allowed:

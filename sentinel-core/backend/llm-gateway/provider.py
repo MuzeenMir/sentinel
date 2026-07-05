@@ -72,6 +72,9 @@ class ProviderRouter:
                 kwargs["default_model"] = (
                     source.get("LOCAL_LLM_MODEL") or NODE_DEFAULT_LOCAL_MODEL
                 )
+            # Per-call budget: CPU-only hosts need more than the 60s default.
+            if "timeout" not in kwargs and source.get("LOCAL_LLM_TIMEOUT"):
+                kwargs["timeout"] = float(source["LOCAL_LLM_TIMEOUT"])
             return LocalLLMClient(**kwargs)
 
         from anthropic_client import AnthropicClient

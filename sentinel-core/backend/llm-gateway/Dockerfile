@@ -13,7 +13,7 @@ COPY llm-gateway/requirements.lock .
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir --require-hashes -r requirements.lock
 
-COPY observability.py metrics.py ./
+COPY observability.py metrics.py audit_logger.py audit_merkle.py ./
 COPY _lib/ _lib/
 COPY llm-gateway/ llm-gateway/
 
@@ -26,4 +26,6 @@ EXPOSE 5012
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import requests; requests.get('http://localhost:5012/health', timeout=5).raise_for_status()"
 
-CMD ["gunicorn", "--bind", "0.0.0.0:5012", "--workers", "2", "app:app"]
+# --timeout covers a full grounded copilot exchange on CPU-only local
+# inference (model load + multi-call tool loop); the default 30s kills it.
+CMD ["gunicorn", "--bind", "0.0.0.0:5012", "--workers", "2", "--timeout", "300", "app:app"]
