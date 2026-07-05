@@ -362,6 +362,56 @@ services:
       - sentinel-network
     restart: unless-stopped
 
+  # Node spine, first hop: tail the host's auditd log onto the local Redis
+  # stream (offline detection path — no Kafka, no cloud). Reuses the
+  # data-collector image with a command override, reaper-style.
+  node-collector:
+    build:
+      context: ./backend
+      dockerfile: data-collector/Dockerfile
+    container_name: sentinel-node-collector
+    command: ["python", "node_collector.py"]
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - AUDIT_LOG_PATH=/host/audit/audit.log
+    volumes:
+      # Host auditd directory (override AUDIT_LOG_DIR for dev boxes without
+      # auditd). Mounted read-only — the collector must never write it.
+      - ${AUDIT_LOG_DIR:-/var/log/audit}:/host/audit:ro
+    depends_on:
+      redis:
+        condition: service_started
+    networks:
+      - sentinel-network
+    # No HTTP surface — the image's curl healthcheck doesn't apply.
+    healthcheck:
+      disable: true
+    restart: unless-stopped
+
+  # Node spine, second hop: score host events off the Redis stream and
+  # persist threats as node_alerts rows.
+  node-consumer:
+    build:
+      context: ./backend
+      dockerfile: ai-engine/Dockerfile
+    container_name: sentinel-node-consumer
+    command: ["python", "node_consumer.py"]
+    environment:
+      - REDIS_URL=redis://redis:6379
+      # node_alerts writes are owner-only (20260627_001); sentinel_app has
+      # SELECT only (20260703_001) — the detector must connect as the owner.
+      - DATABASE_URL=postgresql://sentinel:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@sentinel-postgres:5432/${POSTGRES_DB:-sentinel}
+    depends_on:
+      redis:
+        condition: service_started
+      db-migrate:
+        condition: service_completed_successfully
+    networks:
+      - sentinel-network
+    healthcheck:
+      disable: true
+    restart: unless-stopped
+
   # LLM Gateway — grounded analyst copilot (advisory-only)
   llm-gateway:
     build:
