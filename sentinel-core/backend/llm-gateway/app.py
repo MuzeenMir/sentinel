@@ -217,6 +217,9 @@ def copilot_summarize():
             "get_audit_events", {"entity_id": entity_id, "window": "24h"}
         ),
         ctx.registry.execute("get_enforcement_state", {"entity_id": entity_id}),
+        # The node product's primary signal — seed it deterministically; small
+        # local models don't reliably decide to fetch it themselves.
+        ctx.registry.execute("get_node_alerts", {"limit": 10}),
     ]
     result = ctx.copilot.run(
         system=render("system"),

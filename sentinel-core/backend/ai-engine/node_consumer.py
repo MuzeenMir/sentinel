@@ -129,3 +129,32 @@ class NodeConsumer:
         while True:
             self.reclaim_once(conn)
             self.process_once(conn)
+
+
+def main() -> None:  # pragma: no cover - process wiring; loop pieces unit-tested
+    import psycopg2
+
+    from node_scoring import RuleScorer
+
+    logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
+
+    redis_client = redis.from_url(
+        os.environ.get("REDIS_URL", "redis://localhost:6379"),
+        decode_responses=True,
+    )
+    # Fail loud: without a DB there is nowhere to persist alerts. The role
+    # must be the node_alerts owner — sentinel_app cannot INSERT (20260627_001).
+    conn = psycopg2.connect(os.environ["DATABASE_URL"])
+
+    consumer = NodeConsumer(redis_client, RuleScorer())
+    logger.info(
+        "consuming stream %s as group=%s consumer=%s",
+        consumer.stream,
+        consumer.group,
+        consumer.consumer,
+    )
+    consumer.run(conn)
+
+
+if __name__ == "__main__":
+    main()

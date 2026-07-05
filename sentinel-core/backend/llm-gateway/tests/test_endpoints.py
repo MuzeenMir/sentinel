@@ -79,6 +79,12 @@ def test_summarize_returns_grounded_summary(app_module, monkeypatch):
                 "result": {"state": "none"},
                 "record_ids": ["enforce:h1"],
             },
+            "get_node_alerts": {
+                "tool": "get_node_alerts",
+                "ok": True,
+                "result": {"alerts": []},
+                "record_ids": [],
+            },
         }
     )
     client = FakeClient(
@@ -104,6 +110,36 @@ def test_summarize_returns_grounded_summary(app_module, monkeypatch):
     assert body["citation_provenance"]["score:s1"]
 
 
+def test_summarize_prefetches_the_node_detector_feed(app_module, monkeypatch):
+    """node_alerts is the node product's primary signal. Small local models
+    don't reliably decide to fetch it on their own (observed with a 3B Qwen:
+    it *recommended* calling get_node_alerts instead of calling it), so the
+    summary must be deterministically seeded with the detector feed.
+    """
+    calls = []
+
+    class RecordingRegistry(FakeRegistry):
+        def execute(self, name, tool_input):
+            calls.append(name)
+            return {
+                "tool": name,
+                "ok": True,
+                "result": {},
+                "record_ids": [f"{name}:r1"],
+            }
+
+    registry = RecordingRegistry({})
+    client = FakeClient([_resp(text="quiet host [get_node_alerts:r1]")])
+    _install(app_module, monkeypatch, client, registry)
+
+    rv = app_module.app.test_client().post(
+        "/copilot/summarize", json={"entity_id": "h1"}
+    )
+
+    assert rv.status_code == 200
+    assert "get_node_alerts" in calls
+
+
 def test_summarize_requires_entity_id(app_module, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     rv = app_module.app.test_client().post("/copilot/summarize", json={})
@@ -124,6 +160,7 @@ def test_summarize_rate_limited(app_module, monkeypatch):
             "get_threat_score": {"ok": True, "result": {}, "record_ids": []},
             "get_audit_events": {"ok": True, "result": {}, "record_ids": []},
             "get_enforcement_state": {"ok": True, "result": {}, "record_ids": []},
+            "get_node_alerts": {"ok": True, "result": {}, "record_ids": []},
         }
     )
     # fresh client per call; rate limit is what we assert
@@ -299,6 +336,7 @@ def test_rate_limit_key_ignores_spoofed_actor(app_module, monkeypatch):
             "get_threat_score": {"ok": True, "result": {}, "record_ids": []},
             "get_audit_events": {"ok": True, "result": {}, "record_ids": []},
             "get_enforcement_state": {"ok": True, "result": {}, "record_ids": []},
+            "get_node_alerts": {"ok": True, "result": {}, "record_ids": []},
         }
     )
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
@@ -335,6 +373,7 @@ def test_xactor_honored_only_when_service_token_valid(app_module, monkeypatch):
             "get_threat_score": {"ok": True, "result": {}, "record_ids": []},
             "get_audit_events": {"ok": True, "result": {}, "record_ids": []},
             "get_enforcement_state": {"ok": True, "result": {}, "record_ids": []},
+            "get_node_alerts": {"ok": True, "result": {}, "record_ids": []},
         }
     )
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
