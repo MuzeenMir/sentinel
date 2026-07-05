@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.11.0](https://github.com/MuzeenMir/sentinel/compare/v1.10.0...v1.11.0) (2026-07-05)
+
+
+### Features
+
+* **node:** deploy the offline detection spine ([#110](https://github.com/MuzeenMir/sentinel/issues/110)) ([c87f062](https://github.com/MuzeenMir/sentinel/commit/c87f062c219103d2ae132d93cd6d4efd21dd4217))
+
 ## [1.10.0](https://github.com/MuzeenMir/sentinel/compare/v1.9.0...v1.10.0) (2026-07-05)
 
 
