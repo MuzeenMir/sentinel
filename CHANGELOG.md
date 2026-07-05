@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.10.0](https://github.com/MuzeenMir/sentinel/compare/v1.9.0...v1.10.0) (2026-07-05)
+
+
+### Features
+
+* compose the llm-gateway analyst — image fix, node_alerts read grant, GPU-ready local inference ([#108](https://github.com/MuzeenMir/sentinel/issues/108)) ([f2485ac](https://github.com/MuzeenMir/sentinel/commit/f2485ac5fd6890a71745f7d31ffe1fa12ff2e84d))
+
+
+### Bug Fixes
+
+* make the enforcement reaper actually run — import path + RLS role ([#107](https://github.com/MuzeenMir/sentinel/issues/107)) ([948f67a](https://github.com/MuzeenMir/sentinel/commit/948f67a8034d9326b7e07c9800bf39b4acbfc3cb))
+
 ## [1.9.0](https://github.com/MuzeenMir/sentinel/compare/v1.8.1...v1.9.0) (2026-07-03)
 
 
