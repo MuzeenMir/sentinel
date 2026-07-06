@@ -38,6 +38,9 @@ jobs:
       DRL_SHADOW_MODE: 'true'
       INTERNAL_SERVICE_TOKEN: ci-smoke-internal-service-token
       GRAFANA_PASSWORD: ci-smoke-grafana-password
+      # This job exercises the legacy v1 pipeline services (data-collector,
+      # drl-engine), which are gated off the default node profile.
+      COMPOSE_PROFILES: full
     steps:
       - uses: actions/checkout@v4
       - name: Write CI .env

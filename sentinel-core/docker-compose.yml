@@ -96,6 +96,7 @@ services:
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0@sha256:d18e7b3a81326dd278a5f2121b29a7f009582e0b0f5552165eb5efc83533a52b
     container_name: sentinel-zookeeper
+    profiles: ["full", "xdp"]
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
@@ -105,6 +106,7 @@ services:
   kafka:
     image: confluentinc/cp-kafka:7.5.0@sha256:69022c46b7f4166ecf21689ab4c20d030b0a62f2d744c20633abfc7c0040fa80
     container_name: sentinel-kafka
+    profiles: ["full", "xdp"]
     depends_on:
       - zookeeper
     environment:
@@ -154,14 +156,12 @@ services:
       - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       - OTEL_SERVICE_NAME=api-gateway
     depends_on:
+      # Only node-default services may be pinned here — the gateway routes to
+      # the profile-gated v1 services lazily (a down service is a 502 on its
+      # route, not a stack that won't start).
       - auth-service
-      - data-collector
       - alert-service
       - policy-orchestrator
-      - compliance-engine
-      - xai-service
-      - hardening-service
-      - hids-agent
     networks:
       - sentinel-network
     restart: unless-stopped
@@ -172,6 +172,7 @@ services:
       context: ./backend
       dockerfile: data-collector/Dockerfile
     container_name: sentinel-data-collector
+    profiles: ["full"]
     environment:
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - REDIS_URL=redis://redis:6379
@@ -270,10 +271,10 @@ services:
     volumes:
       - ai_models:/models
     depends_on:
+      # No kafka pin: the app only reads KAFKA_BOOTSTRAP_SERVERS as config
+      # (no eager connect), and the node profile runs without Kafka.
       redis:
         condition: service_started
-      kafka:
-        condition: service_healthy
       auth-service:
         condition: service_started
     networks:
@@ -288,6 +289,7 @@ services:
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:7.17.0@sha256:4f588d1001c207d6217e61747df8752c5d2a04c41e3a235c621bfa3a57e352f5
     container_name: sentinel-elasticsearch
+    profiles: ["full"]
     environment:
       - discovery.type=single-node
       - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
@@ -301,6 +303,7 @@ services:
   kibana:
     image: docker.elastic.co/kibana/kibana:7.17.0@sha256:7963042ab4dfe95a5577c6c1bcb871a1c63cb1e92f61403945f298ba0a7dcbfe
     container_name: sentinel-kibana
+    profiles: ["full"]
     environment:
       ELASTICSEARCH_HOSTS: http://elasticsearch:9200
     depends_on:
@@ -462,6 +465,7 @@ services:
       context: ./backend
       dockerfile: drl-engine/Dockerfile
     container_name: sentinel-drl-engine
+    profiles: ["full"]
     environment:
       - REDIS_URL=redis://redis:6379
       - AI_ENGINE_URL=http://ai-engine:5003
@@ -490,6 +494,7 @@ services:
       context: ./backend
       dockerfile: xai-service/Dockerfile
     container_name: sentinel-xai-service
+    profiles: ["full"]
     environment:
       - REDIS_URL=redis://redis:6379
       - AI_ENGINE_URL=http://ai-engine:5003
@@ -510,6 +515,7 @@ services:
       context: ./backend
       dockerfile: compliance-engine/Dockerfile
     container_name: sentinel-compliance-engine
+    profiles: ["full"]
     environment:
       - REDIS_URL=redis://redis:6379
       - AUTH_SERVICE_URL=http://auth-service:5000
@@ -528,6 +534,7 @@ services:
       context: ./backend
       dockerfile: hids-agent/Dockerfile
     container_name: sentinel-hids-agent
+    profiles: ["full"]
     environment:
       - REDIS_URL=redis://redis:6379
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
@@ -565,6 +572,7 @@ services:
       context: ./backend
       dockerfile: hardening-service/Dockerfile
     container_name: sentinel-hardening-service
+    profiles: ["full"]
     environment:
       - REDIS_URL=redis://redis:6379
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
@@ -677,6 +685,7 @@ services:
       context: ./stream-processing/flink-jobs
       dockerfile: Dockerfile.anomaly
     container_name: sentinel-flink-anomaly
+    profiles: ["full"]
     environment:
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - FLINK_PARALLELISM=2
@@ -693,6 +702,7 @@ services:
       context: ./stream-processing/flink-jobs
       dockerfile: Dockerfile.feature
     container_name: sentinel-flink-features
+    profiles: ["full"]
     environment:
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - KAFKA_INPUT_TOPIC=sentinel-network-events
@@ -711,6 +721,7 @@ services:
       context: ./stream-processing/flink-jobs
       dockerfile: Dockerfile.drl-feed
     container_name: sentinel-flink-drl-feed
+    profiles: ["full"]
     environment:
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - DRL_ENGINE_URL=http://drl-engine:5005
