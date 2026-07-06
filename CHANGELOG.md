@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.0](https://github.com/MuzeenMir/sentinel/compare/v1.11.0...v1.12.0) (2026-07-06)
+
+
+### Features
+
+* **deploy:** gate the legacy pipeline off the default node stack ([#113](https://github.com/MuzeenMir/sentinel/issues/113)) ([41ec85b](https://github.com/MuzeenMir/sentinel/commit/41ec85b92bebeb6a5a3e5d4a6d328edbd3a8dd36))
+
 ## [1.11.0](https://github.com/MuzeenMir/sentinel/compare/v1.10.0...v1.11.0) (2026-07-05)
 
 
