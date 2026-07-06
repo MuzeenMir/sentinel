@@ -22,6 +22,10 @@ import yaml
 _DCDIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 _COMPOSE = os.path.abspath(os.path.join(_DCDIR, "..", "..", "docker-compose.yml"))
 
+# Importable regardless of the pytest rootdir the run started from.
+if _DCDIR not in sys.path:
+    sys.path.insert(0, _DCDIR)
+
 
 def test_collector_imports_standalone_like_the_container():
     env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
