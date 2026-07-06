@@ -124,11 +124,25 @@ class NodeConsumer:
         entries = resp[1] if resp and len(resp) >= 2 else []
         return self._handle_entries(conn, entries)
 
+    def poll_cycle(self, conn, block_ms: int = 5000, count: int = 10) -> int:
+        """One reclaim+read pass, tolerant of idle-stream read timeouts.
+
+        redis-py 8.x can surface the server's block expiry on an idle stream
+        as TimeoutError instead of an empty reply; that is a normal idle tick,
+        not a failure. DB and other Redis errors still propagate.
+        """
+        try:
+            written = self.reclaim_once(conn, count=count)
+            written += self.process_once(conn, block_ms=block_ms, count=count)
+        except redis.exceptions.TimeoutError:
+            logger.debug("blocking read timed out on idle stream; polling again")
+            return 0
+        return written
+
     def run(self, conn) -> None:  # pragma: no cover - long-running loop
         self.ensure_group()
         while True:
-            self.reclaim_once(conn)
-            self.process_once(conn)
+            self.poll_cycle(conn)
 
 
 def main() -> None:  # pragma: no cover - process wiring; loop pieces unit-tested

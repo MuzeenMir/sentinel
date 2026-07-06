@@ -1,5 +1,6 @@
 import json
 import fakeredis
+import redis
 from node_consumer import NodeConsumer
 from node_scoring import RuleScorer
 
@@ -222,3 +223,33 @@ def test_reclaim_is_a_noop_with_nothing_pending():
     conn = FakeConn()
     assert c.reclaim_once(conn, min_idle_ms=0, count=10) == 0
     assert conn.commits == 0
+
+
+class TimingOutRedis:
+    """redis-py 8.x surfaces a blocked read on an idle stream as TimeoutError
+    instead of an empty reply — the daemon loop must poll again, not crash."""
+
+    def xautoclaim(self, *a, **k):
+        raise redis.exceptions.TimeoutError("Timeout reading from socket")
+
+    def xreadgroup(self, *a, **k):
+        raise redis.exceptions.TimeoutError("Timeout reading from socket")
+
+
+def test_poll_cycle_survives_idle_blocking_read_timeout():
+    c = NodeConsumer(
+        TimingOutRedis(),
+        RuleScorer(),
+        stream="node:events",
+        group="node-detector",
+        consumer="ai-1",
+    )
+    assert c.poll_cycle(FakeConn()) == 0
+
+
+def test_poll_cycle_processes_new_events():
+    r, c = _consumer()
+    r.xadd("node:events", {"event": json.dumps(_THREAT_PAYLOAD)})
+    conn = FakeConn()
+    assert c.poll_cycle(conn, block_ms=1) == 1
+    assert r.xpending("node:events", "node-detector")["pending"] == 0
