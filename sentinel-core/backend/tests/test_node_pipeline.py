@@ -1,7 +1,13 @@
 """Real node-path e2e: auditd event -> Redis stream -> ai-engine -> node_alerts.
 
-Requires a live Redis and PostgreSQL (the local docker-compose stack). Skips
-cleanly when they are unreachable, like test_e2e_pipeline.py.
+The Month-1 spine gate. Marked ``integration`` so it runs against the real
+Redis + migrated Postgres of the integration-compose CI job (host-published
+ports, see docker-compose.ci.yml); NODE_E2E_DATABASE_URL must be the
+node_alerts OWNER role — writes are owner-only (20260627_001).
+
+Local runs skip cleanly when the backing stores are unreachable. CI sets
+NODE_E2E_REQUIRE=1 to turn those skips into failures — a silently-skipped
+gate is a false green.
 """
 
 import os
@@ -13,10 +19,20 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "ai-engine"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "data-collector"))
 
-REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379")
-DATABASE_URL = os.environ.get(
+pytestmark = pytest.mark.integration
+
+REDIS_URL = os.environ.get("NODE_E2E_REDIS_URL") or os.environ.get(
+    "REDIS_URL", "redis://localhost:6379"
+)
+DATABASE_URL = os.environ.get("NODE_E2E_DATABASE_URL") or os.environ.get(
     "DATABASE_URL", "postgresql://sentinel:sentinel@localhost:5432/sentinel"
 )
+
+
+def _unreachable(what: str) -> None:
+    if os.environ.get("NODE_E2E_REQUIRE"):
+        pytest.fail(f"{what} unreachable but NODE_E2E_REQUIRE is set")
+    pytest.skip(f"{what} not reachable")
 
 
 @pytest.fixture(scope="module")
@@ -26,7 +42,7 @@ def redis_client():
     try:
         client.ping()
     except Exception:
-        pytest.skip(f"Redis not reachable at {REDIS_URL}")
+        _unreachable(f"Redis at {REDIS_URL}")
     return client
 
 
@@ -36,8 +52,8 @@ def pg_conn():
     try:
         conn = psycopg2.connect(DATABASE_URL)
     except Exception:
-        pytest.skip(f"PostgreSQL not reachable at {DATABASE_URL}")
-        return  # unreachable (skip raises); proves conn is bound at yield below
+        _unreachable(f"PostgreSQL at {DATABASE_URL}")
+        return  # unreachable (skip/fail raises); proves conn is bound at yield
     yield conn
     conn.close()
 
