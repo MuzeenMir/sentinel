@@ -1,7 +1,11 @@
-# CI-only overlay: publish Postgres port to the host so host-run pytest can
-# connect directly (AUDIT_TEST_DATABASE_URL). Not included in production or
-# developer compose — only activated when COMPOSE_FILE includes this file.
+# CI-only overlay: publish Postgres + Redis ports to the host so host-run
+# pytest can connect directly (AUDIT_TEST_DATABASE_URL, NODE_E2E_*). Not
+# included in production or developer compose — only activated when
+# COMPOSE_FILE includes this file.
 services:
   postgres:
     ports:
       - "127.0.0.1:5432:5432"
+  redis:
+    ports:
+      - "127.0.0.1:6379:6379"
