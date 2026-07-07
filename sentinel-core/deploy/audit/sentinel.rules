@@ -1,0 +1,13 @@
+# Sentinel Dragon-Scale — auditd ruleset for the offline node detection spine.
+#
+# Scope: process-execution telemetry only. node_collector tails audit.log and
+# auditd_source.parse_event consumes execve/execveat records exclusively
+# (_EXECVE_SYSCALLS = {59, 322, execve, execveat}); rules for other syscalls
+# would emit records the pipeline silently drops.
+#
+# Install: copy to /etc/audit/rules.d/sentinel.rules, then `augenrules --load`
+# (or restart auditd). Verify with: auditctl -l | grep sentinel_exec
+
+# Every process execution, 64-bit and 32-bit ABIs.
+-a always,exit -F arch=b64 -S execve,execveat -k sentinel_exec
+-a always,exit -F arch=b32 -S execve,execveat -k sentinel_exec
