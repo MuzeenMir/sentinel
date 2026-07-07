@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.13.0](https://github.com/MuzeenMir/sentinel/compare/v1.12.0...v1.13.0) (2026-07-07)
+
+
+### Features
+
+* **deploy:** add auditd ruleset for the node detection spine ([#118](https://github.com/MuzeenMir/sentinel/issues/118)) ([0b4dc65](https://github.com/MuzeenMir/sentinel/commit/0b4dc65613d57ba9007d59b50f05d81cef2857dd))
+
+
+### Bug Fixes
+
+* **ai-engine:** tolerate idle-stream redis read timeouts in node-consumer ([#115](https://github.com/MuzeenMir/sentinel/issues/115)) ([ee3b07b](https://github.com/MuzeenMir/sentinel/commit/ee3b07be861551895949b1309b44dd9132a67435))
+* **docker:** make admin-console and enforcement-reaper healthchecks truthful ([#119](https://github.com/MuzeenMir/sentinel/issues/119)) ([fa4aef0](https://github.com/MuzeenMir/sentinel/commit/fa4aef00706f5ef5e988c3dc4414d51101cf8bed))
+* **observability:** drop duplicate grafana datasource provisioning file ([#116](https://github.com/MuzeenMir/sentinel/issues/116)) ([d2d8087](https://github.com/MuzeenMir/sentinel/commit/d2d8087190e52e5359e927109138e375e9003f1d))
+
 ## [1.12.0](https://github.com/MuzeenMir/sentinel/compare/v1.11.0...v1.12.0) (2026-07-06)
 
 
