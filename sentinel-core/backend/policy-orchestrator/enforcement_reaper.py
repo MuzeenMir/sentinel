@@ -6,6 +6,7 @@ import logging
 import os
 import sys
 import time
+from pathlib import Path
 from typing import Any, Callable
 
 # Shared modules (audit_logger, _lib) live one level up — both in the repo and
@@ -108,6 +109,16 @@ class EnforcementReaper:
         logger.error("enforcement_reaper_alert %s", alert)
 
 
+def beat() -> None:
+    """Touch the heartbeat file the container healthcheck watches.
+
+    Only beaten after a completed cycle, so a reaper hung mid-run_once (e.g.
+    on a stuck DB connection) stops beating and the container goes unhealthy
+    instead of silently leaving expired enforcement actions applied.
+    """
+    Path(os.environ.get("REAPER_HEARTBEAT_PATH", "/tmp/reaper-heartbeat")).touch()
+
+
 def main() -> None:
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
     interval = int(os.environ.get("ENFORCEMENT_REAPER_INTERVAL_SECONDS", "30"))
@@ -116,6 +127,7 @@ def main() -> None:
 
     while True:
         reaper.run_once(limit=batch_size)
+        beat()
         time.sleep(interval)
 
 
