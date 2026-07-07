@@ -468,6 +468,57 @@ services:
       - sentinel-network
     restart: unless-stopped
 
+  # Node spine, third hop: auto-triage every detector alert with the grounded
+  # copilot and store the cited verdict + a signed reversible proposal for a
+  # human to confirm. Reuses the llm-gateway image with a command override
+  # (reaper-style) so slow local inference never stalls the HTTP copilot.
+  # Advisory-only: the worker proposes; enforcement still requires the human
+  # confirmation boundary at policy-orchestrator POST /enforcement.
+  triage-worker:
+    build:
+      context: ./backend
+      dockerfile: llm-gateway/Dockerfile
+    container_name: sentinel-triage-worker
+    command: ["python", "triage_worker.py"]
+    environment:
+      # Reads node_alerts and writes node_alert_triage as the runtime app
+      # role — SELECT/INSERT/UPDATE granted by migration 20260707_001.
+      - DATABASE_URL=postgresql://sentinel_app:${SENTINEL_APP_DB_PASSWORD:?set SENTINEL_APP_DB_PASSWORD}@sentinel-postgres:5432/${POSTGRES_DB:-sentinel}
+      - INTERNAL_SERVICE_TOKEN=${INTERNAL_SERVICE_TOKEN:?set INTERNAL_SERVICE_TOKEN}
+      # Same signing key as llm-gateway/policy-orchestrator — proposals the
+      # worker drafts must verify at the enforcement boundary.
+      - COPILOT_PROPOSAL_SIGNING_KEY=${COPILOT_PROPOSAL_SIGNING_KEY:-}
+      # Same provider seam as the gateway; offline is a pure .env change.
+      - INFERENCE_PROVIDER=${INFERENCE_PROVIDER:-anthropic}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - LOCAL_LLM_BASE_URL=${LOCAL_LLM_BASE_URL:-http://host.docker.internal:11434}
+      - LOCAL_LLM_MODEL=${LOCAL_LLM_MODEL:-qwen2.5:14b-instruct}
+      - LOCAL_LLM_TIMEOUT=${LOCAL_LLM_TIMEOUT:-}
+      # Worker audit writes are RLS-gated on app.tenant_id (single-node
+      # default tenant), same as the gateway.
+      - DEFAULT_TENANT_ID=${DEFAULT_TENANT_ID:-1}
+      - TRIAGE_POLL_SECONDS=${TRIAGE_POLL_SECONDS:-10}
+      - TRIAGE_BATCH_SIZE=${TRIAGE_BATCH_SIZE:-5}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+    networks:
+      - sentinel-network
+    # No HTTP surface — probe heartbeat-file freshness instead (reaper
+    # pattern). The worker heartbeats after EVERY alert (and on idle cycles,
+    # including inference-disabled / PG-down ones), so the stale threshold
+    # only needs to cover ONE local inference call, not a whole batch. 600s
+    # covers worst-case CPU-only inference with a repair round.
+    healthcheck:
+      test: ["CMD-SHELL", "test $$(( $$(date +%s) - $$(stat -c %Y /tmp/triage-heartbeat 2>/dev/null || echo 0) )) -lt $${TRIAGE_STALE_SECONDS:-600}"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+
   # DRL Engine
   drl-engine:
     build:
