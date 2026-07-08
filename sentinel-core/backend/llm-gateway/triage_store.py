@@ -4,6 +4,13 @@ Lists the reversible proposals the auto-triage worker drafted and stored in
 ``node_alert_triage`` (JSONB), joined with their originating ``node_alerts``
 context, so the admin console can surface them for one-click human
 confirmation. Read-only: nothing here mutates a proposal or executes anything.
+
+Tenancy: ``node_alerts`` and ``node_alert_triage`` are single-host node-path
+tables with **no ``tenant_id`` column** — the offline node is a single tenant
+(``DEFAULT_TENANT_ID=1``). There is therefore no tenant dimension to scope this
+read on, and no cross-tenant boundary to cross; this mirrors the already-shipped
+``get_node_alerts`` grounding tool in ``tools.py``, which reads the same tables
+the same way. The authenticated api-gateway proxy remains the access boundary.
 """
 
 from __future__ import annotations
