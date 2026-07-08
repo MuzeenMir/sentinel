@@ -400,3 +400,93 @@ def test_xactor_honored_only_when_service_token_valid(app_module, monkeypatch):
     second = c.post("/copilot/summarize", json={"entity_id": "h1"}, headers=hdr_b)
     assert first.status_code == 200
     assert second.status_code == 200  # distinct authenticated actors = distinct buckets
+
+
+# --- approval queue (GET /copilot/proposals) ---------------------------------
+
+
+class _FakeCursor:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def execute(self, sql, params=None):
+        self._sql = sql
+
+    def fetchall(self):
+        return self._rows
+
+
+class _FakeConn:
+    def __init__(self, rows):
+        self._rows = rows
+        self.closed = False
+
+    def cursor(self):
+        return _FakeCursor(self._rows)
+
+    def close(self):
+        self.closed = True
+
+
+def _pending_row(alert_id=7):
+    import json as _json
+    from datetime import datetime, timezone
+
+    return (
+        alert_id,
+        "critical",
+        "nc",
+        "/usr/bin/nc",
+        "host-9",
+        "offensive tool 'nc'",
+        f"Reverse shell tooling [node_alert:{alert_id}].",
+        _json.dumps([f"node_alert:{alert_id}"]),
+        _json.dumps(
+            {
+                "proposal_id": "proposal:xyz",
+                "action_type": "quarantine",
+                "reversible": True,
+                "executed": False,
+                "signature": "sig",
+            }
+        ),
+        datetime(2026, 7, 8, 4, 0, tzinfo=timezone.utc),
+    )
+
+
+def test_list_proposals_returns_pending_queue(app_module, monkeypatch):
+    conn = _FakeConn([_pending_row(7)])
+    monkeypatch.setattr(app_module, "_triage_db", lambda: conn)
+
+    rv = app_module.app.test_client().get("/copilot/proposals")
+
+    assert rv.status_code == 200
+    body = rv.get_json()
+    assert len(body["proposals"]) == 1
+    item = body["proposals"][0]
+    assert item["alert_id"] == 7
+    assert item["severity"] == "critical"
+    assert item["proposal"]["proposal_id"] == "proposal:xyz"
+    assert item["proposal"]["executed"] is False
+    assert item["citations"] == ["node_alert:7"]
+    # the connection is always released
+    assert conn.closed is True
+
+
+def test_list_proposals_is_resilient_to_db_error(app_module, monkeypatch):
+    def _boom():
+        raise RuntimeError("pg down")
+
+    monkeypatch.setattr(app_module, "_triage_db", _boom)
+
+    rv = app_module.app.test_client().get("/copilot/proposals")
+
+    assert rv.status_code == 503
+    assert "proposals" in rv.get_json()
+    assert rv.get_json()["proposals"] == []

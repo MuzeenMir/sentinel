@@ -26,6 +26,9 @@ const Alerts = lazy(() =>
 const Copilot = lazy(() =>
   import("./pages/CopilotPage").then((m) => ({ default: m.CopilotPage })),
 );
+const Approvals = lazy(() =>
+  import("./pages/Approvals").then((m) => ({ default: m.Approvals })),
+);
 const Hardening = lazy(() =>
   import("./pages/Hardening").then((m) => ({ default: m.Hardening })),
 );
@@ -111,6 +114,7 @@ function App() {
           <Route path="/threats/:id" element={<ThreatDetail />} />
           <Route path="/alerts" element={<Alerts />} />
           <Route path="/copilot" element={<Copilot />} />
+          <Route path="/approvals" element={<Approvals />} />
           <Route path="/policies" element={<Policies />} />
           <Route path="/compliance" element={<Compliance />} />
           <Route path="/hardening" element={<Hardening />} />

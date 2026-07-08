@@ -23,9 +23,13 @@ _COMPOSE = os.path.abspath(
 )
 
 
-def _service():
+def _services():
     with open(_COMPOSE) as fh:
-        return yaml.safe_load(fh)["services"]["llm-gateway"]
+        return yaml.safe_load(fh)["services"]
+
+
+def _service():
+    return _services()["llm-gateway"]
 
 
 def _env(service):
@@ -81,6 +85,35 @@ def test_llm_gateway_image_ships_shared_audit_modules():
         )
     assert "audit_logger.py" in copy_lines
     assert "audit_merkle.py" in copy_lines
+
+
+def test_triage_worker_is_composed_reaper_style():
+    # The auto-triage worker is the spine link alert -> analyst. It reuses the
+    # llm-gateway image with a command override (node-collector/reaper pattern)
+    # so slow local inference can never stall the HTTP copilot or the detector.
+    svc = _services()["triage-worker"]
+    assert svc["build"]["dockerfile"] == "llm-gateway/Dockerfile"
+    assert svc["command"] == ["python", "triage_worker.py"]
+    env = _env(svc)
+    # Reads node_alerts and writes node_alert_triage as the runtime app role
+    # (20260707_001 grants SELECT/INSERT/UPDATE on the triage table).
+    assert env["DATABASE_URL"].startswith("postgresql://sentinel_app:")
+    # Same provider seam as the gateway: offline is a pure .env change.
+    assert "INFERENCE_PROVIDER" in env
+    assert "LOCAL_LLM_BASE_URL" in env
+    assert ":?" not in env.get("ANTHROPIC_API_KEY", "")
+    # Proposal drafts must be signable + tools authenticated.
+    assert "COPILOT_PROPOSAL_SIGNING_KEY" in env
+    assert "INTERNAL_SERVICE_TOKEN" in env
+    # Audit writes are RLS-gated; the worker needs the default tenant too.
+    assert env.get("DEFAULT_TENANT_ID") == "${DEFAULT_TENANT_ID:-1}"
+    assert svc["depends_on"]["db-migrate"]["condition"] == (
+        "service_completed_successfully"
+    )
+    # Host-side Ollama must be reachable on Linux/WSL2 engines.
+    assert "host-gateway" in " ".join(svc.get("extra_hosts", []))
+    # No HTTP surface — liveness is heartbeat-file freshness, reaper-style.
+    assert "triage-heartbeat" in " ".join(svc["healthcheck"]["test"])
 
 
 def test_llm_gateway_worker_timeout_covers_local_inference():

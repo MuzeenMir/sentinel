@@ -35,6 +35,7 @@ from prompts import render  # noqa: E402
 from proposals import ProposalError, ProposalSigner  # noqa: E402
 from residency import resolve_residency  # noqa: E402
 from safety import RateLimiter, check_request  # noqa: E402
+from triage_store import list_pending_proposals  # noqa: E402
 from tools import (  # noqa: E402
     SERVICE_TOKEN_HEADER,
     InvalidEntityIdError,
@@ -109,6 +110,13 @@ def make_copilot_context(actor: str, tenant_id=None) -> SimpleNamespace:
         max_total_tokens=resolve_token_budget(),
     )
     return SimpleNamespace(copilot=copilot, registry=registry, auditor=auditor)
+
+
+def _triage_db():
+    """Connection for the read-only approval queue. Overridden in tests."""
+    from _lib.db import connect
+
+    return connect()
 
 
 def _session_store(tenant_id=None) -> SessionStore:
@@ -326,6 +334,31 @@ def copilot_propose():
     if proposal["executed"] is not False:
         return jsonify({"error": "invalid proposal"}), 502
     return jsonify({"proposal": proposal}), 200
+
+
+@app.get("/copilot/proposals")
+def copilot_proposals():
+    """Approval queue: the reversible proposals the auto-triage worker drafted
+    and stored, awaiting human confirmation. Read-only — listing a proposal
+    executes nothing; a human still confirms each via /copilot/confirm and the
+    policy-orchestrator enforcement boundary."""
+    try:
+        limit = int(request.args.get("limit", 50))
+    except (TypeError, ValueError):
+        limit = 50
+    try:
+        conn = _triage_db()
+    except Exception as exc:  # noqa: BLE001 - DB briefly unavailable is not fatal
+        logger.warning("Approval queue unavailable: %r", exc)
+        return jsonify({"proposals": [], "error": "queue unavailable"}), 503
+    try:
+        proposals = list_pending_proposals(conn, limit=limit)
+    finally:
+        try:
+            conn.close()
+        except Exception:  # noqa: BLE001 - best-effort release
+            pass
+    return jsonify({"proposals": proposals}), 200
 
 
 @app.post("/copilot/confirm")
