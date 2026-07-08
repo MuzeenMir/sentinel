@@ -66,7 +66,11 @@ describe("Approvals", () => {
       },
     });
     mockConfirm.mockResolvedValue({
-      data: { confirmed: true, proposal: PROPOSAL, forward_to: "…/enforcement" },
+      data: {
+        confirmed: true,
+        proposal: PROPOSAL,
+        forward_to: "…/enforcement",
+      },
     });
   });
 
@@ -76,7 +80,9 @@ describe("Approvals", () => {
       await screen.findByText(/Reverse shell tooling executed/),
     ).toBeInTheDocument();
     // Cited alert id appears in the header AND as a citation chip.
-    expect(screen.getAllByText("node_alert:7").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("node_alert:7").length).toBeGreaterThanOrEqual(
+      1,
+    );
     expect(screen.getByText("critical")).toBeInTheDocument();
     expect(screen.getByTestId("proposal-card")).toBeInTheDocument();
   });
@@ -107,8 +113,6 @@ describe("Approvals", () => {
   it("shows an empty state when nothing is pending", async () => {
     mockList.mockResolvedValue({ data: { proposals: [] } });
     renderPage();
-    expect(
-      await screen.findByText(/No pending proposals/),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/No pending proposals/)).toBeInTheDocument();
   });
 });

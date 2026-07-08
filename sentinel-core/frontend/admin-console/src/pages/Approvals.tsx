@@ -35,8 +35,7 @@ export function Approvals() {
     onSuccess: (data, proposal) => {
       setConfirmedIds((m) => ({
         ...m,
-        [proposal.proposal_id]:
-          data.forward_to ?? "Confirmed for enforcement.",
+        [proposal.proposal_id]: data.forward_to ?? "Confirmed for enforcement.",
       }));
     },
   });
