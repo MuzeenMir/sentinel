@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.14.0](https://github.com/MuzeenMir/sentinel/compare/v1.13.0...v1.14.0) (2026-07-08)
+
+
+### Features
+
+* Month-2 offline spine — auto-triage worker, detector scenarios, approval queue ([#120](https://github.com/MuzeenMir/sentinel/issues/120)) ([6529fed](https://github.com/MuzeenMir/sentinel/commit/6529fed4a539a557bef6e13dd8048121393bb917))
+
 ## [1.13.0](https://github.com/MuzeenMir/sentinel/compare/v1.12.0...v1.13.0) (2026-07-07)
 
 
