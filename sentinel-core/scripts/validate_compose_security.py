@@ -66,6 +66,7 @@ INTERNAL_SERVICES = {
     "data-collector",
     "node-collector",
     "node-consumer",
+    "triage-worker",
     "xdp-collector",
     "alert-service",
     "ai-engine",
