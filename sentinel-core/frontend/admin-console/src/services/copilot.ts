@@ -41,6 +41,25 @@ export interface ConfirmResponse {
   forward_to?: string;
 }
 
+/** One entry in the auto-triage approval queue: an alert the worker triaged,
+ * its grounded verdict, and the reversible proposal awaiting confirmation. */
+export interface PendingProposal {
+  alert_id: number;
+  severity: string;
+  comm?: string;
+  exe?: string;
+  hostname?: string;
+  summary?: string;
+  triage_text?: string;
+  citations: string[];
+  proposal: CopilotProposal;
+  created_at?: string;
+}
+
+export interface ProposalsResponse {
+  proposals: PendingProposal[];
+}
+
 /**
  * Analyst-copilot client. The copilot is advisory only: it summarizes, answers
  * with citations, and *proposes* reversible enforcement. A proposal is only
@@ -74,4 +93,10 @@ export const copilotApi = {
     }),
   confirm: (proposal: CopilotProposal) =>
     api.post<ConfirmResponse>("/api/v1/copilot/confirm", { proposal }),
+  // Read-only approval queue: the reversible actions the auto-triage worker
+  // drafted from detector alerts, awaiting one-click human confirmation.
+  listProposals: (limit = 50) =>
+    api.get<ProposalsResponse>("/api/v1/copilot/proposals", {
+      params: { limit },
+    }),
 };

@@ -23,6 +23,10 @@ _COPILOT_PATHS = {
     "propose": "/copilot/propose",
     "summarize": "/copilot/summarize",
 }
+# Read-only copilot paths reachable over GET (the auto-triage approval queue).
+_COPILOT_GET_PATHS = {
+    "proposals": "/copilot/proposals",
+}
 asgi.add_middleware(
     CORSMiddleware,
     allow_origins=core._load_cors_origins(),
@@ -923,6 +927,11 @@ async def copilot_proxy(path: str, request: Request) -> Response:
     return await _copilot_proxy(request, path)
 
 
+@asgi.get("/api/v1/copilot/{path:path}")
+async def copilot_proxy_get(path: str, request: Request) -> Response:
+    return await _copilot_proxy_get(request, path)
+
+
 @asgi.get("/api/v1/audit/events")
 def get_audit_events(request: Request) -> JSONResponse:
     current_user = require_role(request, "admin")
@@ -1033,6 +1042,56 @@ async def _copilot_proxy(request: Request, path: str) -> Response:
             headers=headers,
             json=await _json_body(request),
             timeout=30,
+        )
+    except requests.exceptions.RequestException:
+        return JSONResponse({"error": "Copilot service unavailable"}, status_code=503)
+
+    if response.status_code >= 500:
+        return JSONResponse({"error": "Copilot service error"}, status_code=502)
+    if not response.content:
+        return Response(status_code=response.status_code)
+    try:
+        return JSONResponse(response.json(), status_code=response.status_code)
+    except ValueError:
+        return JSONResponse({"error": "Copilot service error"}, status_code=502)
+
+
+async def _copilot_proxy_get(request: Request, path: str) -> Response:
+    """Forward a read-only copilot GET (the approval queue) with verified
+    internal identity. Mirrors _copilot_proxy but never carries a body and only
+    honors the GET-allowlisted paths."""
+    current_user = require_current_user(request)
+    if isinstance(current_user, JSONResponse):
+        return current_user
+
+    upstream_path = _COPILOT_GET_PATHS.get(path)
+    if upstream_path is None:
+        return JSONResponse({"error": "Endpoint not found"}, status_code=404)
+
+    user_id = current_user.get("id")
+    if user_id is None:
+        return JSONResponse(
+            {"error": "Authenticated user identity unavailable"}, status_code=503
+        )
+
+    try:
+        headers = {
+            "X-Internal-Service-Token": core.get_internal_service_token(),
+            "X-Actor": f"user:{user_id}",
+        }
+    except RuntimeError:
+        return JSONResponse({"error": "Copilot service unavailable"}, status_code=503)
+
+    tenant_id = current_user.get("tenant_id")
+    if tenant_id is not None:
+        headers["X-Tenant-Id"] = str(tenant_id)
+
+    try:
+        response = requests.get(
+            core.CONFIG["LLM_GATEWAY_URL"].rstrip("/") + upstream_path,
+            headers=headers,
+            params={"limit": request.query_params.get("limit", "50")},
+            timeout=10,
         )
     except requests.exceptions.RequestException:
         return JSONResponse({"error": "Copilot service unavailable"}, status_code=503)
