@@ -1,0 +1,14 @@
+# CodeQL configuration for the security-codeql job (security.yml).
+#
+# py/unused-global-variable is excluded because it false-positives on every
+# Alembic migration: the module-level `revision` / `down_revision` /
+# `branch_labels` / `depends_on` assignments are Alembic's versioning
+# contract, read externally by the framework, never by the module itself
+# (dismissed examples: alerts 281/282 on migration 20260707_001). Unused-code
+# hygiene for our own Python is already enforced repo-wide by ruff in the
+# lint gate, so this exclusion loses no real coverage — and unlike a
+# paths-ignore on backend/migrations/versions/, the security query suite
+# still analyzes migration files.
+query-filters:
+  - exclude:
+      id: py/unused-global-variable
