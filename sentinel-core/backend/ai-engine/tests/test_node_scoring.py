@@ -193,3 +193,65 @@ def test_benign_curl_without_pipe_is_not_threat():
         _ev(comm="curl", exe="/usr/bin/curl", args=["curl", "-O", "http://x/file"])
     )
     assert v["is_threat"] is False
+
+
+# --- numeric-mode and path-matching edge cases --------------------------------
+
+
+def test_setuid_mode_with_sticky_bit_7755_is_flagged():
+    # First octal digit 7 = setuid+setgid+sticky — every digit 2-7 carries
+    # setuid and/or setgid and must be detected, not just 2/4/6.
+    v = score_event(
+        _ev(comm="chmod", exe="/usr/bin/chmod", args=["chmod", "7755", "/usr/bin/x"])
+    )
+    assert v["is_threat"] is True
+    assert "setuid" in v["summary"]
+
+
+def test_year_like_number_inside_path_is_not_setuid():
+    # "2026" is part of a path token, not a standalone mode argument.
+    v = score_event(
+        _ev(
+            comm="chmod",
+            exe="/usr/bin/chmod",
+            args=["chmod", "u+w", "/backup/2026/report"],
+        )
+    )
+    assert v["is_threat"] is False
+
+
+def test_chmod_600_in_tmp_is_not_an_exec_grant():
+    # Mode 600 (octal) grants no execute bit; decimal parsing would misflag it.
+    v = score_event(
+        _ev(comm="chmod", exe="/usr/bin/chmod", args=["chmod", "600", "/tmp/secret"])
+    )
+    assert v["is_threat"] is False
+
+
+def test_chmod_444_in_tmp_is_not_an_exec_grant():
+    # Mode 444 (octal) is read-only for everyone.
+    v = score_event(
+        _ev(comm="chmod", exe="/usr/bin/chmod", args=["chmod", "444", "/tmp/notes"])
+    )
+    assert v["is_threat"] is False
+
+
+def test_chmod_755_in_tmp_is_flagged_executable():
+    # Guard pin: a real octal exec grant on a world-writable path stays flagged.
+    v = score_event(
+        _ev(comm="chmod", exe="/usr/bin/chmod", args=["chmod", "755", "/tmp/drop.sh"])
+    )
+    assert v["is_threat"] is True
+    assert "executable" in v["summary"]
+
+
+def test_path_merely_containing_tmp_substring_is_not_world_writable():
+    # /home/user/tmpfile contains "/tmp" as a substring but is not under /tmp/.
+    v = score_event(
+        _ev(
+            comm="chmod",
+            exe="/usr/bin/chmod",
+            args=["chmod", "+x", "/home/user/tmpfile"],
+        )
+    )
+    assert v["is_threat"] is False

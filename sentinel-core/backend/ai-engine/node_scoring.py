@@ -23,9 +23,12 @@ CREDENTIAL_FILES = ("/etc/shadow", "/etc/gshadow")
 DOWNLOADERS = ("curl", "wget", "fetch")
 THRESHOLD = 0.5
 
-# A numeric chmod mode that sets the setuid/setgid bit (leading 4/2/6 in a
-# 4-digit octal mode, e.g. 4755). Symbolic form (u+s / g+s) is matched textually.
-_SETUID_NUMERIC_RE = re.compile(r"\b[642]\d{3}\b")
+# A standalone 4-digit octal chmod mode whose special-bits digit carries
+# setuid (4) and/or setgid (2) — i.e. any leading digit 2-7 (3/5/7 combine
+# them with the sticky bit). Matched per-token so numbers embedded in path
+# arguments (e.g. /backup/2026/report) never trip it. Symbolic form
+# (u+s / g+s) is matched textually.
+_SETUID_NUMERIC_RE = re.compile(r"[2-7][0-7]{3}")
 _PIPE_TO_SHELL_RE = re.compile(r"\|\s*(?:sudo\s+)?(?:sh|bash|zsh|dash|ksh|python\d?)\b")
 
 
@@ -116,19 +119,23 @@ def _writes(args: str) -> bool:
 
 
 def _setuid_numeric(args: str) -> bool:
-    return bool(_SETUID_NUMERIC_RE.search(args))
+    return any(_SETUID_NUMERIC_RE.fullmatch(token) for token in args.split())
 
 
 def _exec_numeric(args: str) -> bool:
-    """A numeric chmod mode granting execute to anyone (odd/7/5 low digits)."""
+    """A numeric chmod mode granting execute to anyone (modes are octal)."""
     for token in args.split():
-        if re.fullmatch(r"[0-7]{3,4}", token) and int(token[-3:]) & 0o111:
+        if re.fullmatch(r"[0-7]{3,4}", token) and int(token[-3:], 8) & 0o111:
             return True
     return False
 
 
 def _targets_world_writable(args: str) -> bool:
-    return any(prefix.rstrip("/") in args for prefix in WORLD_WRITABLE_PREFIXES)
+    prefixes = tuple(p.rstrip("/") for p in WORLD_WRITABLE_PREFIXES)
+    return any(
+        token.startswith(WORLD_WRITABLE_PREFIXES) or token in prefixes
+        for token in args.split()
+    )
 
 
 def _adds_privileged_group(args: str) -> bool:
