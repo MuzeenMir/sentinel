@@ -499,6 +499,10 @@ services:
       - DEFAULT_TENANT_ID=${DEFAULT_TENANT_ID:-1}
       - TRIAGE_POLL_SECONDS=${TRIAGE_POLL_SECONDS:-10}
       - TRIAGE_BATCH_SIZE=${TRIAGE_BATCH_SIZE:-5}
+      # Transient-error retry backoff (base * 2^attempts, capped): an LLM
+      # outage delays triage instead of permanently abandoning it.
+      - TRIAGE_RETRY_BASE_SECONDS=${TRIAGE_RETRY_BASE_SECONDS:-30}
+      - TRIAGE_RETRY_CAP_SECONDS=${TRIAGE_RETRY_CAP_SECONDS:-900}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:

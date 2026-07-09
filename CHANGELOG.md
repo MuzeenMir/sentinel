@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.14.1](https://github.com/MuzeenMir/sentinel/compare/v1.14.0...v1.14.1) (2026-07-09)
+
+
+### Bug Fixes
+
+* **ai-engine:** correct octal parsing and path matching in detector rules ([#122](https://github.com/MuzeenMir/sentinel/issues/122)) ([4689a16](https://github.com/MuzeenMir/sentinel/commit/4689a162af83356c67cd8ef2842a17ffed6d76cd))
+
 ## [1.14.0](https://github.com/MuzeenMir/sentinel/compare/v1.13.0...v1.14.0) (2026-07-08)
 
 
