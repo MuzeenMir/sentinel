@@ -50,13 +50,26 @@ ALERT_COLS = (
     "created_at",
 )
 
+# Retry model, two failure classes:
+#   'failed' — the model produced ungrounded output; retried a bounded number
+#              of times (attempts < max) then left for a human to inspect.
+#   'error'  — infrastructure broke (LLM down, network, bad render); retried
+#              indefinitely with exponential backoff (base * 2^attempts,
+#              capped) so an outage of any length never permanently abandons
+#              the alerts raised during it.
+# Fresh (untriaged) alerts sort before retries so erroring rows can never
+# starve new detections out of the batch.
 _SELECT_SQL = (
     "SELECT "
     + ", ".join(f"a.{c}" for c in ALERT_COLS)
     + " FROM node_alerts a"
     + " LEFT JOIN node_alert_triage t ON t.alert_id = a.id"
-    + " WHERE t.id IS NULL OR (t.status = 'failed' AND t.attempts < %s)"
-    + " ORDER BY a.id LIMIT %s"
+    + " WHERE t.id IS NULL"
+    + " OR (t.status = 'failed' AND t.attempts < %s)"
+    + " OR (t.status = 'error' AND t.updated_at <"
+    + " CURRENT_TIMESTAMP - make_interval(secs =>"
+    + " LEAST(%s, %s * POWER(2, t.attempts))))"
+    + " ORDER BY (t.id IS NOT NULL), a.id LIMIT %s"
 )
 
 UPSERT_COLS = (
@@ -152,6 +165,8 @@ class TriageWorker:
         context_factory=None,
         batch_size: int | None = None,
         max_attempts: int | None = None,
+        retry_base: int | None = None,
+        retry_cap: int | None = None,
         proposal_severities=("critical", "high"),
         proposal_action: str | None = None,
         proposal_ttl: int | None = None,
@@ -163,6 +178,12 @@ class TriageWorker:
         self.batch_size = batch_size or int(os.environ.get("TRIAGE_BATCH_SIZE", "5"))
         self.max_attempts = max_attempts or int(
             os.environ.get("TRIAGE_MAX_ATTEMPTS", "3")
+        )
+        self.retry_base = retry_base or int(
+            os.environ.get("TRIAGE_RETRY_BASE_SECONDS", "30")
+        )
+        self.retry_cap = retry_cap or int(
+            os.environ.get("TRIAGE_RETRY_CAP_SECONDS", "900")
         )
         self.proposal_severities = frozenset(proposal_severities)
         self.proposal_action = proposal_action or os.environ.get(
@@ -187,7 +208,10 @@ class TriageWorker:
 
     def fetch_untriaged(self, conn) -> list[dict]:
         with conn.cursor() as cur:
-            cur.execute(_SELECT_SQL, (self.max_attempts, self.batch_size))
+            cur.execute(
+                _SELECT_SQL,
+                (self.max_attempts, self.retry_cap, self.retry_base, self.batch_size),
+            )
             rows = cur.fetchall()
         return [dict(zip(ALERT_COLS, row)) for row in rows]
 
@@ -311,7 +335,7 @@ class TriageWorker:
             except Exception as exc:  # noqa: BLE001 - one bad alert must not stall the batch
                 logger.warning("Triage failed for alert %s: %r", alert.get("id"), exc)
                 outcome = {
-                    "status": "failed",
+                    "status": "error",
                     "grounded": False,
                     "text": None,
                     "citations": [],

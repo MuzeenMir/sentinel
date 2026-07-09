@@ -228,7 +228,11 @@ def test_ungrounded_triage_is_marked_failed_for_retry():
     assert registry.executed == []
 
 
-def test_copilot_exception_marks_failed_and_continues_batch():
+def test_copilot_exception_marks_transient_error_and_continues_batch():
+    # Infrastructure exceptions (LLM down, network) are a different failure
+    # class from ungrounded output: they get status 'error' and are retried
+    # indefinitely with backoff, so an outage never permanently abandons
+    # triage for the alerts raised during it.
     rows = [_alert_row(id=1), _alert_row(id=2)]
     conn = FakeConn(select_rows=rows)
     copilot = FakeCopilot([RuntimeError("ollama down"), _grounded(2)])
@@ -238,7 +242,7 @@ def test_copilot_exception_marks_failed_and_continues_batch():
 
     assert n == 1
     stored = [dict(zip(worker.upsert_cols, p)) for _sql, p in _upserts(conn)]
-    assert stored[0]["status"] == "failed"
+    assert stored[0]["status"] == "error"
     assert "ollama down" in stored[0]["error"]
     assert stored[1]["status"] == "triaged"
 
@@ -279,7 +283,9 @@ def test_signer_failure_keeps_triage_and_drops_proposal():
 def test_fetch_untriaged_passes_attempts_and_batch_limits():
     conn = FakeConn(select_rows=[_alert_row(id=9)])
     copilot = FakeCopilot([_grounded(9)])
-    worker, _ = _worker(conn, copilot, batch_size=7, max_attempts=4)
+    worker, _ = _worker(
+        conn, copilot, batch_size=7, max_attempts=4, retry_base=20, retry_cap=600
+    )
 
     alerts = worker.fetch_untriaged(conn)
 
@@ -287,7 +293,35 @@ def test_fetch_untriaged_passes_attempts_and_batch_limits():
     assert set(ALERT_COLS) <= set(alerts[0].keys())
     sql, params = conn.executed[0]
     assert "node_alert_triage" in sql
-    assert params == (4, 7)
+    assert params == (4, 600, 20, 7)
+
+
+def test_fetch_retries_transient_errors_with_capped_backoff():
+    # 'error' rows (infra failures) re-qualify only after an exponential
+    # backoff window (base * 2^attempts, capped) — never permanently dropped.
+    conn = FakeConn(select_rows=[])
+    copilot = FakeCopilot([])
+    worker, _ = _worker(conn, copilot)
+
+    worker.fetch_untriaged(conn)
+
+    sql, _params = conn.executed[0]
+    assert "t.status = 'error'" in sql
+    assert "POWER(2, t.attempts)" in sql
+    assert "LEAST" in sql
+
+
+def test_fetch_orders_fresh_alerts_before_retries():
+    # A handful of perpetually erroring rows must not starve brand-new
+    # alerts out of the batch: untriaged rows sort first.
+    conn = FakeConn(select_rows=[])
+    copilot = FakeCopilot([])
+    worker, _ = _worker(conn, copilot)
+
+    worker.fetch_untriaged(conn)
+
+    sql, _params = conn.executed[0]
+    assert "ORDER BY (t.id IS NOT NULL), a.id" in sql
 
 
 def test_poll_once_heartbeats_after_each_alert(tmp_path):
