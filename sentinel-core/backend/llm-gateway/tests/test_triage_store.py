@@ -108,6 +108,21 @@ def test_query_filters_to_triaged_rows_with_a_proposal():
     assert params == (10,)
 
 
+def test_query_excludes_expired_proposals():
+    # A proposal is only confirmable within issued_at + ttl_seconds (the
+    # signature TTL the enforcement boundary enforces). Expired ones would
+    # just fail confirmation, so the queue must not list them — this is
+    # also what drains the queue: nothing transitions a row on confirm, the
+    # TTL window closing is what retires it.
+    conn = FakeConn([])
+    list_pending_proposals(conn)
+    sql, _params = conn.cur.executed
+    flat = " ".join(sql.split())
+    assert "t.proposal->>'issued_at'" in flat
+    assert "t.proposal->>'ttl_seconds'" in flat
+    assert "EXTRACT(EPOCH FROM CURRENT_TIMESTAMP)" in flat
+
+
 def test_limit_is_clamped_to_a_sane_maximum():
     conn = FakeConn([])
     list_pending_proposals(conn, limit=10_000)
