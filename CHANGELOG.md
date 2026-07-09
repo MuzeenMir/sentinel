@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.14.2](https://github.com/MuzeenMir/sentinel/compare/v1.14.1...v1.14.2) (2026-07-09)
+
+
+### Bug Fixes
+
+* **llm-gateway:** exclude expired proposals from the approval queue ([#126](https://github.com/MuzeenMir/sentinel/issues/126)) ([74fc724](https://github.com/MuzeenMir/sentinel/commit/74fc724076340c2ff7c69e45d289b7e4b21dff61))
+* **llm-gateway:** retry transient triage errors with capped backoff ([#125](https://github.com/MuzeenMir/sentinel/issues/125)) ([b3430b3](https://github.com/MuzeenMir/sentinel/commit/b3430b3ab4be29febef5a7bbd5e605c96ea73f0d))
+
 ## [1.14.1](https://github.com/MuzeenMir/sentinel/compare/v1.14.0...v1.14.1) (2026-07-09)
 
 
